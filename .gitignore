@@ -1,0 +1,44 @@
+# ── Datasets & model weights (large binary files) ───────────────────────────
+data/
+models/
+
+# ── Training artefacts & logs ─────────────────────────────────────────────
+logs/
+wandb/
+runs/
+
+# ── Python byte-compiled / optimised files ───────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# ── Virtual environments ──────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Secrets — never commit these ─────────────────────────────────────────
+.env
+
+# ── HuggingFace local cache ───────────────────────────────────────────────
+.cache/
+~/.cache/huggingface/
+
+# ── Build artefacts ───────────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
+*.egg
+
+# ── Editor / OS noise ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Jupyter notebooks checkpoints ────────────────────────────────────────
+.ipynb_checkpoints/

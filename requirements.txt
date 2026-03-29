@@ -1,0 +1,35 @@
+# Core Python / PyTorch — requires CUDA 12.x drivers on the host
+torch==2.5.1
+torchvision==0.20.1
+torchaudio==0.20.1
+
+# Hugging Face ecosystem
+transformers==4.47.1
+datasets==3.2.0
+peft==0.14.0
+trl==0.13.0
+accelerate==1.2.1
+huggingface_hub==0.27.1
+
+# 4-bit quantisation (NF4 / double-quant)
+bitsandbytes==0.45.0
+
+# Unsloth — optimised NVIDIA kernels (2x faster, 60 % less VRAM)
+# Install separately with the GPU-specific wheel; see README for the exact command.
+unsloth==2024.12.4
+
+# Experiment tracking
+wandb==0.19.1
+
+# Evaluation
+evaluate==0.4.3
+rouge-score==0.1.2
+deepeval==1.4.2
+
+# Misc utilities
+python-dotenv==1.0.1
+pyyaml==6.0.2
+numpy==1.26.4
+scipy==1.14.1
+sentencepiece==0.2.0
+protobuf==5.29.2
