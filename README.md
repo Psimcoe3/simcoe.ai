@@ -16,7 +16,8 @@ and fully automated evaluation.
 3. [Environment Setup — WSL2 & CUDA 12.x](#environment-setup--wsl2--cuda-12x)
 4. [Configuration](#configuration)
 5. [Pipeline Walkthrough](#pipeline-walkthrough)
-6. [LoRA vs QLoRA vs Full Fine-Tuning](#lora-vs-qlora-vs-full-fine-tuning)
+6. [What Else Would I Do Next?](#what-else-would-i-do-next)
+7. [LoRA vs QLoRA vs Full Fine-Tuning](#lora-vs-qlora-vs-full-fine-tuning)
 
 ---
 
@@ -208,6 +209,24 @@ Key sections:
 - Scores outputs with ROUGE-1/2/L and exact match.
 - Includes a stub for LLM-as-judge qualitative scoring (configure `judge_model` in `config.yaml`).
 - Saves results to `evals/results.json`.
+
+---
+
+## What Else Would I Do Next?
+
+If I were taking this project beyond the initial pipeline, the next high-leverage
+improvements would be:
+
+1. **Add CI smoke checks** so every PR validates YAML parsing, script imports,
+   and basic CLI help output before changes are merged.
+2. **Ship a tiny example dataset** that exercises `prepare_data.py` end-to-end
+   without requiring a full training run or external secrets.
+3. **Replace the LLM-as-judge stub** in `scripts/evaluate.py` with a real judge
+   implementation and a strict output schema for reliable scoring.
+4. **Add config validation** up front so missing paths, invalid split values,
+   or incompatible precision settings fail early with clear messages.
+5. **Document inference workflows** for both Hugging Face/vLLM and Ollama so
+   users can move from export to local serving without guessing the next step.
 
 ---
 
