@@ -23,9 +23,9 @@ import json
 import os
 import sys
 
-import yaml
-from datasets import Dataset, DatasetDict, load_dataset
+from datasets import Dataset, load_dataset
 from transformers import AutoTokenizer
+from config_validation import load_config, validate_prepare_data_config
 
 
 # ── Chat template ──────────────────────────────────────────────────────────────
@@ -35,9 +35,9 @@ def format_example(example: dict) -> dict:
     Convert a raw JSONL record into a single 'text' field using an
     Alpaca-style instruction template.  The 'input' field is optional.
     """
-    instruction = example.get("instruction", "").strip()
-    context = example.get("input", "").strip()
-    response = example.get("response", example.get("output", "")).strip()
+    instruction = (example.get("instruction") or "").strip()
+    context = (example.get("input") or "").strip()
+    response = (example.get("response") or example.get("output") or "").strip()
 
     if context:
         text = (
@@ -55,6 +55,64 @@ def format_example(example: dict) -> dict:
 
 
 # ── Validation ─────────────────────────────────────────────────────────────────
+
+
+def validate_raw_jsonl(raw_path: str) -> None:
+    """Validate JSONL formatting and the expected instruction-tuning schema."""
+    errors: list[str] = []
+    record_count = 0
+
+    with open(raw_path, "r", encoding="utf-8") as handle:
+        for line_number, raw_line in enumerate(handle, start=1):
+            stripped_line = raw_line.strip()
+
+            if not stripped_line:
+                errors.append(f"line {line_number}: blank lines are not allowed")
+                continue
+
+            try:
+                record = json.loads(stripped_line)
+            except json.JSONDecodeError as exc:
+                errors.append(f"line {line_number}: invalid JSON ({exc.msg})")
+                continue
+
+            if not isinstance(record, dict):
+                errors.append(f"line {line_number}: each row must be a JSON object")
+                continue
+
+            instruction = record.get("instruction")
+            context = record.get("input", "")
+            response = record.get("response", record.get("output"))
+
+            if not isinstance(instruction, str) or not instruction.strip():
+                errors.append(
+                    f"line {line_number}: 'instruction' must be a non-empty string"
+                )
+
+            if "input" in record and not isinstance(context, str):
+                errors.append(f"line {line_number}: 'input' must be a string when present")
+
+            if not isinstance(response, str) or not response.strip():
+                errors.append(
+                    f"line {line_number}: provide a non-empty 'response' or 'output' string"
+                )
+
+            record_count += 1
+
+    if record_count == 0:
+        print(f"❌  Raw data file is empty: {raw_path}")
+        sys.exit(1)
+
+    if errors:
+        print("❌  Dataset schema validation failed.")
+        for error in errors[:10]:
+            print(f"    - {error}")
+        if len(errors) > 10:
+            print(f"    - ... and {len(errors) - 10} more error(s)")
+        sys.exit(1)
+
+    print(f"  ✅  Validated {record_count} JSONL records against the expected schema.")
+
 
 def validate_lengths(
     dataset: Dataset,
@@ -94,7 +152,6 @@ def validate_lengths(
     else:
         print(f"  ✅  All {before} examples are within max_seq_length={max_seq_length}.")
 
-    # Drop the temporary column — the training script doesn't need it.
     dataset = dataset.remove_columns(["token_count"])
     return dataset
 
@@ -110,9 +167,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Load config
-    with open(args.config, "r") as f:
-        cfg = yaml.safe_load(f)
+    cfg = load_config(args.config)
+
+    validate_prepare_data_config(cfg)
 
     raw_path: str = cfg["data"]["raw_path"]
     processed_dir: str = cfg["data"]["processed_dir"]
@@ -125,19 +182,23 @@ def main() -> None:
         print(f"❌  Raw data file not found: {raw_path}")
         sys.exit(1)
 
+    print(f"\n🔎  Validating raw JSONL schema: {raw_path}")
+    validate_raw_jsonl(raw_path)
+
     print(f"\n📂  Loading dataset from: {raw_path}")
     raw_dataset = load_dataset("json", data_files=raw_path, split="train")
     print(f"    Loaded {len(raw_dataset)} examples.")
 
-    # Format into chat template
+    if len(raw_dataset) < 2:
+        print("❌  Need at least 2 examples to create train and validation splits.")
+        sys.exit(1)
+
     print("\n📝  Formatting examples into instruction-response template …")
     formatted = raw_dataset.map(format_example, desc="Formatting")
 
-    # Keep only the 'text' column
     columns_to_remove = [c for c in formatted.column_names if c != "text"]
     formatted = formatted.remove_columns(columns_to_remove)
 
-    # Train / validation split (use random_state=3407 for reproducibility)
     print(f"\n✂️   Splitting dataset: {100*(1-validation_split):.0f}% train / "
           f"{100*validation_split:.0f}% validation (seed={random_state}) …")
     split = formatted.train_test_split(
@@ -150,7 +211,13 @@ def main() -> None:
     print(f"    Train: {len(train_ds)} examples")
     print(f"    Valid: {len(valid_ds)} examples")
 
-    # Length validation
+    if len(train_ds) == 0 or len(valid_ds) == 0:
+        print(
+            "❌  The current validation split produced an empty train or validation set. "
+            "Adjust data.validation_split or add more examples."
+        )
+        sys.exit(1)
+
     print(f"\n🔍  Loading tokeniser from '{model_name}' for length validation …")
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
@@ -164,7 +231,13 @@ def main() -> None:
         print("  Validating validation set …")
         valid_ds = validate_lengths(valid_ds, tokenizer, max_seq_length)
 
-    # Save to disk
+    if len(train_ds) == 0 or len(valid_ds) == 0:
+        print(
+            "❌  All examples in either the train or validation split were removed during "
+            "length validation. Increase model.max_seq_length or shorten the dataset entries."
+        )
+        sys.exit(1)
+
     os.makedirs(processed_dir, exist_ok=True)
     train_path = os.path.join(processed_dir, "train")
     valid_path = os.path.join(processed_dir, "valid")

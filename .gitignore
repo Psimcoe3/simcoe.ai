@@ -42,3 +42,4 @@ Thumbs.db
 
 # ── Jupyter notebooks checkpoints ────────────────────────────────────────
 .ipynb_checkpoints/
+unsloth_compiled_cache/

@@ -143,11 +143,16 @@ def check_unsloth() -> bool:
 def check_env_vars() -> bool:
     import os
     ok = True
-    for var in ("HF_TOKEN", "WANDB_API_KEY", "WANDB_PROJECT"):
+    # These are optional — the pipeline runs fully locally without any of them.
+    for var, note in [
+        ("HF_TOKEN", "needed only for gated HF models — Unsloth models are ungated"),
+        ("WANDB_API_KEY", "needed only if privacy.tracking is set to 'wandb'"),
+        ("WANDB_PROJECT", "needed only if privacy.tracking is set to 'wandb'"),
+    ]:
         if os.environ.get(var):
             _pass(f"{var} is set")
         else:
-            _warn(f"{var} is not set (copy .env.example → .env and fill in values)")
+            _warn(f"{var} not set — {note}")
             ok = False
     return ok
 

@@ -1,0 +1,32 @@
+{
+  "num_examples": 2,
+  "metrics": {
+    "rouge": {
+      "rouge1": 0.3555,
+      "rouge2": 0.0897,
+      "rougeL": 0.2344
+    },
+    "exact_match": 0.0
+  },
+  "judge_model": "simcoe",
+  "per_example": [
+    {
+      "prompt": "### Instruction:\nWhat are the NEC requirements for electrical panel clearances and working space?\n\n### Response:",
+      "reference": "NEC Section 110.26 establishes minimum working space requirements around electrical equipment rated 600V or less. The key requirements are: (1) Depth \u2014 minimum 3 feet of clear working space in front of the panel for equipment rated 0-150V to ground (Condition 1), measured from the live parts or enclosure front; (2) Width \u2014 minimum 30 inches wide or the width of the equipment, whichever is greater; (3) Height \u2014 the working space must extend from the floor or platform to a height of 6.5 feet or the height of the equipment, whichever is greater; (4) the space must permit at least a 90-degree opening of equipment doors; (5) illumination must be provided for all working spaces around service equipment, switchboards, and panelboards in other than dwelling units; (6) dedicated headroom space above the panel extending from the floor to 6 feet above or to the structural ceiling, whichever is lower, must be clear of foreign systems (piping, ducts, etc.).",
+      "prediction": "NEC 110.26(A) requires a minimum of 30 inches of working space in front of electrical panels. NEC 110.26(B) requires a minimum of 36 inches of working space on the sides of electrical panels. NEC 110.26(C) requires a minimum of 30 inches of headroom above electrical panels. NEC 110.26(D) requires a minimum of 30 inches of working space in front of electrical panels for equipment over 6 feet in height. NEC 110.26(E) requires a minimum of 36 inches of working space on the sides of electrical panels for equipment over 6 feet in height. NEC 110.26(F) requires a minimum of 30 inches of headroom above electrical panels for equipment over 6 feet in height. NEC 110.26(G) requires a minimum of 36 inches of working space in front of electrical panels for equipment over 6 feet in height. NEC 110.26(H) requires a minimum of 36 inches of working space on the sides of electrical panels for equipment over 6 feet in height. NEC 110.26(I) requires a minimum of 30 inches of headroom above electrical panels for equipment over 6 feet in height. NEC 110.",
+      "judge": {
+        "score": 5,
+        "rationale": "The model response is accurate and complete. It covers all key requirements from NEC Section 110.26: depth (Condition 1), width, height, headroom, door opening, illumination, and dedicated space above the panel. The response also includes specific dimensions for equipment over 6 feet tall."
+      }
+    },
+    {
+      "prompt": "### Instruction:\nWhat is the difference between a design pattern and an architectural pattern in software engineering?\n\n### Response:",
+      "reference": "Design patterns and architectural patterns operate at different scales. Design patterns (Gang of Four patterns) solve recurring problems within a component or between a small number of classes \u2014 examples include Singleton, Observer, Strategy, Factory Method, and Decorator. They address code-level concerns like object creation, behavior composition, and interface adaptation. Architectural patterns define the high-level structure and organization of an entire system or major subsystem \u2014 examples include Layered Architecture, Microservices, Event-Driven Architecture, CQRS (Command Query Responsibility Segregation), and Hexagonal Architecture (Ports and Adapters). The key distinction: a design pattern affects how you write code within a module; an architectural pattern affects how you organize modules, define communication boundaries, and manage data flow across the system. In practice, architectural decisions constrain which design patterns are appropriate \u2014 for example, an event-driven architecture naturally leads to Observer and Publish-Subscribe patterns at the component level.",
+      "prediction": "Design patterns are reusable solutions to common software design problems, such as the Singleton pattern for ensuring a class has only one instance, or the Observer pattern for decoupling objects that produce events from objects that consume them. They are typically implemented at the class or module level and are language-agnostic. Architectural patterns, on the other hand, are high-level designs that describe the structure and organization of a software system, such as the Model-View-Controller (MVC) pattern for separating business logic from presentation, or the Microservices pattern for decomposing a monolithic application into independent, loosely coupled services. They are typically implemented at the system or application level and are language-specific. Both design patterns and architectural patterns are important for building scalable, maintainable, and testable software systems, but they operate at different levels of abstraction and serve different purposes.",
+      "judge": {
+        "score": 3,
+        "rationale": "The response correctly distinguishes between design patterns (e.g., Singleton) and architectural patterns (e.g., MVC), but it lacks depth in explaining how they differ in scale and impact on system organization."
+      }
+    }
+  ]
+}

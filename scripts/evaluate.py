@@ -25,22 +25,15 @@ import os
 import re
 import string
 
-import yaml
+from config_validation import load_config, validate_evaluate_config
 from datasets import load_from_disk
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
 try:
-    import evaluate as hf_evaluate
-    _rouge = hf_evaluate.load("rouge")
-except Exception:
-    _rouge = None
-
-
-# ── Config ────────────────────────────────────────────────────────────────────
-
-def load_config(path: str) -> dict:
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
+    from rouge_score import rouge_scorer
+    _scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
+except ImportError:
+    _scorer = None
 
 
 # ── Text normalisation ────────────────────────────────────────────────────────
@@ -102,11 +95,15 @@ def run_inference(
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
 def score_rouge(predictions: list[str], references: list[str]) -> dict:
-    if _rouge is None:
-        print("  ⚠️   evaluate library not available; skipping ROUGE.")
+    if _scorer is None:
+        print("  ⚠️   rouge-score library not available; skipping ROUGE.")
         return {}
-    scores = _rouge.compute(predictions=predictions, references=references)
-    return {k: round(v, 4) for k, v in scores.items()}
+    aggregated = {"rouge1": [], "rouge2": [], "rougeL": []}
+    for pred, ref in zip(predictions, references):
+        scores = _scorer.score(ref, pred)
+        for key in aggregated:
+            aggregated[key].append(scores[key].fmeasure)
+    return {k: round(sum(v) / len(v), 4) for k, v in aggregated.items() if v}
 
 
 def score_exact_match(predictions: list[str], references: list[str]) -> float:
@@ -118,49 +115,108 @@ def score_exact_match(predictions: list[str], references: list[str]) -> float:
     return round(matches / len(predictions), 4) if predictions else 0.0
 
 
-# ── LLM-as-judge (stub) ───────────────────────────────────────────────────────
+# ── LLM-as-judge ───────────────────────────────────────────────────────────────
 
-def llm_judge_stub(
+_JUDGE_SYSTEM_PROMPT = (
+    "You are an expert evaluator. You will be given an instruction, a reference "
+    "answer, and a model-generated response. Rate the response on a scale of 1-5 "
+    "using these criteria:\n"
+    "  5 = Excellent: accurate, complete, and well-structured\n"
+    "  4 = Good: mostly accurate with minor omissions\n"
+    "  3 = Acceptable: partially correct but missing key information\n"
+    "  2 = Poor: significant errors or omissions\n"
+    "  1 = Unacceptable: wrong, incoherent, or irrelevant\n\n"
+    "Respond with ONLY a JSON object: {\"score\": <int 1-5>, \"rationale\": \"<brief explanation>\"}"
+)
+
+
+def _build_judge_message(prompt: str, prediction: str, reference: str) -> str:
+    return (
+        f"### Instruction\n{prompt}\n\n"
+        f"### Reference Answer\n{reference}\n\n"
+        f"### Model Response\n{prediction}\n\n"
+        "Rate the model response. Return JSON only."
+    )
+
+
+def llm_judge(
     judge_model: str | None,
     prompts: list[str],
     predictions: list[str],
     references: list[str],
 ) -> list[dict]:
     """
-    Stub for LLM-as-judge evaluation.
+    Score each prediction using a local Ollama model or OpenAI-compatible judge.
 
-    When judge_model is set in config.yaml, this function should:
-      1. Construct a scoring prompt that presents the instruction, reference
-         response, and model output to a capable judge model.
-      2. Parse a numeric score (e.g. 1–5) and a brief rationale from the
-         judge's response.
-      3. Return a list of per-example dicts with 'score' and 'rationale' keys.
-
-    For now it returns placeholder values.  Replace the body of this function
-    with a real implementation using the OpenAI / Anthropic SDK or a local
-    vLLM-served judge model.
-
-    Example scoring prompt template:
-        "Rate the following response on a scale of 1–5 for correctness and
-         helpfulness.
-         Instruction: {instruction}
-         Reference: {reference}
-         Response: {response}
-         Score:"
+    Set evaluation.judge_model in config.yaml to:
+      - An Ollama model name (e.g. "simcoe") for fully local judging.
+      - "openai/<model>" (e.g. "openai/gpt-4o") to use the OpenAI API.
+      - null to disable.
     """
     if judge_model is None:
-        return [{"score": None, "rationale": "LLM-as-judge not configured"} for _ in predictions]
+        return [
+            {"score": None, "rationale": "LLM-as-judge not configured"}
+            for _ in predictions
+        ]
 
-    # TODO: implement real judge logic here
-    # Example with OpenAI:
-    #   from openai import OpenAI
-    #   client = OpenAI()
-    #   for prompt, pred, ref in zip(prompts, predictions, references):
-    #       resp = client.chat.completions.create(...)
-    #       ...
-    print(f"  ⚠️   LLM-as-judge stub called with judge_model='{judge_model}'.  "
-          "Returning placeholder scores.")
-    return [{"score": None, "rationale": "stub — not yet implemented"} for _ in predictions]
+    use_openai = judge_model.startswith("openai/")
+
+    if use_openai:
+        try:
+            from openai import OpenAI
+        except ImportError:
+            print("  ⚠️   openai package not installed; skipping LLM-as-judge.")
+            return [{"score": None, "rationale": "openai package not installed"} for _ in predictions]
+
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            print("  ⚠️   OPENAI_API_KEY not set; skipping LLM-as-judge.")
+            return [{"score": None, "rationale": "OPENAI_API_KEY not set"} for _ in predictions]
+
+        client = OpenAI(api_key=api_key)
+        model_name = judge_model.removeprefix("openai/")
+    else:
+        # Use Ollama via its OpenAI-compatible API
+        try:
+            from openai import OpenAI
+        except ImportError:
+            print("  ⚠️   openai package not installed; skipping LLM-as-judge.")
+            return [{"score": None, "rationale": "openai package not installed"} for _ in predictions]
+
+        client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+        model_name = judge_model
+
+    results: list[dict] = []
+    for i, (prompt, pred, ref) in enumerate(zip(prompts, predictions, references)):
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": _JUDGE_SYSTEM_PROMPT},
+                    {"role": "user", "content": _build_judge_message(prompt, pred, ref)},
+                ],
+                temperature=0.0,
+                max_tokens=256,
+            )
+            raw = response.choices[0].message.content.strip()
+            # Try to extract JSON from the response
+            json_match = re.search(r'\{[^}]+\}', raw)
+            if json_match:
+                parsed = json.loads(json_match.group())
+            else:
+                parsed = json.loads(raw)
+            score = int(parsed.get("score", 0))
+            rationale = str(parsed.get("rationale", ""))
+            if not 1 <= score <= 5:
+                raise ValueError(f"score {score} out of range")
+            results.append({"score": score, "rationale": rationale})
+        except Exception as exc:
+            results.append({"score": None, "rationale": f"judge error: {exc}"})
+
+        if (i + 1) % 10 == 0:
+            print(f"    Judged {i + 1}/{len(predictions)} examples …")
+
+    return results
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -177,6 +233,7 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_config(args.config)
+    validate_evaluate_config(cfg, args.num_examples)
 
     model_dir = cfg["export"]["merged_16bit_dir"]
     valid_dir = os.path.join(cfg["data"]["processed_dir"], "valid")
@@ -222,7 +279,7 @@ def main() -> None:
 
     # ── LLM-as-judge ─────────────────────────────────────────────────────────
     print("\n🧑‍⚖️  Running LLM-as-judge evaluation …")
-    judge_scores = llm_judge_stub(judge_model, prompts, predictions, references)
+    judge_scores = llm_judge(judge_model, prompts, predictions, references)
 
     # ── Save results ──────────────────────────────────────────────────────────
     results = {

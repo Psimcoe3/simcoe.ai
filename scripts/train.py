@@ -18,19 +18,11 @@ Prerequisites:
 import argparse
 import os
 
-import wandb
-import yaml
+from unsloth import FastLanguageModel
 from datasets import load_from_disk
+from config_validation import load_config, validate_train_config
 from dotenv import load_dotenv
 from trl import SFTTrainer, SFTConfig
-from unsloth import FastLanguageModel
-
-
-# ── Config loading ─────────────────────────────────────────────────────────────
-
-def load_config(path: str) -> dict:
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
 
 
 # ── Model + adapter setup ──────────────────────────────────────────────────────
@@ -92,29 +84,36 @@ def build_model(cfg: dict):
     return model, tokenizer
 
 
-# ── W&B initialisation ─────────────────────────────────────────────────────────
+# ── Tracking initialisation ───────────────────────────────────────────────────────
 
-def init_wandb(cfg: dict) -> None:
+def _get_tracker(cfg: dict) -> str:
     """
-    Initialise Weights & Biases before the trainer is created so that all
-    hyperparameters, system metrics, and training curves are captured from
-    the very first step.
+    Return the tracking backend from config.  Defaults to 'tensorboard' for
+    fully local, private experiment tracking.  Set privacy.tracking to 'wandb'
+    to use Weights & Biases instead (requires WANDB_API_KEY).
     """
-    wandb.init(
-        project=os.environ.get("WANDB_PROJECT", "simcoe-finetune"),
-        config={
-            "model_name": cfg["model"]["name"],
-            "max_seq_length": cfg["model"]["max_seq_length"],
-            "lora_r": cfg["lora"]["r"],
-            "lora_alpha": cfg["lora"]["lora_alpha"],
-            "use_dora": cfg["lora"]["use_dora"],
-            "use_rslora": cfg["lora"]["use_rslora"],
-            **cfg["training"],
-        },
-        # Resume the same run if a checkpoint exists — useful for multi-day
-        # training jobs or recovering from an OOM crash.
-        resume="allow",
-    )
+    privacy = cfg.get("privacy", {})
+    tracker = privacy.get("tracking", "tensorboard")
+    if tracker == "wandb":
+        try:
+            import wandb
+            wandb.init(
+                project=os.environ.get("WANDB_PROJECT", "simcoe-finetune"),
+                config={
+                    "model_name": cfg["model"]["name"],
+                    "max_seq_length": cfg["model"]["max_seq_length"],
+                    "lora_r": cfg["lora"]["r"],
+                    "lora_alpha": cfg["lora"]["lora_alpha"],
+                    "use_dora": cfg["lora"]["use_dora"],
+                    "use_rslora": cfg["lora"]["use_rslora"],
+                    **cfg["training"],
+                },
+                resume="allow",
+            )
+        except Exception as exc:
+            print(f"  ⚠️   W&B init failed ({exc}); falling back to tensorboard.")
+            tracker = "tensorboard"
+    return tracker
 
 
 # ── Trainer ────────────────────────────────────────────────────────────────────
@@ -125,6 +124,7 @@ def build_trainer(
     train_dataset,
     eval_dataset,
     cfg: dict,
+    tracker: str,
 ) -> SFTTrainer:
     t = cfg["training"]
     m = cfg["model"]
@@ -145,7 +145,7 @@ def build_trainer(
         lr_scheduler_type=t["lr_scheduler_type"],
         # 5 % warmup prevents gradient explosion in the first few steps when
         # the adapter weights are still far from their converged values.
-        warmup_ratio=t["warmup_ratio"],
+        warmup_steps=max(1, int(t["warmup_ratio"] * t["num_train_epochs"])),
         # bf16 has a wider dynamic range than fp16, reducing overflow/underflow
         # on Ampere+ GPUs.  fp16 is left False to avoid mixed precision issues.
         bf16=t["bf16"],
@@ -154,19 +154,18 @@ def build_trainer(
         save_steps=t["save_steps"],
         save_total_limit=t["save_total_limit"],
         seed=t["seed"],
-        # W&B integration — logs loss, learning rate, and grad norm automatically
-        # when wandb has been initialised before this point.
-        report_to="wandb",
+        # Tracking backend — 'tensorboard' is fully local, no account needed.
+        report_to=tracker,
         # Pack short examples together to fill the context window and reduce
         # padding waste — standard practice for instruction fine-tuning.
         dataset_text_field="text",
-        max_seq_length=m["max_seq_length"],
+        max_length=m["max_seq_length"],
         dataset_num_proc=2,
     )
 
     trainer = SFTTrainer(
         model=model,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         args=training_args,
@@ -178,17 +177,26 @@ def build_trainer(
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    # Load secrets from .env (HF_TOKEN, WANDB_API_KEY, WANDB_PROJECT)
+    # Load .env if present (optional — no external secrets required)
     load_dotenv()
+
+    # ── Privacy: block all telemetry before any library import side-effects ──
+    os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+    os.environ["DO_NOT_TRACK"] = "1"
+    os.environ["WANDB_DISABLED"] = "true"
+    os.environ["DISABLE_TELEMETRY"] = "YES"
+    os.environ.setdefault("TENSORBOARD_LOGGING_DIR", "logs")
 
     parser = argparse.ArgumentParser(description="QLoRA fine-tuning with Unsloth.")
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
+    validate_train_config(cfg)
 
-    # Initialise W&B before the trainer so all config is captured
-    init_wandb(cfg)
+    # Initialise tracking (TensorBoard by default — fully local)
+    tracker = _get_tracker(cfg)
+    print(f"\n📊  Tracking: {tracker}")
 
     print(f"\n🚀  Loading model: {cfg['model']['name']}")
     model, tokenizer = build_model(cfg)
@@ -201,7 +209,7 @@ def main() -> None:
     print(f"    Valid: {len(eval_dataset)} examples")
 
     print("\n🏋️  Building trainer …")
-    trainer = build_trainer(model, tokenizer, train_dataset, eval_dataset, cfg)
+    trainer = build_trainer(model, tokenizer, train_dataset, eval_dataset, cfg, tracker)
 
     print("\n🏋️  Starting training …")
     trainer.train()
@@ -213,8 +221,16 @@ def main() -> None:
     model.save_pretrained(adapter_dir)
     tokenizer.save_pretrained(adapter_dir)
 
-    wandb.finish()
+    if tracker == "wandb":
+        try:
+            import wandb
+            wandb.finish()
+        except Exception:
+            pass
+
     print("\n✅  Training complete.\n")
+    if tracker == "tensorboard":
+        print("    View training curves:  tensorboard --logdir logs/\n")
 
 
 if __name__ == "__main__":

@@ -37,7 +37,7 @@ pip install -r requirements.txt
 
 # 4. Configure secrets
 cp .env.example .env
-# Edit .env and add HF_TOKEN, WANDB_API_KEY, WANDB_PROJECT
+# Edit .env and add HF_TOKEN, WANDB_API_KEY, WANDB_PROJECT, OPENAI_API_KEY
 
 # 5. Validate the environment
 python scripts/check_env.py
@@ -55,6 +55,12 @@ python scripts/export.py
 python scripts/evaluate.py
 ```
 
+Or run the entire pipeline in one command:
+
+```bash
+make all
+```
+
 ---
 
 ## Project Structure
@@ -62,11 +68,13 @@ python scripts/evaluate.py
 ```
 simcoe.ai/
 ├── config.yaml            # All hyperparameters — nothing hardcoded in scripts
+├── Makefile               # Pipeline orchestration (make all, make train, etc.)
+├── topics.yaml            # Topic definitions for synthetic data generation
 ├── .env.example           # Secret template (copy to .env, never commit .env)
 ├── requirements.txt       # Pinned dependency versions for CUDA 12.x
 │
 ├── data/
-│   ├── raw/               # Place your dataset.jsonl here
+│   ├── raw/               # Place your dataset.jsonl here (seed dataset included)
 │   └── processed/         # Train/validation Arrow datasets (auto-generated)
 │
 ├── models/
@@ -76,6 +84,8 @@ simcoe.ai/
 │
 ├── scripts/
 │   ├── check_env.py       # Pre-flight validator
+│   ├── config_validation.py # Shared config/prerequisite validation
+│   ├── generate_data.py   # Synthetic data generation via OpenAI API
 │   ├── prepare_data.py    # JSONL → formatted + split dataset
 │   ├── train.py           # QLoRA training with Unsloth + SFTTrainer
 │   ├── export.py          # Merge adapters → 16-bit + GGUF
@@ -184,6 +194,7 @@ Key sections:
 ### 1. Prepare data (`scripts/prepare_data.py`)
 
 - Loads a JSONL file where each line is `{"instruction": "...", "input": "...", "response": "..."}`.
+- Fails early on invalid JSON, blank lines, missing `instruction`, or missing `response`/`output` fields.
 - Formats into an Alpaca-style instruction template.
 - Splits 90 % / 10 % (train / validation) using `random_state=3407`.
 - Validates that no example exceeds `max_seq_length` tokens and drops over-length examples.
@@ -191,6 +202,7 @@ Key sections:
 
 ### 2. Train (`scripts/train.py`)
 
+- Fails early if processed datasets are missing, required config fields are invalid, or `HF_TOKEN` / `WANDB_API_KEY` / `WANDB_PROJECT` are unset.
 - Loads the base model in 4-bit NF4 via Unsloth's `FastLanguageModel`.
 - Applies a DoRA + rsLoRA adapter with `r=16, lora_alpha=16` targeting all linear layers.
 - Initialises Weights & Biases for loss, learning rate, and gradient norm tracking.
@@ -199,16 +211,67 @@ Key sections:
 
 ### 3. Export (`scripts/export.py`)
 
+- Fails early if adapter artifacts are missing or export-related config values are invalid.
 - Merges adapters into the base model at bfloat16 precision (→ `models/merged_16bit/`).
 - Quantises to Q4_K_M GGUF (→ `models/gguf/`).
 - Writes an Ollama `Modelfile` for one-command registration.
 
 ### 4. Evaluate (`scripts/evaluate.py`)
 
+- Fails early if the merged model, processed validation set, or evaluation config is missing.
 - Loads the merged model and runs inference on the validation set.
 - Scores outputs with ROUGE-1/2/L and exact match.
-- Includes a stub for LLM-as-judge qualitative scoring (configure `judge_model` in `config.yaml`).
+- LLM-as-judge scoring via OpenAI API (set `evaluation.judge_model` in `config.yaml`; requires `OPENAI_API_KEY`).
+  Rates each response 1–5 with a structured rationale.
+  Set `judge_model: null` to disable.
 - Saves results to `evals/results.json`.
+
+---
+
+## Makefile
+
+The Makefile orchestrates the pipeline in the correct order:
+
+```bash
+make all          # check → prepare → train → export → evaluate
+make check        # validate environment only
+make prepare      # prepare dataset only
+make train        # fine-tune (requires prepared data)
+make export       # export (requires trained adapters)
+make evaluate     # evaluate (requires exported model)
+make clean        # remove all generated artifacts
+make help         # show all targets
+```
+
+Override the config file: `make all CONFIG=my_config.yaml`
+
+---
+
+## Synthetic Data Generation
+
+`scripts/generate_data.py` uses an OpenAI-compatible API to generate training
+examples from topic descriptions.
+
+```bash
+# Generate 20 examples per topic
+python scripts/generate_data.py --topics topics.yaml --out data/raw/generated.jsonl --count 20
+
+# Merge into the main dataset
+cat data/raw/generated.jsonl >> data/raw/dataset.jsonl
+```
+
+Edit `topics.yaml` to define your domains. The included topics cover:
+- NEC Code (general requirements + special occupancies)
+- Massachusetts amendments (527 CMR)
+- Electrical theory and apprentice training
+- Software design patterns
+- Software architecture and DevOps
+
+### Seed Dataset
+
+A 32-example seed dataset is included at `data/raw/dataset.jsonl` covering all
+four target domains. Use it to verify the pipeline end-to-end before scaling up
+with `generate_data.py`.
 
 ---
 
@@ -219,14 +282,13 @@ improvements would be:
 
 1. **Add CI smoke checks** so every PR validates YAML parsing, script imports,
    and basic CLI help output before changes are merged.
-2. **Ship a tiny example dataset** that exercises `prepare_data.py` end-to-end
-   without requiring a full training run or external secrets.
-3. **Replace the LLM-as-judge stub** in `scripts/evaluate.py` with a real judge
-   implementation and a strict output schema for reliable scoring.
-4. **Add config validation** up front so missing paths, invalid split values,
-   or incompatible precision settings fail early with clear messages.
+2. ~~**Ship a tiny example dataset**~~ ✅ Done — 32-example seed dataset at `data/raw/dataset.jsonl`.
+3. ~~**Replace the LLM-as-judge stub**~~ ✅ Done — real OpenAI-based judge in `scripts/evaluate.py`.
+4. ~~**Add config validation**~~ ✅ Done — shared `scripts/config_validation.py` used by all pipeline scripts.
 5. **Document inference workflows** for both Hugging Face/vLLM and Ollama so
    users can move from export to local serving without guessing the next step.
+6. **Scale the dataset** using `scripts/generate_data.py` to reach 500–2000+
+   examples before production fine-tuning.
 
 ---
 

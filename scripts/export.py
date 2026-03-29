@@ -19,15 +19,8 @@ Prerequisites:
 import argparse
 import os
 
-import yaml
+from config_validation import load_config, validate_export_config
 from unsloth import FastLanguageModel
-
-
-# ── Config ────────────────────────────────────────────────────────────────────
-
-def load_config(path: str) -> dict:
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
 
 
 # ── Load model + adapters ─────────────────────────────────────────────────────
@@ -152,6 +145,7 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_config(args.config)
+    validate_export_config(cfg)
     exp = cfg["export"]
 
     print("\n🔧  Loading fine-tuned model and adapters …")
@@ -161,10 +155,17 @@ def main() -> None:
     export_merged_16bit(model, tokenizer, exp["merged_16bit_dir"])
 
     # ── GGUF export (for Ollama / llama.cpp) ──────────────────────────────────
-    gguf_path = export_gguf(model, tokenizer, exp["gguf_dir"], exp["gguf_quantisation"])
+    try:
+        gguf_path = export_gguf(model, tokenizer, exp["gguf_dir"], exp["gguf_quantisation"])
+    except Exception as exc:
+        print(f"\n  ⚠️   GGUF export failed: {exc}")
+        print("  The 16-bit merged model is still available for inference.")
+        print("  To retry GGUF export later, install llama.cpp and re-run this script.")
+        gguf_path = None
 
     # ── Ollama Modelfile ───────────────────────────────────────────────────────
-    generate_modelfile(gguf_path, exp["ollama_modelfile"], cfg)
+    if gguf_path:
+        generate_modelfile(gguf_path, exp["ollama_modelfile"], cfg)
 
     print("\n✅  Export complete.\n")
 

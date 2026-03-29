@@ -22,7 +22,7 @@ lora:
     - gate_proj
     - up_proj
     - down_proj
-  use_dora: true        # DoRA: ~3.7 % accuracy gain over standard LoRA
+  use_dora: false       # disabled — Unsloth merge does not yet support DoRA magnitude vectors
   use_rslora: true      # rank-stabilised scaling for gradient stability
 
 # ── Training ──────────────────────────────────────────────────────────────
@@ -59,4 +59,10 @@ export:
 # ── Evaluation ────────────────────────────────────────────────────────────
 evaluation:
   results_path: "evals/results.json"
-  judge_model: null   # set to an HF id or "openai/gpt-4o" to enable LLM-as-judge
+  judge_model: "simcoe"  # Ollama model name for local judging, "openai/<model>" for API, null to disable
+
+# ── Privacy ───────────────────────────────────────────────────────────────
+# All tracking and telemetry is local-only.  No data leaves this machine.
+privacy:
+  tracking: "tensorboard"   # "tensorboard" (local) or "wandb" (requires account)
+  telemetry: false           # disables HF / torch analytics

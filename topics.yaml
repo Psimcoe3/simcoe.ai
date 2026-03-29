@@ -1,0 +1,57 @@
+# topics.yaml — topic descriptions for scripts/generate_data.py
+#
+# Usage:
+#   python scripts/generate_data.py --topics topics.yaml --out data/raw/generated.jsonl --count 20
+#
+# After generating, merge into the main dataset:
+#   cat data/raw/generated.jsonl >> data/raw/dataset.jsonl
+
+topics:
+  - name: "NEC Code — General Requirements"
+    description: >
+      National Electrical Code (NFPA 70) articles covering wiring methods,
+      overcurrent protection, grounding and bonding, branch circuits, feeders,
+      services, conductor sizing (Table 310.16), raceway fill, box fill
+      calculations, and equipment installation requirements.
+    example_styles: "code interpretation, calculation problems, scenario-based troubleshooting, code comparison across editions"
+
+  - name: "NEC Code — Special Occupancies and Equipment"
+    description: >
+      NEC articles for hazardous locations (500-516), healthcare facilities (517),
+      assembly occupancies (518), swimming pools (680), electric vehicle charging
+      (625), solar PV systems (690), and energy storage systems (706).
+    example_styles: "installation procedures, code requirements, equipment selection, inspection checklists"
+
+  - name: "Massachusetts Amendments (527 CMR)"
+    description: >
+      Massachusetts-specific electrical code amendments under 527 CMR 12.00,
+      including licensing requirements (Master, Journeyman, Apprentice,
+      Systems), permit and inspection procedures, smoke and CO detector
+      requirements (M.G.L. c. 148), tamper-resistant receptacle enforcement,
+      and state-specific deviations from the base NEC.
+    example_styles: "regulatory questions, licensing exam prep, permit procedures, inspection scenarios"
+
+  - name: "Electrical Theory and Apprentice Training"
+    description: >
+      Fundamental electrical theory including Ohm's Law, power calculations,
+      series and parallel circuits, AC theory (impedance, reactance, power factor),
+      motor theory, transformer principles, conduit bending, wire pulling,
+      safety practices (LOTO, NFPA 70E), tool identification, and blueprint reading.
+    example_styles: "calculations, definitions, procedures, safety scenarios, tool usage"
+
+  - name: "Software Design Patterns"
+    description: >
+      Software engineering design patterns and principles including SOLID,
+      GoF patterns (Factory, Strategy, Observer, Decorator, Singleton),
+      Repository pattern, Dependency Injection, Clean Architecture, Hexagonal
+      Architecture, Domain-Driven Design tactical patterns (Entities, Value
+      Objects, Aggregates, Repositories).
+    example_styles: "definitions, comparisons, implementation examples, when-to-use guidance"
+
+  - name: "Software Architecture and DevOps"
+    description: >
+      Software architecture patterns (microservices, event-driven, CQRS,
+      monolith), API design (REST, GraphQL), CI/CD pipelines, containerization,
+      testing strategies (TDD, integration, E2E), observability (logging,
+      metrics, tracing), and infrastructure-as-code fundamentals.
+    example_styles: "architecture decisions, implementation procedures, trade-off analysis, troubleshooting"
