@@ -27,7 +27,7 @@ GGUF_Q4       := $(GGUF_DIR)/model-Q4_K_M.gguf
 MODELFILE     := $(GGUF_DIR)/Modelfile
 OLLAMA        := $(HOME)/.local/bin/ollama
 
-.PHONY: all check prepare train export gguf evaluate generate clean help
+.PHONY: all check prepare train export gguf evaluate generate catalog scrape-public clean help
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -69,6 +69,22 @@ generate: ## Generate synthetic training data using Ollama
 		--out data/raw/generated.jsonl --count 10
 	@echo "✅  Generated data saved to data/raw/generated.jsonl"
 	@echo "    To merge: cat data/raw/generated.jsonl >> data/raw/dataset.jsonl"
+
+catalog: ## Build training data from a real manufacturer/distributor catalog export
+	@if [[ -z "$(SOURCE)" ]]; then \
+		echo "Usage: make catalog SOURCE=path/to/catalog.csv OUT=data/raw/catalog_examples.jsonl"; \
+		exit 1; \
+	fi
+	$(PYTHON) scripts/build_catalog_data.py --source $(SOURCE) \
+		--out $(if $(OUT),$(OUT),data/raw/catalog_examples.jsonl)
+	@echo "✅  Catalog-derived data built. Review it before merging into data/raw/dataset.jsonl"
+
+scrape-public: ## Scrape public manufacturer/spec pages and public labor-rate pages
+	$(PYTHON) scripts/scrape_public_data.py --sources sources/public_sources.yaml \
+		--out data/raw/public_scrape.jsonl
+	@echo "✅  Public web data scraped to data/raw/public_scrape.jsonl"
+	@echo "    To turn product, wage, and reference records into training examples:"
+	@echo "    $(PYTHON) scripts/build_catalog_data.py --source data/raw/public_scrape.jsonl --out data/raw/public_catalog_examples.jsonl"
 
 clean: ## Remove all generated artifacts (data/processed, models, evals)
 	@echo "Removing generated artifacts …"

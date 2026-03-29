@@ -16,6 +16,7 @@ Prerequisites:
 """
 
 import argparse
+import math
 import os
 
 from unsloth import FastLanguageModel
@@ -129,6 +130,18 @@ def build_trainer(
     t = cfg["training"]
     m = cfg["model"]
 
+    examples_per_step = (
+        t["per_device_train_batch_size"] * t["gradient_accumulation_steps"]
+    )
+    steps_per_epoch = max(1, math.ceil(len(train_dataset) / examples_per_step))
+    total_training_steps = max(1, math.ceil(steps_per_epoch * t["num_train_epochs"]))
+
+    if t.get("warmup_steps") is not None:
+        warmup_steps = t["warmup_steps"]
+    else:
+        warmup_ratio = t.get("warmup_ratio", 0)
+        warmup_steps = max(1, math.ceil(total_training_steps * warmup_ratio))
+
     training_args = SFTConfig(
         output_dir=t["output_dir"],
         per_device_train_batch_size=t["per_device_train_batch_size"],
@@ -143,9 +156,10 @@ def build_trainer(
         # Cosine schedule decays smoothly to near-zero, reducing the risk of
         # overshooting the optimum at the end of training.
         lr_scheduler_type=t["lr_scheduler_type"],
-        # 5 % warmup prevents gradient explosion in the first few steps when
-        # the adapter weights are still far from their converged values.
-        warmup_steps=max(1, int(t["warmup_ratio"] * t["num_train_epochs"])),
+        # Warm up for a small number of optimizer steps at the start of
+        # training. Prefer an explicit warmup_steps config; fall back to a
+        # ratio of total training steps for older configs.
+        warmup_steps=warmup_steps,
         # bf16 has a wider dynamic range than fp16, reducing overflow/underflow
         # on Ampere+ GPUs.  fp16 is left False to avoid mixed precision issues.
         bf16=t["bf16"],

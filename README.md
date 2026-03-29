@@ -258,6 +258,26 @@ python scripts/generate_data.py --topics topics.yaml --out data/raw/generated.js
 
 # Merge into the main dataset
 cat data/raw/generated.jsonl >> data/raw/dataset.jsonl
+
+## Public Source Ingestion
+
+The repo also supports collecting public manufacturer, wage, and industry
+reference pages before converting them into training examples.
+
+```bash
+# Scrape configured public sources
+make scrape-public
+
+# Convert scraped records into JSONL training examples
+python scripts/build_catalog_data.py \
+   --source data/raw/public_scrape.jsonl \
+   --out data/raw/public_catalog_examples.jsonl
+```
+
+Current source coverage in [sources/public_sources.yaml](sources/public_sources.yaml)
+includes material manufacturers such as ABB, nVent HOFFMAN, Atkore, Leviton,
+Hubbell, and Legrand, plus public reference sources such as BLS OEWS,
+California DIR prevailing wage pages, and Electrical Contractor Magazine.
 ```
 
 Edit `topics.yaml` to define your domains. The included topics cover:

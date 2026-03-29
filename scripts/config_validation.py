@@ -64,6 +64,12 @@ def require_positive_int(value: object, label: str) -> int:
     return value
 
 
+def require_optional_positive_int(value: object, label: str) -> int | None:
+    if value is None:
+        return None
+    return require_positive_int(value, label)
+
+
 def require_positive_number(value: object, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
         fail(f"{label} must be a positive number")
@@ -129,7 +135,7 @@ def validate_train_config(cfg: dict) -> None:
 
     require_keys(model, "model", {"name", "max_seq_length", "load_in_4bit", "dtype"})
     require_keys(lora, "lora", {"r", "lora_alpha", "lora_dropout", "bias", "target_modules", "use_dora", "use_rslora"})
-    require_keys(training, "training", {"output_dir", "per_device_train_batch_size", "gradient_accumulation_steps", "num_train_epochs", "learning_rate", "lr_scheduler_type", "warmup_ratio", "bf16", "fp16", "logging_steps", "save_steps", "save_total_limit", "seed"})
+    require_keys(training, "training", {"output_dir", "per_device_train_batch_size", "gradient_accumulation_steps", "num_train_epochs", "learning_rate", "lr_scheduler_type", "bf16", "fp16", "logging_steps", "save_steps", "save_total_limit", "seed"})
     require_keys(data, "data", {"processed_dir"})
 
     require_non_empty_string(model["name"], "model.name")
@@ -151,7 +157,14 @@ def validate_train_config(cfg: dict) -> None:
     require_positive_number(training["num_train_epochs"], "training.num_train_epochs")
     require_positive_number(training["learning_rate"], "training.learning_rate")
     require_non_empty_string(training["lr_scheduler_type"], "training.lr_scheduler_type")
-    require_number_in_range(training["warmup_ratio"], "training.warmup_ratio", 0, 1)
+    warmup_steps = require_optional_positive_int(training.get("warmup_steps"), "training.warmup_steps")
+    warmup_ratio = training.get("warmup_ratio")
+    if warmup_steps is None:
+        if warmup_ratio is None:
+            fail("training must define either warmup_steps or warmup_ratio")
+        require_number_in_range(warmup_ratio, "training.warmup_ratio", 0, 1)
+    elif warmup_ratio is not None:
+        require_number_in_range(warmup_ratio, "training.warmup_ratio", 0, 1)
     require_bool(training["bf16"], "training.bf16")
     require_bool(training["fp16"], "training.fp16")
     if training["bf16"] and training["fp16"]:

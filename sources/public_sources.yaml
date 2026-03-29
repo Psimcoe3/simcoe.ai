@@ -1,0 +1,217 @@
+sources:
+  - kind: catalog
+    manufacturer: Southwire
+    start_urls:
+      - https://www.southwire.com/categories/c-wire-cable
+      - https://www.southwire.com/industries/building-solutions
+    allowed_domains:
+      - www.southwire.com
+      - southwire.com
+    include_patterns:
+      - /categories/
+      - /products/
+      - /resources/
+    max_pages: 12
+
+  - kind: catalog
+    manufacturer: Orbit Industries
+    start_urls:
+      - https://www.orbitelectric.com/products-list
+      - https://www.orbitelectric.com/steel-products.html
+      - https://www.orbitelectric.com/nema-enclosures.html
+      - https://www.orbitelectric.com/electrical-fittings.html
+    allowed_domains:
+      - www.orbitelectric.com
+      - orbitelectric.com
+    include_patterns:
+      - .html
+      - /products-list
+      - /submittal-sheet-download
+    max_pages: 14
+    request_timeout: 10
+
+  - kind: catalog
+    manufacturer: Eaton
+    start_urls:
+      - https://www.eaton.com/us/en-us/catalog.html
+      - https://www.eaton.com/content/eaton/us/en-us/products/electrical-circuit-protection.html
+      - https://www.eaton.com/content/eaton/us/en-us/products/conduit-cable-wire-management.html
+    allowed_domains:
+      - www.eaton.com
+      - eaton.com
+    include_patterns:
+      - /content/eaton/us/en-us/products/
+    max_pages: 14
+    request_timeout: 10
+
+  - kind: catalog
+    manufacturer: Schneider Electric
+    start_urls:
+      - https://www.se.com/us/en/all-products
+      - https://www.se.com/us/en/brands/squared/
+      - https://www.se.com/us/en/work/support/resources-and-tools/digestplus/
+    allowed_domains:
+      - www.se.com
+      - se.com
+    include_patterns:
+      - /us/en/product/
+      - /us/en/all-products/
+      - /us/en/brands/
+    max_pages: 14
+    request_timeout: 10
+
+  - kind: catalog
+    manufacturer: ABB
+    start_urls:
+      - https://new.abb.com/low-voltage
+      - https://new.abb.com/low-voltage/products/circuit-breakers
+      - https://new.abb.com/low-voltage/products/enclosures
+      - https://new.abb.com/low-voltage/products/conduit-and-fittings
+    allowed_domains:
+      - new.abb.com
+      - abb.com
+    include_patterns:
+      - /low-voltage/products/
+      - /low-voltage/low-voltage-products/
+    max_pages: 14
+
+  - kind: catalog
+    manufacturer: nVent HOFFMAN
+    start_urls:
+      - https://www.nvent.com/en-us/hoffman
+      - https://www.nvent.com/en-us/hoffman/products/wall-mounted-enclosures
+      - https://www.nvent.com/en-us/hoffman/products/free-stand-enclosures
+      - https://www.nvent.com/en-us/hoffman/products/wireway-and-cable-management
+    allowed_domains:
+      - www.nvent.com
+      - nvent.com
+    include_patterns:
+      - /en-us/hoffman/products/
+      - /en-us/products/enclosures/
+      - /en-us/hoffman/industrial-electrical-enclosures
+    max_pages: 14
+
+  - kind: catalog
+    manufacturer: Atkore
+    start_urls:
+      - https://www.atkore.com/products/conduit
+      - https://www.atkore.com/products/conduit/ez-pull(r)-emt
+    allowed_domains:
+      - www.atkore.com
+      - atkore.com
+    include_patterns:
+      - /products/
+    max_pages: 12
+
+  - kind: catalog
+    manufacturer: Leviton
+    start_urls:
+      - https://www.leviton.com/en/products
+      - https://www.leviton.com/en/products/load-centers
+      - https://www.leviton.com/en/products/wiring-devices
+      - https://www.leviton.com/en/products/industrial
+    allowed_domains:
+      - www.leviton.com
+      - leviton.com
+    include_patterns:
+      - /en/products/
+      - /products/industrial/
+      - /products/commercial/
+    max_pages: 16
+
+  - kind: catalog
+    manufacturer: Legrand
+    start_urls:
+      - https://www.legrand.us/new-products
+      - https://www.legrand.us/wiring-devices/designer-switches-and-outlets/usb-wall-outlets
+      - https://www.legrand.us/cablofil/cable-bus
+      - https://www.legrand.us/pass-and-seymour/plugs-connectors
+    allowed_domains:
+      - www.legrand.us
+      - legrand.us
+    include_patterns:
+      - /p/
+      - /wiring-devices/
+      - /lighting-controls-and-systems/
+      - /network-infrastructure/
+      - /wire-and-cable-management/
+      - /cablofil/
+      - /pass-and-seymour/
+      - /connectrac
+    max_pages: 16
+
+  - kind: catalog
+    manufacturer: Hubbell
+    start_urls:
+      - https://www.hubbell.com/hubbell/en/products/electrical-electronic/cl/535411
+      - https://www.hubbell.com/hubbell/en/products/electrical-electronic/wiring-devices/cl/559793
+      - https://www.hubbell.com/hubbell/en/products/electrical-electronic/floor-boxes/cl/2144474
+    allowed_domains:
+      - www.hubbell.com
+      - hubbell.com
+    include_patterns:
+      - /hubbell/en/products/electrical-electronic/
+      - /hubbell/en/products/
+    max_pages: 16
+
+  - kind: labor
+    source_name: Public prevailing wage
+    start_urls:
+      - https://sam.gov/content/wage-determinations
+    allowed_domains:
+      - sam.gov
+      - www.sam.gov
+    include_patterns:
+      - /search
+      - /content/wage-determinations
+      - /wage-determinations/
+    max_pages: 6
+    request_timeout: 10
+
+  - kind: labor
+    source_name: California DIR prevailing wage
+    start_urls:
+      - https://www.dir.ca.gov/OPRL/2026-1/PWD/index.htm
+      - https://www.dir.ca.gov/oprl/DPreWageDetermination.htm
+    allowed_domains:
+      - www.dir.ca.gov
+      - dir.ca.gov
+    include_patterns:
+      - /OPRL/
+      - /oprl/
+      - /PWD/
+      - /DPreWageDetermination
+    max_pages: 10
+
+  - kind: labor
+    source_name: BLS OEWS electricians wages
+    start_urls:
+      - https://www.bls.gov/oes/current/oes472111.htm
+      - https://www.bls.gov/oes/tables.htm
+    allowed_domains:
+      - www.bls.gov
+      - bls.gov
+      - data.bls.gov
+      - download.bls.gov
+    include_patterns:
+      - /oes/
+      - /oes/current/
+      - /oes/tables
+      - .xlsx
+      - .xls
+    max_pages: 8
+
+  - kind: reference
+    source_name: Electrical Contractor Magazine
+    start_urls:
+      - https://www.ecmag.com/market-research/profile
+      - https://www.ecmag.com/market-research/profile-data
+      - https://www.ecmag.com/topics/your-business
+    allowed_domains:
+      - www.ecmag.com
+      - ecmag.com
+    include_patterns:
+      - /market-research/
+      - /magazine/articles/article-detail/
+      - /topics/your-business
+    max_pages: 10

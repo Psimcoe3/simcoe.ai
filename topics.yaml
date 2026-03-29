@@ -39,6 +39,18 @@ topics:
       safety practices (LOTO, NFPA 70E), tool identification, and blueprint reading.
     example_styles: "calculations, definitions, procedures, safety scenarios, tool usage"
 
+  - name: "Electrical Materials, Manufacturers, and Product Specifications"
+    description: >
+      Electrical construction materials and equipment including conduit,
+      conductors, fittings, boxes, supports, terminations, panelboards,
+      breakers, disconnects, wireways, cable tray, luminaires, controls,
+      fire alarm devices, low-voltage systems, grounding components, and
+      specialty hardware. Include manufacturer names, product families,
+      catalog numbers, application guidance, UL or ETL listings, NEMA ratings,
+      environmental suitability, installation constraints, selection tradeoffs,
+      and pricing or purchasing descriptors when available.
+    example_styles: "manufacturer-specific product summaries, part-number lookups, material selection guidance, specification comparisons, submittal review questions, price-aware purchasing questions"
+
   - name: "Software Design Patterns"
     description: >
       Software engineering design patterns and principles including SOLID,
