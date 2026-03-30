@@ -76,6 +76,7 @@ simcoe.ai/
 ├── data/
 │   ├── raw/               # Place your dataset.jsonl here (seed dataset included)
 │   └── processed/         # Train/validation Arrow datasets (auto-generated)
+│   └── registry/          # Source registry manifests for external roots (auto-generated)
 │
 ├── models/
 │   ├── adapters/          # Saved LoRA / DoRA adapter weights
@@ -86,7 +87,9 @@ simcoe.ai/
 │   ├── check_env.py       # Pre-flight validator
 │   ├── build_estimate_index.py # Build lookup-ready RSMeans estimate records
 │   ├── build_catalog_data.py # Turn structured product/reference data into training rows
+│   ├── build_source_registry.py # Snapshot external source roots into a review-safe registry manifest
 │   ├── config_validation.py # Shared config/prerequisite validation
+│   ├── data_contracts.py  # Stable IDs and review-safe data-family metadata
 │   ├── generate_data.py   # Synthetic data generation via OpenAI API
 │   ├── prepare_data.py    # JSONL → formatted + split dataset
 │   ├── revit_ingestion.py # Normalize Revit exports or family files for retrieval
@@ -189,7 +192,10 @@ Key sections:
 | `data`  | `raw_path`, `validation_split`, `random_state` |
 | `export` | `gguf_quantisation`, output directories |
 | `evaluation` | `judge_model`, `results_path`, `inference_batch_size`, `max_new_tokens` |
-| `release` | `fail_on_threshold_breach`, metric thresholds for quick/full evaluation |
+| `release` | `fail_on_threshold_breach`, quick/full thresholds, category thresholds, smoke-test requirements |
+| `retrieval` | `enabled`, corpus path, benchmark-time retrieval settings |
+| `architecture` | primary runtime, retrieval requirement, multimodal/geometry feature flags |
+| `source_registry` | external source root, registry manifest path, review-safe defaults |
 
 ---
 
@@ -214,6 +220,8 @@ Key sections:
 - Initialises Weights & Biases for loss, learning rate, and gradient norm tracking.
 - Trains with `SFTTrainer` (cosine LR schedule, warmup 5 %, bfloat16).
 - Saves LoRA adapters to `models/adapters/`.
+- Writes `train_manifest.json` with config, runtime, processed-data lineage, trainer state, and adapter checksums.
+- Supports `--manifest_only` to backfill `train_manifest.json` from an existing adapter directory and latest checkpoint without re-running training.
 
 ### 3. Export (`scripts/export.py`)
 
@@ -221,18 +229,37 @@ Key sections:
 - Merges adapters into the base model at bfloat16 precision (→ `models/merged_16bit/`).
 - Quantises to Q4_K_M GGUF (→ `models/gguf/`).
 - Writes an Ollama `Modelfile` for one-command registration.
+- Supports `--verify_existing` so you can validate already-exported artifacts without re-running the merge.
+- Starts a local Ollama daemon automatically for GGUF smoke tests when the binary is installed but the server is not already running.
+- Can run required merged-model and GGUF smoke tests from the `release` section.
+- Writes `export_manifest.json` with artifact checksums, runtime metadata, and smoke-test results.
 
 ### 4. Evaluate (`scripts/evaluate.py`)
 
-- Fails early if the merged model, processed validation set, or evaluation config is missing.
-- Loads the merged model and runs batched inference on the validation set with timing and progress output.
+- Fails early if the merged model, processed validation set, configured benchmark, or evaluation config is missing.
+- Loads the merged model and runs batched inference with timing and progress output.
 - Scores outputs with ROUGE-1/2/L and exact match.
 - LLM-as-judge scoring via OpenAI API (set `evaluation.judge_model` in `config.yaml`; requires `OPENAI_API_KEY`).
   Rates each response 1–5 with a structured rationale.
   Set `judge_model: null` to disable.
 - Supports quick and full evaluation profiles via config plus CLI overrides for example count, batch size, and generation length.
-- Emits release-gate results from the optional `release` section and can fail non-zero when thresholds are breached.
+- Uses `evaluation.golden_benchmark_path` for full-mode benchmark runs when configured.
+- Can inject retrieved context from a local corpus when `retrieval.enabled` and `retrieval.use_in_full_evaluation` are set.
+- Emits release-gate results from the optional `release` section, including per-category threshold checks, and can fail non-zero when thresholds are breached.
 - Saves results to `evals/results.json`.
+
+### 5. Build Retrieval And Benchmark Assets
+
+- `scripts/build_retrieval_corpus.py` builds a deduplicated local retrieval corpus plus a manifest with source distribution and dedupe counts.
+- `scripts/build_golden_benchmark.py` builds a reproducible benchmark JSONL from the checked-in spec and source corpus.
+- These assets are intended for source-heavy domains where release quality depends on grounded retrieval, not just memorized phrasing.
+
+### 6. Source Registry And Review Contracts
+
+- `scripts/build_source_registry.py` snapshots the configured external root into a machine-readable registry manifest with stable asset IDs, file hashes, and ingestion recommendations.
+- `scripts/ingest_reference_folder.py`, `scripts/revit_ingestion.py`, and `scripts/build_estimate_index.py` now stamp output records with `record_id` and a `data_contract` block.
+- Contract-marked non-SFT records default to `review_state: review_required` and `sft_candidate: false`.
+- `scripts/build_catalog_data.py` refuses to promote contract-marked unreviewed records into training examples unless `--allow_contract_override` is passed deliberately.
 
 ---
 
@@ -245,10 +272,15 @@ make all          # check → prepare → train → export → evaluate
 make check        # validate environment only
 make prepare      # prepare dataset only
 make train        # fine-tune (requires prepared data)
+make train-manifest # backfill train lineage from existing checkpoints
 make export       # export (requires trained adapters)
+make export-verify # verify existing exports and smoke tests
 make evaluate     # evaluate (requires exported model)
 make evaluate-quick # faster metrics-only evaluation
 make evaluate-release # fail if configured release thresholds are missed
+make source-registry # build the configured external source registry manifest
+make retrieval-corpus # build the local retrieval corpus
+make golden-benchmark # build the curated golden benchmark
 make pdf-notes    # extract short attributed notes from a local PDF
 make ingest-reference-folder # ingest a mixed local docs/code folder into JSONL
 make merge-examples # merge reviewed example JSONLs into one corpus
@@ -259,6 +291,17 @@ make help         # show all targets
 ```
 
 Override the config file: `make all CONFIG=my_config.yaml`
+
+For the electrician workflow, the release-oriented sequence is typically:
+
+```bash
+make source-registry CONFIG=config.electrician.yaml
+make retrieval-corpus
+make golden-benchmark
+make train-manifest CONFIG=config.electrician.yaml
+make export-verify CONFIG=config.electrician.yaml
+make evaluate-release CONFIG=config.electrician.yaml
+```
 
 ---
 
@@ -328,6 +371,14 @@ Keep volatile fields like material pricing, labor hours, and installed totals in
 - interpretation of category, type, and assembly context
 
 Use `scripts/build_catalog_data.py` only after reviewing whether a structured source should become training examples or stay as reference data.
+
+Raw external-root assets should first be registered with:
+
+```bash
+make source-registry CONFIG=config.electrician.yaml
+```
+
+When records carry a `data_contract` block, `build_catalog_data.py` will block automatic SFT conversion unless the record is explicitly marked reviewed/approved and `sft_candidate: true`.
 
 ---
 

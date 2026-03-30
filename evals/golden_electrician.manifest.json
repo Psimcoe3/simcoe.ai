@@ -1,0 +1,36 @@
+{
+  "benchmark_ids": [
+    "nccer-l1-module-nine-summary",
+    "nccer-l2-module-nine-summary",
+    "nccer-l1-section-one-summary",
+    "nccer-l4-example-summary",
+    "nccer-l4-contractor-guidance",
+    "nccer-l1-contractor-guidance",
+    "njatc-overview-summary",
+    "njatc-long-break-line",
+    "bids-contractor-blueprint",
+    "bids-labor-estimating-services",
+    "ebook-productivity",
+    "ebook-corrections"
+  ],
+  "categories": {
+    "blueprint_reading": 2,
+    "contractor_guidance": 2,
+    "estimating_methodology": 4,
+    "nccer_reference_summary": 4
+  },
+  "generated_at": "2026-03-30T20:38:39.070966+00:00",
+  "output": {
+    "count": 12,
+    "path": "/home/paul/src/simcoe.ai/evals/golden_electrician.jsonl"
+  },
+  "schema_version": 1,
+  "source": {
+    "path": "/home/paul/src/simcoe.ai/data/raw/electrician_reference_examples.jsonl",
+    "sha256": "ad673cdc8270db120d57ee8e9c405a1a81c3e6ee07233a7f87f6c345bd109b73"
+  },
+  "spec": {
+    "path": "/home/paul/src/simcoe.ai/evals/golden_electrician_spec.json",
+    "sha256": "8f42552ad2e353fda5267002f5a60fb4d1e6f112850b9064373293df4544ce37"
+  }
+}

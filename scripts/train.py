@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 scripts/train.py
 ────────────────
@@ -18,12 +20,20 @@ Prerequisites:
 import argparse
 import math
 import os
+import re
+import shutil
 
-from unsloth import FastLanguageModel
 from datasets import load_from_disk
 from config_validation import load_config, validate_train_config
 from dotenv import load_dotenv
-from trl import SFTTrainer, SFTConfig
+from manifest_utils import (
+    current_utc_timestamp,
+    directory_artifact_manifest,
+    read_json_file,
+    runtime_manifest,
+    safe_git_commit,
+    write_json_file,
+)
 
 
 # ── Model + adapter setup ──────────────────────────────────────────────────────
@@ -38,6 +48,8 @@ def build_model(cfg: dict):
 
     # FastLanguageModel patches the HuggingFace model class with Unsloth's
     # optimised CUDA kernels at load time — no code changes required elsewhere.
+    from unsloth import FastLanguageModel
+
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=m["name"],
         max_seq_length=m["max_seq_length"],
@@ -126,7 +138,9 @@ def build_trainer(
     eval_dataset,
     cfg: dict,
     tracker: str,
-) -> SFTTrainer:
+) -> "SFTTrainer":
+    from trl import SFTConfig, SFTTrainer
+
     t = cfg["training"]
     m = cfg["model"]
 
@@ -188,6 +202,242 @@ def build_trainer(
     return trainer
 
 
+def _tracker_name(cfg: dict) -> str:
+    privacy = cfg.get("privacy", {})
+    return privacy.get("tracking", "tensorboard")
+
+
+def load_processed_manifest(processed_dir: str) -> dict | None:
+    manifest_path = os.path.join(processed_dir, "manifest.json")
+    if not os.path.isfile(manifest_path):
+        return None
+    try:
+        return read_json_file(manifest_path)
+    except Exception as exc:
+        return {
+            "path": os.path.abspath(manifest_path),
+            "error": str(exc),
+        }
+
+
+def summarise_trainer_state(trainer: SFTTrainer) -> dict:
+    state = trainer.state
+    log_history = state.log_history or []
+    final_log = log_history[-1] if log_history else None
+
+    return {
+        "epoch": state.epoch,
+        "global_step": state.global_step,
+        "max_steps": state.max_steps,
+        "num_train_epochs": state.num_train_epochs,
+        "best_metric": state.best_metric,
+        "best_model_checkpoint": state.best_model_checkpoint,
+        "final_log": final_log,
+    }
+
+
+def summarise_trainer_state_dict(state: dict) -> dict:
+    log_history = state.get("log_history") or []
+    final_log = log_history[-1] if log_history else None
+    return {
+        "epoch": state.get("epoch"),
+        "global_step": state.get("global_step"),
+        "max_steps": state.get("max_steps"),
+        "num_train_epochs": state.get("num_train_epochs"),
+        "best_metric": state.get("best_metric"),
+        "best_model_checkpoint": state.get("best_model_checkpoint"),
+        "final_log": final_log,
+    }
+
+
+CHECKPOINT_PATTERN = re.compile(r"^checkpoint-(\d+)$")
+
+
+def find_latest_checkpoint(adapter_dir: str) -> str | None:
+    candidates: list[tuple[int, str]] = []
+    for entry in os.listdir(adapter_dir):
+        match = CHECKPOINT_PATTERN.match(entry)
+        if not match:
+            continue
+        checkpoint_path = os.path.join(adapter_dir, entry)
+        if os.path.isdir(checkpoint_path):
+            candidates.append((int(match.group(1)), checkpoint_path))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: item[0])
+    return candidates[-1][1]
+
+
+def load_existing_trainer_state(adapter_dir: str) -> tuple[dict | None, str | None]:
+    trainer_state_path = os.path.join(adapter_dir, "trainer_state.json")
+    if os.path.isfile(trainer_state_path):
+        return read_json_file(trainer_state_path), trainer_state_path
+
+    latest_checkpoint = find_latest_checkpoint(adapter_dir)
+    if latest_checkpoint is None:
+        return None, None
+
+    checkpoint_state_path = os.path.join(latest_checkpoint, "trainer_state.json")
+    if not os.path.isfile(checkpoint_state_path):
+        return None, None
+
+    return read_json_file(checkpoint_state_path), checkpoint_state_path
+
+
+def reconstruct_train_metrics(trainer_state: dict) -> dict:
+    final_log = summarise_trainer_state_dict(trainer_state).get("final_log") or {}
+    return {
+        "reconstructed_from_existing_artifacts": True,
+        "epoch": trainer_state.get("epoch"),
+        "global_step": trainer_state.get("global_step"),
+        "max_steps": trainer_state.get("max_steps"),
+        "num_train_epochs": trainer_state.get("num_train_epochs"),
+        "final_logged_loss": final_log.get("loss"),
+        "final_logged_learning_rate": final_log.get("learning_rate"),
+        "total_flos": trainer_state.get("total_flos"),
+    }
+
+
+def resolve_dataset_counts(processed_dir: str) -> tuple[int, int]:
+    processed_manifest = load_processed_manifest(processed_dir)
+    counts = processed_manifest.get("counts") if isinstance(processed_manifest, dict) else None
+    if isinstance(counts, dict):
+        train_rows = counts.get("train_rows")
+        valid_rows = counts.get("valid_rows")
+        if isinstance(train_rows, int) and isinstance(valid_rows, int):
+            return train_rows, valid_rows
+
+    train_dataset = load_from_disk(os.path.join(processed_dir, "train"))
+    eval_dataset = load_from_disk(os.path.join(processed_dir, "valid"))
+    return len(train_dataset), len(eval_dataset)
+
+
+def build_training_manifest(
+    cfg: dict,
+    config_path: str,
+    tracker: str,
+    processed_dir: str,
+    adapter_dir: str,
+    train_rows: int,
+    valid_rows: int,
+    train_metrics: dict,
+    trainer_state_summary: dict,
+    trainer_state_path: str,
+    manifest_mode: str,
+    trainer_state_source_path: str | None = None,
+) -> dict:
+    processed_manifest = load_processed_manifest(processed_dir)
+
+    return {
+        "schema_version": 1,
+        "generated_at": current_utc_timestamp(),
+        "git_commit": safe_git_commit(os.getcwd()),
+        "config_path": os.path.abspath(config_path),
+        "manifest_mode": manifest_mode,
+        "tracker": tracker,
+        "model": cfg["model"],
+        "lora": cfg["lora"],
+        "training": cfg["training"],
+        "data": {
+            "processed_dir": os.path.abspath(processed_dir),
+            "train_rows": train_rows,
+            "valid_rows": valid_rows,
+            "processed_manifest": processed_manifest,
+        },
+        "runtime": runtime_manifest(
+            [
+                "torch",
+                "transformers",
+                "datasets",
+                "trl",
+                "peft",
+                "accelerate",
+                "unsloth",
+            ]
+        ),
+        "train_metrics": train_metrics,
+        "trainer_state": trainer_state_summary,
+        "outputs": {
+            "adapter_dir": os.path.abspath(adapter_dir),
+            "trainer_state_path": os.path.abspath(trainer_state_path),
+            "trainer_state_source_path": (
+                os.path.abspath(trainer_state_source_path)
+                if trainer_state_source_path
+                else os.path.abspath(trainer_state_path)
+            ),
+            "artifacts": directory_artifact_manifest(adapter_dir),
+        },
+    }
+
+
+def write_training_manifest(
+    cfg: dict,
+    config_path: str,
+    tracker: str,
+    processed_dir: str,
+    adapter_dir: str,
+    train_dataset,
+    eval_dataset,
+    trainer: SFTTrainer,
+    train_metrics: dict,
+) -> str:
+    manifest_path = os.path.join(adapter_dir, "train_manifest.json")
+    trainer_state_path = os.path.join(adapter_dir, "trainer_state.json")
+    trainer.state.save_to_json(trainer_state_path)
+
+    manifest = build_training_manifest(
+        cfg,
+        config_path,
+        tracker,
+        processed_dir,
+        adapter_dir,
+        len(train_dataset),
+        len(eval_dataset),
+        train_metrics,
+        summarise_trainer_state(trainer),
+        trainer_state_path,
+        manifest_mode="post_train",
+    )
+    write_json_file(manifest_path, manifest)
+    return manifest_path
+
+
+def backfill_training_manifest(cfg: dict, config_path: str, tracker: str) -> str:
+    processed_dir = cfg["data"]["processed_dir"]
+    adapter_dir = cfg["training"]["output_dir"]
+    manifest_path = os.path.join(adapter_dir, "train_manifest.json")
+    trainer_state, trainer_state_source_path = load_existing_trainer_state(adapter_dir)
+
+    if trainer_state is None or trainer_state_source_path is None:
+        raise FileNotFoundError(
+            f"No trainer_state.json found in {adapter_dir} or its checkpoint-* subdirectories"
+        )
+
+    canonical_trainer_state_path = os.path.join(adapter_dir, "trainer_state.json")
+    if os.path.abspath(trainer_state_source_path) != os.path.abspath(canonical_trainer_state_path):
+        shutil.copyfile(trainer_state_source_path, canonical_trainer_state_path)
+
+    train_rows, valid_rows = resolve_dataset_counts(processed_dir)
+    manifest = build_training_manifest(
+        cfg,
+        config_path,
+        tracker,
+        processed_dir,
+        adapter_dir,
+        train_rows,
+        valid_rows,
+        reconstruct_train_metrics(trainer_state),
+        summarise_trainer_state_dict(trainer_state),
+        canonical_trainer_state_path,
+        manifest_mode="backfill_existing_artifacts",
+        trainer_state_source_path=trainer_state_source_path,
+    )
+    write_json_file(manifest_path, manifest)
+    return manifest_path
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -203,10 +453,21 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="QLoRA fine-tuning with Unsloth.")
     parser.add_argument("--config", default="config.yaml")
+    parser.add_argument(
+        "--manifest_only",
+        action="store_true",
+        help="Backfill train_manifest.json from existing adapter and checkpoint artifacts without running training.",
+    )
     args = parser.parse_args()
 
     cfg = load_config(args.config)
     validate_train_config(cfg)
+
+    if args.manifest_only:
+        tracker = _tracker_name(cfg)
+        manifest_path = backfill_training_manifest(cfg, args.config, tracker)
+        print(f"\n🧾  Training manifest written to: {manifest_path}\n")
+        return
 
     # Initialise tracking (TensorBoard by default — fully local)
     tracker = _get_tracker(cfg)
@@ -226,7 +487,7 @@ def main() -> None:
     trainer = build_trainer(model, tokenizer, train_dataset, eval_dataset, cfg, tracker)
 
     print("\n🏋️  Starting training …")
-    trainer.train()
+    train_result = trainer.train()
 
     # Save LoRA adapters (not the full merged model — see scripts/export.py)
     adapter_dir = cfg["training"]["output_dir"]
@@ -234,6 +495,19 @@ def main() -> None:
     print(f"\n💾  Saving LoRA adapters to: {adapter_dir}")
     model.save_pretrained(adapter_dir)
     tokenizer.save_pretrained(adapter_dir)
+
+    manifest_path = write_training_manifest(
+        cfg,
+        args.config,
+        tracker,
+        processed_dir,
+        adapter_dir,
+        train_dataset,
+        eval_dataset,
+        trainer,
+        train_result.metrics,
+    )
+    print(f"    Training manifest → {manifest_path}")
 
     if tracker == "wandb":
         try:

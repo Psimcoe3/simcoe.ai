@@ -37,6 +37,9 @@ import sys
 from collections import defaultdict
 
 
+APPROVED_REVIEW_STATES = {"reviewed", "approved"}
+
+
 def _clean_value(value):
     if value is None:
         return None
@@ -124,6 +127,58 @@ def _normalize_record(record: dict) -> dict:
                     normalized[canonical_key] = cleaned
                     break
     return normalized
+
+
+def _record_label(record: dict, index: int) -> str:
+    for key in (
+        "page_title",
+        "product_name",
+        "description",
+        "record_type",
+        "kind",
+        "source_name",
+    ):
+        cleaned = _clean_value(record.get(key))
+        if cleaned:
+            return cleaned
+    return f"record {index}"
+
+
+def validate_sft_contracts(records: list[dict], allow_contract_override: bool) -> None:
+    blocked = []
+    for index, record in enumerate(records, start=1):
+        contract = record.get("data_contract")
+        if not isinstance(contract, dict):
+            continue
+
+        review_state = _clean_value(contract.get("review_state")) or "review_required"
+        sft_candidate = contract.get("sft_candidate")
+        reasons = []
+        if review_state not in APPROVED_REVIEW_STATES:
+            reasons.append(f"review_state={review_state}")
+        if sft_candidate is not True:
+            reasons.append("sft_candidate=false")
+        if reasons:
+            blocked.append((index, _record_label(record, index), reasons))
+
+    if not blocked:
+        return
+
+    if allow_contract_override:
+        print(
+            "⚠️  Overriding data-contract gate for "
+            f"{len(blocked)} contract-marked records."
+        )
+        return
+
+    sample_index, sample_label, reasons = blocked[0]
+    raise ValueError(
+        "Refusing to generate SFT examples from contract-marked records that are not "
+        f"approved for training ({len(blocked)} blocked). Example at record {sample_index} "
+        f"[{sample_label}] has: {', '.join(reasons)}. Review the source and set "
+        "data_contract.review_state to reviewed/approved plus sft_candidate=true, or rerun "
+        "with --allow_contract_override to bypass intentionally."
+    )
 
 
 def _spec_pairs(record: dict) -> list[tuple[str, str]]:
@@ -452,12 +507,23 @@ def main() -> None:
     )
     parser.add_argument("--source", required=True, help="Source catalog file (.csv or .jsonl)")
     parser.add_argument("--out", required=True, help="Output JSONL path")
+    parser.add_argument(
+        "--allow_contract_override",
+        action="store_true",
+        help="Allow conversion of contract-marked records that are not approved for SFT.",
+    )
     args = parser.parse_args()
 
     try:
         source_records = _load_source(args.source)
     except Exception as exc:
         print(f"❌  Could not load source data: {exc}")
+        sys.exit(1)
+
+    try:
+        validate_sft_contracts(source_records, args.allow_contract_override)
+    except Exception as exc:
+        print(f"❌  {exc}")
         sys.exit(1)
 
     examples = build_examples(source_records)

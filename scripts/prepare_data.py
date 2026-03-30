@@ -33,9 +33,9 @@ import os
 import sys
 
 from datasets import Dataset, load_dataset
-from transformers import AutoTokenizer
 from config_validation import load_config, validate_prepare_data_config
 from manifest_utils import current_utc_timestamp, sha256_file, summarise_numeric, write_json_file
+from tokenizer_utils import load_tokenizer_with_compat
 
 
 SUPPORTED_RESPONSE_KEYS = ("response", "output")
@@ -306,7 +306,7 @@ def main() -> None:
 
     print(f"\n🔍  Loading tokeniser from '{model_name}' for length validation …")
     try:
-        tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        tokenizer = load_tokenizer_with_compat(model_name)
     except Exception as exc:
         print(f"  ⚠️   Could not load tokeniser ({exc}).  Skipping length validation.")
         tokenizer = None

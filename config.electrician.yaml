@@ -1,5 +1,20 @@
 # config.electrician.yaml — electrician-focused training configuration.
 
+architecture:
+  system_type: "grounded_multi_runtime"
+  primary_runtime: "text"
+  multimodal_runtime_enabled: false
+  retrieval_layer_enabled: true
+  geometry_rules_enabled: false
+  grounded_answers_require_retrieval: true
+
+source_registry:
+  root: "/mnt/c/Users/Paul/OneDrive/Desktop/ElectricalAi Docs"
+  manifest_path: "data/registry/electricalai_docs_registry.json"
+  default_review_state: "review_required"
+  default_data_family: "reference_unassigned"
+  allow_auto_sft: false
+
 model:
   name: "unsloth/Meta-Llama-3.1-8B-bnb-4bit"
   max_seq_length: 2048
@@ -52,6 +67,7 @@ export:
 evaluation:
   results_path: "evals/results_electrician.json"
   judge_model: "simcoe"
+  golden_benchmark_path: "evals/golden_electrician.jsonl"
   num_examples: 100
   quick_num_examples: 8
   max_new_tokens: 192
@@ -61,6 +77,12 @@ evaluation:
 
 release:
   fail_on_threshold_breach: false
+  require_merged_smoke_test: true
+  require_gguf_smoke_test: true
+  smoke_test_prompt: "In one sentence, what is torque in an electrical motor context?"
+  smoke_test_max_new_tokens: 48
+  smoke_test_min_response_chars: 40
+  ollama_model_name: "simcoe-electrician-smoke"
   quick_min_rouge1: 0.18
   quick_min_rouge2: 0.10
   quick_min_rougeL: 0.16
@@ -70,6 +92,32 @@ release:
   full_min_rougeL: 0.18
   full_min_exact_match: 0.0
   min_avg_judge_score: 3.5
+  category_thresholds:
+    nccer_reference_summary:
+      min_rouge1: 0.16
+      min_rouge2: 0.08
+      min_rougeL: 0.14
+    contractor_guidance:
+      min_rouge1: 0.16
+      min_rouge2: 0.08
+      min_rougeL: 0.14
+    blueprint_reading:
+      min_rouge1: 0.16
+      min_rouge2: 0.08
+      min_rougeL: 0.14
+    estimating_methodology:
+      min_rouge1: 0.16
+      min_rouge2: 0.08
+      min_rougeL: 0.14
+
+retrieval:
+  enabled: true
+  corpus_path: "data/retrieval/electrician_reference_corpus.jsonl"
+  manifest_path: "data/retrieval/electrician_reference_corpus.manifest.json"
+  top_k: 3
+  max_context_chars: 1600
+  min_score: 2
+  use_in_full_evaluation: true
 
 privacy:
   tracking: "tensorboard"

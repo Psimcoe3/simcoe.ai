@@ -30,6 +30,8 @@ import csv
 import json
 from pathlib import Path
 
+from data_contracts import build_data_contract, stable_identifier
+
 
 SCAN_EXTENSIONS = {".rfa"}
 OPTIONAL_SCAN_EXTENSIONS = {".rvt"}
@@ -150,6 +152,20 @@ def _build_lookup_key(record: dict) -> str:
     return joined.strip("-")
 
 
+def _attach_spatial_contract(record: dict) -> dict:
+    record["record_id"] = stable_identifier(
+        "revit_family_reference",
+        record.get("lookup_key") or record.get("family_and_type") or record.get("family_name"),
+        record.get("source_path") or record.get("source_name"),
+    )
+    record["data_contract"] = build_data_contract(
+        data_family="spatial_grounding_records",
+        runtime_owner="geometry_rules",
+        routing_hint="deterministic_tool_input",
+    )
+    return record
+
+
 def _collect_extra_fields(record: dict, consumed_aliases: set[str]) -> dict:
     extras = {}
     for key, value in record.items():
@@ -233,7 +249,7 @@ def _normalize_export_record(record: dict, source_name: str) -> dict | None:
     extras = _collect_extra_fields(record, consumed_aliases)
     if extras:
         normalized["source_fields"] = extras
-    return normalized
+    return _attach_spatial_contract(normalized)
 
 
 def _scan_family_dir(path: str, include_rvt: bool) -> list[dict]:
@@ -256,7 +272,8 @@ def _scan_family_dir(path: str, include_rvt: bool) -> list[dict]:
         category = relative_path.parts[0] if len(relative_path.parts) > 1 else None
         family_name = file_path.stem
         records.append(
-            {
+            _attach_spatial_contract(
+                {
                 "record_type": "revit_family_reference",
                 "source_type": "family_directory_scan",
                 "source_name": str(base_path),
@@ -270,7 +287,8 @@ def _scan_family_dir(path: str, include_rvt: bool) -> list[dict]:
                 "lookup_key": _build_lookup_key(
                     {"category": category, "family_name": family_name}
                 ),
-            }
+                }
+            )
         )
     return records
 

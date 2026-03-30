@@ -5,9 +5,14 @@
 #   make check        # validate environment only
 #   make prepare      # prepare dataset only
 #   make train        # train only (requires prepared data)
+#   make train-manifest # backfill a train manifest from existing checkpoints
 #   make export       # export only (requires trained adapters)
+#   make export-verify # verify existing export artifacts + smoke tests
 #   make gguf         # convert merged model to GGUF and register with Ollama
 #   make evaluate     # evaluate only (requires exported model)
+#   make source-registry # snapshot the configured external source root into a registry manifest
+#   make retrieval-corpus # build a local retrieval corpus for source-grounded evaluation
+#   make golden-benchmark # build the curated golden benchmark from the checked-in spec
 #   make generate     # generate synthetic data using Ollama (requires running model)
 #   make clean        # remove all generated artifacts
 #
@@ -26,8 +31,15 @@ GGUF_F16      := $(GGUF_DIR)/model-f16.gguf
 GGUF_Q4       := $(GGUF_DIR)/model-Q4_K_M.gguf
 MODELFILE     := $(GGUF_DIR)/Modelfile
 OLLAMA        := $(HOME)/.local/bin/ollama
+RETRIEVAL_SOURCE   ?= data/raw/electrician_reference_examples.jsonl
+RETRIEVAL_OUT      ?= data/retrieval/electrician_reference_corpus.jsonl
+RETRIEVAL_MANIFEST ?= data/retrieval/electrician_reference_corpus.manifest.json
+GOLDEN_SOURCE      ?= $(RETRIEVAL_SOURCE)
+GOLDEN_SPEC        ?= evals/golden_electrician_spec.json
+GOLDEN_OUT         ?= evals/golden_electrician.jsonl
+GOLDEN_MANIFEST    ?= evals/golden_electrician.manifest.json
 
-.PHONY: all check prepare train export gguf evaluate evaluate-quick evaluate-release generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest estimate-index clean help
+.PHONY: all check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release source-registry retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest estimate-index clean help
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -44,8 +56,14 @@ prepare: ## Prepare JSONL data → processed train/valid splits
 train: ## QLoRA fine-tuning with Unsloth + SFTTrainer
 	$(PYTHON) scripts/train.py --config $(CONFIG)
 
+train-manifest: ## Backfill train manifest from existing adapter/checkpoint artifacts
+	$(PYTHON) scripts/train.py --config $(CONFIG) --manifest_only
+
 export: ## Merge adapters → 16-bit model
 	$(PYTHON) scripts/export.py --config $(CONFIG)
+
+export-verify: ## Verify existing merged/GGUF artifacts, smoke tests, and export manifest
+	$(PYTHON) scripts/export.py --config $(CONFIG) --verify_existing
 
 gguf: $(GGUF_Q4) ## Convert to GGUF Q4_K_M and register with Ollama
 	@echo "Registering model with Ollama …"
@@ -69,6 +87,22 @@ evaluate-quick: ## Run a faster metrics-only evaluation profile
 
 evaluate-release: ## Evaluate and fail if configured release thresholds are not met
 	$(PYTHON) scripts/evaluate.py --config $(CONFIG) --fail_on_thresholds
+
+source-registry: ## Build a registry manifest for the configured external source root
+	$(PYTHON) scripts/build_source_registry.py --config $(CONFIG)
+
+retrieval-corpus: ## Build a deduplicated retrieval corpus from source-grounded examples
+	$(PYTHON) scripts/build_retrieval_corpus.py \
+		--source $(RETRIEVAL_SOURCE) \
+		--out $(RETRIEVAL_OUT) \
+		--manifest $(RETRIEVAL_MANIFEST)
+
+golden-benchmark: ## Build the curated golden benchmark from the checked-in spec
+	$(PYTHON) scripts/build_golden_benchmark.py \
+		--source $(GOLDEN_SOURCE) \
+		--spec $(GOLDEN_SPEC) \
+		--out $(GOLDEN_OUT) \
+		--manifest $(GOLDEN_MANIFEST)
 
 generate: ## Generate synthetic training data using Ollama
 	$(PYTHON) scripts/generate_data.py --topics topics.yaml \

@@ -20,6 +20,8 @@ import json
 from pathlib import Path
 from urllib.parse import urlparse
 
+from data_contracts import build_data_contract, stable_identifier
+
 
 ESTIMATE_FIELDS = (
     "description",
@@ -179,6 +181,21 @@ def _build_lookup_key(record: dict) -> str:
     return joined.strip("-")
 
 
+def _attach_estimate_contract(record: dict) -> dict:
+    record["record_id"] = stable_identifier(
+        "estimate_lookup",
+        record.get("lookup_key") or record.get("description"),
+        record.get("source_name"),
+        record.get("source_row"),
+    )
+    record["data_contract"] = build_data_contract(
+        data_family="estimate_lookup_records",
+        runtime_owner="geometry_rules",
+        routing_hint="deterministic_tool_input",
+    )
+    return record
+
+
 def _normalize_mapping_record(record: dict, source_name: str, row_number: int) -> dict | None:
     family_name = _lookup_value(
         record,
@@ -248,7 +265,7 @@ def _normalize_mapping_record(record: dict, source_name: str, row_number: int) -
         "lookup_tokens": _tokenize(category, family_name, manufacturer, part_number, description),
     }
     normalized["lookup_key"] = _build_lookup_key(normalized)
-    return normalized
+    return _attach_estimate_contract(normalized)
 
 
 def _estimate_record_score(record: dict) -> int:
@@ -331,7 +348,7 @@ def _normalize_rsmeans_record(record: dict, source_name: str, row_number: int) -
         "lookup_tokens": _tokenize(description, unit, crew),
     }
     normalized["lookup_key"] = _build_lookup_key(normalized)
-    return normalized
+    return _attach_estimate_contract(normalized)
 
 
 def _normalize_rsmeans_har_row(cells: list, source_name: str, row_number: int) -> dict | None:
@@ -378,7 +395,7 @@ def _normalize_rsmeans_har_row(cells: list, source_name: str, row_number: int) -
         "lookup_tokens": _tokenize(description, unit, crew),
     }
     normalized["lookup_key"] = _build_lookup_key(normalized)
-    return normalized
+    return _attach_estimate_contract(normalized)
 
 
 def _looks_like_code_series(values: list[float | None]) -> bool:

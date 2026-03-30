@@ -23,6 +23,7 @@ import json
 import re
 from pathlib import Path
 
+from data_contracts import build_data_contract, stable_identifier
 from extract_reference_pdf import extract_pdf_records
 
 
@@ -95,6 +96,7 @@ def _text_records(path: Path, root: Path, source_name: str, chunk_lines: int) ->
         return []
 
     records = []
+    relative_source_path = str(path.relative_to(root))
     for index, chunk in enumerate(_chunk_lines(lines, chunk_lines), start=1):
         title = _title_from_lines(chunk, f"{path.stem} chunk {index}")
         summary = _summary_from_lines(chunk)
@@ -108,9 +110,19 @@ def _text_records(path: Path, root: Path, source_name: str, chunk_lines: int) ->
                 "page_title": title,
                 "summary": summary,
                 "key_points": key_points,
+                "record_id": stable_identifier(
+                    "reference_note",
+                    relative_source_path,
+                    f"text_chunk_{index}",
+                ),
                 "source_path": str(path),
-                "relative_source_path": str(path.relative_to(root)),
+                "relative_source_path": relative_source_path,
                 "record_group": f"text_chunk_{index}",
+                "data_contract": build_data_contract(
+                    data_family="reference_notes",
+                    runtime_owner="retrieval",
+                    routing_hint="retrieval_only",
+                ),
             }
         )
     return records
@@ -129,6 +141,7 @@ def _code_records(path: Path, root: Path, source_name: str, chunk_lines: int) ->
         return []
 
     records = []
+    relative_source_path = str(path.relative_to(root))
     for index, chunk in enumerate(_chunk_lines(lines, chunk_lines), start=1):
         normalized_chunk = [_clean_line(line) for line in chunk]
         normalized_chunk = [line for line in normalized_chunk if line]
@@ -143,10 +156,20 @@ def _code_records(path: Path, root: Path, source_name: str, chunk_lines: int) ->
                 "page_title": title,
                 "summary": summary,
                 "key_points": normalized_chunk[:5],
+                "record_id": stable_identifier(
+                    "code_reference",
+                    relative_source_path,
+                    f"code_chunk_{index}",
+                ),
                 "source_path": str(path),
-                "relative_source_path": str(path.relative_to(root)),
+                "relative_source_path": relative_source_path,
                 "language": _language_for_path(path),
                 "record_group": f"code_chunk_{index}",
+                "data_contract": build_data_contract(
+                    data_family="code_reference_notes",
+                    runtime_owner="retrieval",
+                    routing_hint="retrieval_only",
+                ),
             }
         )
     return records
@@ -206,7 +229,19 @@ def main() -> int:
                 end_page=None,
             )
             for record in pdf_records:
-                record["relative_source_path"] = str(path.relative_to(root))
+                relative_source_path = str(path.relative_to(root))
+                record["relative_source_path"] = relative_source_path
+                record["record_id"] = stable_identifier(
+                    "reference_note",
+                    relative_source_path,
+                    record.get("page_start"),
+                    record.get("page_end"),
+                )
+                record["data_contract"] = build_data_contract(
+                    data_family="reference_notes",
+                    runtime_owner="retrieval",
+                    routing_hint="retrieval_only",
+                )
             records.extend(pdf_records)
             counts["pdf"] += len(pdf_records)
             continue

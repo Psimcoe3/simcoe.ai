@@ -24,9 +24,15 @@
       "size_bytes": 3479872
     }
   },
-  "generated_at": "2026-03-30T20:21:00.355425+00:00",
+  "evaluation_source": {
+    "available_rows": 12,
+    "kind": "golden_benchmark",
+    "path": "/home/paul/src/simcoe.ai/evals/golden_electrician.jsonl",
+    "selected_rows": 12
+  },
+  "generated_at": "2026-03-30T22:05:55.491759+00:00",
   "inference_stats": {
-    "examples_per_second": 0.0251,
+    "examples_per_second": 0.0064,
     "final_batch_size": 1,
     "oom_retries": 0,
     "requested_batch_size": 1
@@ -35,109 +41,535 @@
   "metrics": {
     "exact_match": 0.0,
     "rouge": {
-      "rouge1": 0.2054,
-      "rouge2": 0.118,
-      "rougeL": 0.1777
+      "rouge1": 0.4295,
+      "rouge2": 0.2875,
+      "rougeL": 0.3418
     }
   },
-  "mode": "quick",
-  "num_examples": 8,
+  "mode": "full",
+  "num_examples": 12,
+  "per_category_metrics": {
+    "blueprint_reading": {
+      "avg_judge_score": null,
+      "count": 2,
+      "exact_match": 0.0,
+      "rouge": {
+        "rouge1": 0.4144,
+        "rouge2": 0.3004,
+        "rougeL": 0.3628
+      }
+    },
+    "contractor_guidance": {
+      "avg_judge_score": null,
+      "count": 2,
+      "exact_match": 0.0,
+      "rouge": {
+        "rouge1": 0.3777,
+        "rouge2": 0.1545,
+        "rougeL": 0.2591
+      }
+    },
+    "estimating_methodology": {
+      "avg_judge_score": null,
+      "count": 4,
+      "exact_match": 0.0,
+      "rouge": {
+        "rouge1": 0.4244,
+        "rouge2": 0.2949,
+        "rougeL": 0.3292
+      }
+    },
+    "nccer_reference_summary": {
+      "avg_judge_score": null,
+      "count": 4,
+      "exact_match": 0.0,
+      "rouge": {
+        "rouge1": 0.4681,
+        "rouge2": 0.3401,
+        "rougeL": 0.3853
+      }
+    }
+  },
   "per_example": [
     {
+      "benchmark_id": "nccer-l1-module-nine-summary",
+      "category": "nccer_reference_summary",
       "judge": {
         "rationale": "LLM-as-judge not configured",
         "score": null
       },
-      "prediction": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 1.1.0 Company Organization\n\n1.1.0 Company Organization Every company, no matter what the size, has a certain structure to how it operates. Smaller companies may have fewer formal structures, while larger companies",
-      "prompt": "### Instruction:\nWhat estimating or industry reference information is available from NCCER Electrical Guides / NCCER Level 4 Trainee Guide?\n\n### Response:",
-      "reference": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 Remote Duct Smoke\n\nRemote Duct Smoke Indicator This duct smoke indicator includes a horn and a test and reset function. LEDs on the device pro vide a visual indication of system condi tions. This unit is also equipped with an optional strobe and smoke lens that provides an enhanced visual indicatio n of an alarm. Figure Credit: System Sensor ligh t in the elevator car itself.\n\nKey points:\n- 5.4.4 Special Door Locking Arrangements\n- There a re dry and wet d ,emical exting uish ing systems, and this section discusses them both.\n- Exti11g11islzing Systems) does not require the .instal\u00ad lation of a building fire alarm system if one was not requ ired elsewhere. Also see NFPA 12 (Carbon\n- Dioxide Exting11ishing Systems), NFPA 12A (Halon\n- 1301 Fire Exting11ishing Systems), and NFPA 2001"
+      "prediction": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 This course map shows all of the modules in\n\nElect1ical Level One. The suggested training order begins at the bottom and proceeds up. Skill levels increase as you advance on the course map. The local Training Program Sponsor may adjust the training order. (Courtesy of 1-1-1/2\" = 1' 0) 1' 1-1-1/2\" = 1' 0) 1' 1-1-1/2\" = 1' 0) 1' 1-1-1/2\" = 1' 0) 1' 1-1-1/2\" = 1' 0) 1' 1-1-1/2\" = 1' 0) 1' 1-1-1/",
+      "prompt": "### Instruction:\nSummarize the electrical construction reference source Module Nine.\n\n### Retrieved Context:\n[1] Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide\nSection: Module Nine\nContent: Module Nine Conductors and Cables Focuses on the types and applications of conduc\u00ad tors and covers proper wirin g techniq ues. Stresses the appropr iate NEC\u00ae requirements. (Module ID 26109-14; 10 I-lours) Module Ten Basic Electrical Construction Dravvings Focuses on electrical prints, drawings, and sym\u00ad bols. Teaches the types of information that can be found on schema tics, one-lines, and wiring dia\u00ad grams.\n\nKey points:\n- Focuses on the types and applications of conduc\u00ad tors and covers proper wirin g techniq ues. Stresses the appropr iate NEC\u00ae requirements. (Module ID\n- Focuses on electrical prints, drawings, and sym\u00ad bols. Teaches the types of information that can be found on schema tics, one-lines, and wiring dia\u00ad grams. (Module ID 26110-14; 7.5 Hours)\n- Introduction to Electrical Circuits\n- This course map shows all of the modules in\n- Elect1ical Level One. The suggested training order begins at the bottom and proceeds up. Skill levels increase as you advance on the course map. The local Training Program Sponsor may adjust the training order.\n\n### Response:",
+      "reference": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 Module Nine\n\nModule Nine Conductors and Cables Focuses on the types and applications of conduc\u00ad tors and covers proper wirin g techniq ues. Stresses the appropr iate NEC\u00ae requirements. (Module ID 26109-14; 10 I-lours) Module Ten Basic Electrical Construction Dravvings Focuses on electrical prints, drawings, and sym\u00ad bols. Teaches the types of information that can be found on schema tics, one-lines, and wiring dia\u00ad grams.\n\nKey points:\n- Focuses on the types and applications of conduc\u00ad tors and covers proper wirin g techniq ues. Stresses the appropr iate NEC\u00ae requirements. (Module ID\n- Focuses on electrical prints, drawings, and sym\u00ad bols. Teaches the types of information that can be found on schema tics, one-lines, and wiring dia\u00ad grams. (Module ID 26110-14; 7.5 Hours)\n- Introduction to Electrical Circuits\n- This course map shows all of the modules in\n- Elect1ical Level One. The suggested training order begins at the bottom and proceeds up. Skill levels increase as you advance on the course map. The local Training Program Sponsor may adjust the training order.",
+      "retrieval": {
+        "preferred_section": "Module Nine",
+        "preferred_source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide",
+        "query": "Summarize the electrical construction reference source Module Nine.",
+        "results": [
+          {
+            "id": "d72c5a1ab542b5d7",
+            "score": 48.0,
+            "section": "Module Nine",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "de206dc0f9b327ec",
+            "score": 41.0,
+            "section": "Module Nine",
+            "source": "NCCER Electrical Guides / NCCER Level 2 Trainee Guide"
+          },
+          {
+            "id": "ba5b3c4c31cc206c",
+            "score": 40.0,
+            "section": "Module Nine",
+            "source": "NCCER Electrical Guides / NCCER Level 3 Trainee Guide"
+          }
+        ]
+      },
+      "section": "Module Nine",
+      "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
     },
     {
+      "benchmark_id": "nccer-l2-module-nine-summary",
+      "category": "nccer_reference_summary",
       "judge": {
         "rationale": "LLM-as-judge not configured",
         "score": null
       },
-      "prediction": "Source: NCCER Electrical Guides / NCCER Level 2 Trainee Guide \u2014 1.1.1 Frequency\n\n1.1.1 Frequency The frequency of a waveform is the number of times per second an identica l pattern repeats it\u00ad self. It is expressed in hertz (Hz). For",
-      "prompt": "### Instruction:\nWhat estimating or industry reference information is available from NCCER Electrical Guides / NCCER Level 2 Trainee Guide?\n\n### Response:",
-      "reference": "Source: NCCER Electrical Guides / NCCER Level 2 Trainee Guide \u2014 RIGHT-ANGLE---'\n\nRIGHT-ANGLE---' CONVEYOR SHEAVE CABLE ROLLER----- .;;;; - Figure 28 Typical cable tray cable-pulling arrangement. In general, the pull exerted on the cables pttlled with a basket grip shou ld not exceed 1,000 lbs (4.4 kN) . . For heavier pulls, a pulling eye should be used.\n\nKey points:\n- Figure 28 Typical cable tray cable-pulling arrangement.\n- Cables or special constru ction such as wire armor and high-voltage cables require a larger radius bend.\n- Best results are obtained by pulling the cable in one continuous operation at a speed of 20' to 25'\n- (6.1 m to 7.6 m) per minute. It may be necessary to brake the reel to reduce sagging of the cables between rollers and sheaves.\n- Figu re Credit: Greenlee/ A Tcxtro11 Company"
+      "prediction": "Source: NCCER Electrical Guides / NCCER Level 2 Trainee Guide \u2014 This course map shows all of the modules in\n\nElectrical level Two. The suggested training order begins at the bottom and proceeds up. Skill levels increase as you advance on the course map. The local Training Program Sponsor may adjust the training order. 32 N CC ER - Electrica l Leve/ Two 26211-17 \u2666 Module Descriptio n ID Module One Electrica l Calculations (Module lD 2620-17; 30 Hours) Gives a thorough explanation of the mathematics needed to do electrical work.\n\nLinked references:\n- 32 N CC ER - Electrica l Leve/ Two 26211-17 \u2666\n- ID Module One Electrica l Calculations (Module lD\n- 2620-17; 30 Hours) Gives a thorough explanation of the mathematics needed to do electrical work.\n- (",
+      "prompt": "### Instruction:\nSummarize the electrical construction reference source Module Nine.\n\n### Retrieved Context:\n[1] Source: NCCER Electrical Guides / NCCER Level 2 Trainee Guide\nSection: Module Nine\nContent: Module Nine Grounding and Bonding Focuses on the purpose of grounding and bond\u00ad ing electrical systems. Thoroughly covers NEC\u00ae requirements. (Module JD 26209-17; 15 Hours) Module Ten Circuit Breakers and Fuses Describes fuses and circuit breakers along with their practical applications. Also covers sizing.\n\nKey points:\n- Focuses on the purpose of grounding and bond\u00ad ing electrical systems. Thoroughly covers NEC\u00ae requirements. (Module JD 26209-17; 15 Hours)\n- Describes fuses and circuit breakers along with their practical applications. Also covers sizing.\n- Gives basic descriptions of various types of con\u00ad tactors and relays along with their practical appli\u00ad cations. (Module TD 26211-17; 12.5 Hours)\n- This course map shows all of the modules in\n- Electrical level Two. The suggested training order begins at the bottom and proceeds up. Skill levels increase as you advance on the course map. The local Training Program Sponsor may adjust the training order.\n\n### Response:",
+      "reference": "Source: NCCER Electrical Guides / NCCER Level 2 Trainee Guide \u2014 Module Nine\n\nModule Nine Grounding and Bonding Focuses on the purpose of grounding and bond\u00ad ing electrical systems. Thoroughly covers NEC\u00ae requirements. (Module JD 26209-17; 15 Hours) Module Ten Circuit Breakers and Fuses Describes fuses and circuit breakers along with their practical applications. Also covers sizing.\n\nKey points:\n- Focuses on the purpose of grounding and bond\u00ad ing electrical systems. Thoroughly covers NEC\u00ae requirements. (Module JD 26209-17; 15 Hours)\n- Describes fuses and circuit breakers along with their practical applications. Also covers sizing.\n- Gives basic descriptions of various types of con\u00ad tactors and relays along with their practical appli\u00ad cations. (Module TD 26211-17; 12.5 Hours)\n- This course map shows all of the modules in\n- Electrical level Two. The suggested training order begins at the bottom and proceeds up. Skill levels increase as you advance on the course map. The local Training Program Sponsor may adjust the training order.",
+      "retrieval": {
+        "preferred_section": "Module Nine",
+        "preferred_source": "NCCER Electrical Guides / NCCER Level 2 Trainee Guide",
+        "query": "Summarize the electrical construction reference source Module Nine.",
+        "results": [
+          {
+            "id": "de206dc0f9b327ec",
+            "score": 47.0,
+            "section": "Module Nine",
+            "source": "NCCER Electrical Guides / NCCER Level 2 Trainee Guide"
+          },
+          {
+            "id": "d72c5a1ab542b5d7",
+            "score": 42.0,
+            "section": "Module Nine",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "ba5b3c4c31cc206c",
+            "score": 40.0,
+            "section": "Module Nine",
+            "source": "NCCER Electrical Guides / NCCER Level 3 Trainee Guide"
+          }
+        ]
+      },
+      "section": "Module Nine",
+      "source": "NCCER Electrical Guides / NCCER Level 2 Trainee Guide"
     },
     {
+      "benchmark_id": "nccer-l1-section-one-summary",
+      "category": "nccer_reference_summary",
       "judge": {
         "rationale": "LLM-as-judge not configured",
         "score": null
       },
-      "prediction": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 Example 2:\n\nExample 2: What size THHN conduc tor would be needed to supply a 150A load when there are 4 to 6 cur\u00ad rent-carrying conductors in a raceway with an",
-      "prompt": "### Instruction:\nSummarize the electrical construction reference source Example 2:.\n\n### Response:",
-      "reference": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 Example 2:\n\nExample 2: The lighting load of 21' of track lighting is de\u00ad termined as follows: 21' ~ 2 = 10.5' (rou nd fractio ns up) = 11 ' 11 ' X 150VA = 1,650VA Any loads that are continuous duty are multip lied by 125% to determine the overcurre nt protect ion device and conductor size. All others are calculated at 100%. 3.1.5 Outside Lighting Loads Outsid e lighting loads are calculated by multiply\u00ad ing the rati ng in VA by the number of fixture s. Refer to NEC Section 220.14(D) .\n\nKey points:\n- The lighting load of 21' of track lighting is de\u00ad termined as follows:\n- 21' ~ 2 = 10.5' (rou nd fractio ns up) = 11 '\n- Any loads that are continuous duty are multip lied by 125% to determine the overcurre nt protect ion device and conductor size. All others are calculated at 100%.\n- Outsid e lighting loads are calculated by multiply\u00ad ing the rati ng in VA by the number of fixture s.\n- Determin e the load for 30 outside lighting fix\u00ad tures, each rated at 250VA, including the ballast."
+      "prediction": "Response:\nSource: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 SECTION ONE\n\nSECTION ONE 1.0.0 S IZING THE ELECTRICAL SERVICE Objective Size the electric service for a dwelling. a. Calculate the electric service load. b. Calculate the ampacity of service-entrance conductors. c.\n\nKey points:\n- a. Calculate the electric service load.\n- 1. For a residential dwelling of a given size and equipped with a given list of major appliru1ces, demonstrate or explain how to:\n- \u2022 Compute lighting, small appliance, and laundry loads.\n- \u2022 Compute the loads for large appliances. 2.\n- d. Explain how to determine the voltage and am\u00ad pacity rating of the service. e. Explain how to determine the wire size for the various loads. f. Explain how to calculate the load for a 240V appliance. g. Explain",
+      "prompt": "### Instruction:\nSummarize the electrical construction reference source SECTION ONE.\n\n### Retrieved Context:\n[1] Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide\nSection: SECTION ONE\nContent: SECTION ONE 1.0.0 IDENTIFYING SECTORS AND TRADE OPTION S IN THE ELECTRICAL INDUSTRY Objective Identify the various sectors and trade options in the electrical industry. a. Describe the typical components in a residential wiring system. b.\n\nKey points:\n- Identify the various sectors and trade options in the electrical industry.\n- a. Describe the typical components in a residential wiring system.\n- b. Describe the typical components in a commercia l wiring system.\n- c. Describe the typical components in an industrial wir.ing system.\n- d. List various career paths and opportunities in the electrical trade.\n\n[2] Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide\nSection: SECTION ONE\nContent: SECTION ONE 1.0.0 S IZING THE ELECTRICAL SERVICE Objective Size the electric service for a dwelling. a. Calculate the electric service load. b.\n\nKey points:\n- Size the electric service for a dwelling.\n- a. Calculate the electric service load.\n- 1. For a residential dwelling of a given size and equipped with a given list of major appliru1ces, demonstrate or explain how to:\n- \u2022 Compute lighting, small appliance, and laundry loads.\n- \u2022 Compute the loads for large appliances.\n\n### Response:",
+      "reference": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 SECTION ONE\n\nSECTION ONE 1.0.0 IDENTIFYING SECTORS AND TRADE OPTION S IN THE ELECTRICAL INDUSTRY Objective Identify the various sectors and trade options in the electrical industry. a. Describe the typical components in a residential wiring system. b.\n\nKey points:\n- Identify the various sectors and trade options in the electrical industry.\n- a. Describe the typical components in a residential wiring system.\n- b. Describe the typical components in a commercia l wiring system.\n- c. Describe the typical components in an industrial wir.ing system.\n- d. List various career paths and opportunities in the electrical trade.",
+      "retrieval": {
+        "preferred_section": "SECTION ONE",
+        "preferred_source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide",
+        "query": "Summarize the electrical construction reference source SECTION ONE.",
+        "results": [
+          {
+            "id": "2cf42dab5084f195",
+            "score": 47.0,
+            "section": "SECTION ONE",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "362d36466fffb523",
+            "score": 47.0,
+            "section": "SECTION ONE",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "a01cebc7871cfbfe",
+            "score": 47.0,
+            "section": "SECTION ONE",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          }
+        ]
+      },
+      "section": "SECTION ONE",
+      "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
     },
     {
+      "benchmark_id": "nccer-l4-example-summary",
+      "category": "nccer_reference_summary",
       "judge": {
         "rationale": "LLM-as-judge not configured",
         "score": null
       },
-      "prediction": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 NCCER Electrical Guides / NCCER Level 1 Trainee Guide pages 413-414\n\n\u2666 \"\"\"\"'.,,.,~ CABLE BUS 1.3.1 Operation The cable bus is a factory",
-      "prompt": "### Instruction:\nWhat should an electrical contractor know from NCCER Electrical Guides / NCCER Level 1 Trainee Guide page NCCER Electrical Guides / NCCER Level 1 Trainee Guide pages 413-414?\n\n### Response:",
-      "reference": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 NCCER Electrical Guides / NCCER Level 1 Trainee Guide pages 413-414\n\n., ri 0 -~~-- I, r. . N \\ ~~-------------\u2022\u2022 r \u2022\u00b7\u2022 ;Ct.03\".'T; : : ' . r .~ ~t=--------------- ., .\n\nKey points:\n- Figure 3 Floor plans of a building.\n- 4 N CC ER - Electrica l Level One 2& 110-11\n- Elevation drawings may also show the heights of win dows, doors, and porches, the pitch of roofs, etc., because all of these measurements cannot be shown conveniently on floo r plans.\n- f'ig11re 4 Front and rear elevation s.\n- \u2666 2e 11 0-11 Basic Electrical Construction Drawings Module Ten 5"
+      "prediction": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 Example: What size THHN conduc tor would be needed to supply a 150A load when there are 4 to 6 cur\u00ad rent-carrying condu ctors in a raceway with an ambient temperatur e of 110\u00b0F? Solution: The adjushnent factor for 4 to 6 current \u00ad carrying condu ctors is 80%, or 0.8 [NEC Table\n\n- 3]: Multiply this value by the current to get the minimum conductor ampacity:\n- Now, find the size of conductor that has a ampacity equal to or excee ds this value. From NCC Table 310.15(8)(16), it can be determined that No. 4 THHN conduc tors will be the minimum size required to supply this 150A load. (The next larger size",
+      "prompt": "### Instruction:\nSummarize the electrical construction reference source Example:.\n\n### Retrieved Context:\n[1] Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide\nSection: Example:\nContent: Example: What size THHN conduc tor would be needed to supply a 150A load when there are 4 to 6 cur\u00ad rent-carrying condu ctors in a raceway with an ambient temperatur e of 110\u00b0F? Solution: The adjushnent factor for 4 to 6 current \u00ad carrying condu ctors is 80%, or 0.8 [NEC Table 310.15(8)(.J)(a)] The correction factor at this ambi \u00ad ent temperatur e is 0.87 [NCC Table 310.15(8)(2) (/J)]. First, find the reciprocals of these two factors.\n\nKey points:\n- What size THHN conduc tor would be needed to supply a 150A load when there are 4 to 6 cur\u00ad rent-carrying condu ctors in a raceway with an ambient temperatur e of 110\u00b0F?\n- The adjushnent factor for 4 to 6 current \u00ad carrying condu ctors is 80%, or 0.8 [NEC Table\n- 310.15(8)(.J)(a)] The correction factor at this ambi \u00ad ent temperatur e is 0.87 [NCC Table 310.15(8)(2)\n- (/J)]. First, find the reciprocals of these two factors.\n- Then, find the product of these reciprocals and the load current to size the conductor:\n\n### Response:",
+      "reference": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 Example:\n\nExample: What size THHN conduc tor would be needed to supply a 150A load when there are 4 to 6 cur\u00ad rent-carrying condu ctors in a raceway with an ambient temperatur e of 110\u00b0F? Solution: The adjushnent factor for 4 to 6 current \u00ad carrying condu ctors is 80%, or 0.8 [NEC Table 310.15(8)(.J)(a)] The correction factor at this ambi \u00ad ent temperatur e is 0.87 [NCC Table 310.15(8)(2) (/J)]. First, find the reciprocals of these two factors.\n\nKey points:\n- What size THHN conduc tor would be needed to supply a 150A load when there are 4 to 6 cur\u00ad rent-carrying condu ctors in a raceway with an ambient temperatur e of 110\u00b0F?\n- The adjushnent factor for 4 to 6 current \u00ad carrying condu ctors is 80%, or 0.8 [NEC Table\n- 310.15(8)(.J)(a)] The correction factor at this ambi \u00ad ent temperatur e is 0.87 [NCC Table 310.15(8)(2)\n- (/J)]. First, find the reciprocals of these two factors.\n- Then, find the product of these reciprocals and the load current to size the conductor:",
+      "retrieval": {
+        "preferred_section": "Example:",
+        "preferred_source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide",
+        "query": "Summarize the electrical construction reference source Example:.",
+        "results": [
+          {
+            "id": "2cc07b453c415774",
+            "score": 41.0,
+            "section": "Example:",
+            "source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide"
+          },
+          {
+            "id": "3422a404a81e0c74",
+            "score": 30.0,
+            "section": "BASIC ELECTRICAL CONSTRUCTION DRAWINGS",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "04944a892dec8e67",
+            "score": 26.0,
+            "section": "Provide a summary of how you got started in the construction industry.",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          }
+        ]
+      },
+      "section": "Example:",
+      "source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide"
     },
     {
+      "benchmark_id": "nccer-l4-contractor-guidance",
+      "category": "contractor_guidance",
       "judge": {
         "rationale": "LLM-as-judge not configured",
         "score": null
       },
-      "prediction": "Source: NCCER Electrical Guides / NCCER Level 3 Trainee Guide \u2014 1.1.0 NE~ Requirements for Conformity\n\n1.1.0 NE~ Requirements for Conformity The NEc\u00ae requirements for conformity are in Sec\u00ad tion 110.10. The general requirements",
-      "prompt": "### Instruction:\nWhat estimating or industry reference information is available from NCCER Electrical Guides / NCCER Level 3 Trainee Guide?\n\n### Response:",
-      "reference": "Source: NCCER Electrical Guides / NCCER Level 3 Trainee Guide \u2014 Table 7 NE<:' Application Rules for Motor Fuel Dispensing Facilities\n\nTable 7 NE<:' Application Rules for Motor Fuel Dispensing Facilities Application Code Requirement Code Reference Equipment in hazardous locations All wiring and componen ts must confo rm to the rules tor NEC Section 514.4 Class I locations. Equlpmont above hazardous locations All wiring must confo rm 10 tho rulos for suoh equipment In NEC Section 514.7 commercial garages. Gasoline di.spenser A disconnecting means must be provided for each circuit NEC Section 514.13 leading to or through a dispens ing pump to disconnect all voltag e sources, including feedbadc, during periods of service and maintenance. An approved seal 1sealotf) is required in each condu it entering or leaving a dispenser.\n\nKey points:\n- Application Code Requirement Code Reference\n- All wiring and componen ts must confo rm to the rules tor NEC Section 514.4\n- All wiring must confo rm 10 tho rulos for suoh equipment In NEC Section 514.7 commercial garages.\n- Grounding Metal port ions of all noncurrent \u2022carrying parts of dispensers NEC Section 514. 16 must be effectively grounded and bonded .\n- locations. NEC A ,-tic/L\u2022 517, f1111\u00b7t V covers the re\u00ad quirements for electrical wiring and equipment in"
+      "prediction": "Response:\nSource: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 Electrical calculations can be divided into three sections:\n\nElectrical calculations can be divided into three sections: lighting, small appliance loads, and general loads. The NEc\u00ae provides methods of com\u00ad puting lighting and small appliance load calcu\u00ad lations on a unit (per square foot) basis instead of having to itemize and compute each individual light and outlet. The NEc\u00ae also provides a method of computing the total house load on a unit (per square foot) basis.\n\nKey points:\n- This module covers th e resources and reference material that is available to help with electrical calculations. It also provides an overview of the\n- Nf.C\u00ae requirements for calculating lighting, small appliance, and general loads.\n- After completing this module, you will be able to:\n- \u2022 Explain why it is important to have a thorough understanding of mathematical concepts and",
+      "prompt": "### Instruction:\nWhat should an electrical contractor know from NCCER Electrical Guides / NCCER Level 4 Trainee Guide page Electrical calculations can be divided into three sections:?\n\n### Retrieved Context:\n[1] Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide\nSection: Electrical calculations can be divided into three sections:\nContent: minimum NEc\u00ae requirements, this module will focus on those requirements. Common practice in the electrical industry is to design and plan electrical systems to make allowance for futur e expansion. Providing conduit and raceways larger than the minimum required by the NEc\u00ae may reduce the labor requ ired in pulling conductors, which may offset the higher cost of the larger con\u00ad duit./\\ service is likely to be sized larger thnn the minimum required by the NEc\u00ae so that futur e expansion of the electrical system will be possible.\n\nKey points:\n- The allowab le current-carrying capacity (ampac\u00ad ity) of conductors may require ndjustment based on several factors . After complyin g wit h N EC\n- Feeder conductor size is adjusted in the following situations:\n- \u2022 The load to be supplied is a continuo us duty load per NCC Section 215.2(A)( 1)(a).\n- \u2022 There are more than three current-carrying conductors in a raceway per NEC Sectio11\n- \u2022 The ambient temperatur e that the condu ctors will pass through exceeds the temperature ratings for condu ctors listed in NCC Table\n\n### Response:",
+      "reference": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 Electrical calculations can be divided into three sections:\n\nminimum NEc\u00ae requirements, this module will focus on those requirements. Common practice in the electrical industry is to design and plan electrical systems to make allowance for futur e expansion. Providing conduit and raceways larger than the minimum required by the NEc\u00ae may reduce the labor requ ired in pulling conductors, which may offset the higher cost of the larger con\u00ad duit./\\ service is likely to be sized larger thnn the minimum required by the NEc\u00ae so that futur e expansion of the electrical system will be possible.\n\nKey points:\n- The allowab le current-carrying capacity (ampac\u00ad ity) of conductors may require ndjustment based on several factors . After complyin g wit h N EC\n- Feeder conductor size is adjusted in the following situations:\n- \u2022 The load to be supplied is a continuo us duty load per NCC Section 215.2(A)( 1)(a).\n- \u2022 There are more than three current-carrying conductors in a raceway per NEC Sectio11\n- \u2022 The ambient temperatur e that the condu ctors will pass through exceeds the temperature ratings for condu ctors listed in NCC Table",
+      "retrieval": {
+        "preferred_section": "Electrical calculations can be divided into three sections:",
+        "preferred_source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide",
+        "query": "What should an electrical contractor know from NCCER Electrical Guides / NCCER Level 4 Trainee Guide page Electrical calculations can be divided into three sections:?",
+        "results": [
+          {
+            "id": "ba1717dedd08d5c7",
+            "score": 78.0,
+            "section": "Electrical calculations can be divided into three sections:",
+            "source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide"
+          },
+          {
+            "id": "ff0f527c8dd3df02",
+            "score": 58.0,
+            "section": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide pages 445-446",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "57149a114adbd0ea",
+            "score": 56.0,
+            "section": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide pages 546-547",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          }
+        ]
+      },
+      "section": "Electrical calculations can be divided into three sections:",
+      "source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide"
     },
     {
+      "benchmark_id": "nccer-l1-contractor-guidance",
+      "category": "contractor_guidance",
       "judge": {
         "rationale": "LLM-as-judge not configured",
         "score": null
       },
-      "prediction": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 TORQUE\n\nTORQUE INCH-POUNDS = (2 X PI) X (TENSION IN LBS) OR TORQUE INCH-POUNDS = (2 X PI) X (COMPRESSED SPRING",
-      "prompt": "### Instruction:\nSummarize the electrical construction reference source TORQUE.\n\n### Response:",
-      "reference": "Source: NCCER Electrical Guides / NCCER Level 2 Trainee Guide \u2014 TORQUE\n\nTORQUE . \u2022, NEUTRAL PLANE----~\u00b7 \u2022 , : . ;\" : \u2022' . \u2022 \u2022 ' INERTIA BRUSH (Al (Bl Figure 9 Neutral p lane in a single-loop DC motor.\n\nKey points:\n- Figure 9 Neutral p lane in a single-loop DC motor.\n- A motor provides torque (a turning force) similar to that needed to turn a nut. In the illustration shown here, which wrench should be able to turn the nut more easily?\n- N CC ER - Electrica l Leve/ Two 262 02-11 \u2666\n- Figure 1.0 Two-loop armat11rc DC motor.\n- Commutation, or the switdting of the armature polarity, must take place at the neutral plane in _or\u00ad der to allow the output current from the machine"
+      "prediction": "Response\nSource: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 SECTION ONE\n\nSECTION ONE 1.0.0 ELECTRICAL HAZARDS Objective Identify electrical hazard s and their effects. a. Understand the effects of electrica l shock on the human body. b.\n\nKey points:\n- Identify electrical hazard s and their effects.\n- a. Understand the effects of electrica l shock on the human body.\n- b. Verif y that circuit s are de-energized.\n- Double-insulated/u ngrounded tools: Electr ical tools that are constructed so that the case is insu\u00ad lated from electrical energy. The case is made of a nonconductive material.\n- Fibrillation Very rapid irreg ular contractions of the muscle fibers of the heart that result in the heartbeat and pulse going out of rhythm with each other. When fibrillation occurs in the ventric",
+      "prompt": "### Instruction:\nWhat should an electrical contractor know from NCCER Electrical Guides / NCCER Level 1 Trainee Guide page SECTION ONE?\n\n### Retrieved Context:\n[1] Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide\nSection: SECTION ONE\nContent: SECTION ONE 1.0.0 IDENTIFYING SECTORS AND TRADE OPTION S IN THE ELECTRICAL INDUSTRY Objective Identify the various sectors and trade options in the electrical industry. a. Describe the typical components in a residential wiring system. b.\n\nKey points:\n- Identify the various sectors and trade options in the electrical industry.\n- a. Describe the typical components in a residential wiring system.\n- b. Describe the typical components in a commercia l wiring system.\n- c. Describe the typical components in an industrial wir.ing system.\n- d. List various career paths and opportunities in the electrical trade.\n\n[2] Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide\nSection: SECTION ONE\nContent: SECTION ONE 1.0.0 ELECTRICAL HAZARDS Objective Identify electrical hazard s and their effects. a. Understand the effects of electrica l shock on the human body. b.\n\nKey points:\n- Identify electrical hazard s and their effects.\n- a. Understand the effects of electrica l shock on the human body.\n- b. Verif y that circuit s are de-energized.\n- Double-insulated/u ngrounded tools: Electr ical tools that are constructed so that the case is insu\u00ad lated from electrical energy. The case is made of a nonconductive material.\n- Fibrillation Very rapid irreg ular contractions of the muscle fibers of the heart that result in the heartbeat and pulse going out of rhythm with each other.\n\n### Response:",
+      "reference": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 SECTION ONE\n\nSECTION ONE 1.0.0 IDENTIFYING SECTORS AND TRADE OPTION S IN THE ELECTRICAL INDUSTRY Objective Identify the various sectors and trade options in the electrical industry. a. Describe the typical components in a residential wiring system. b.\n\nKey points:\n- Identify the various sectors and trade options in the electrical industry.\n- a. Describe the typical components in a residential wiring system.\n- b. Describe the typical components in a commercia l wiring system.\n- c. Describe the typical components in an industrial wir.ing system.\n- d. List various career paths and opportunities in the electrical trade.",
+      "retrieval": {
+        "preferred_section": "SECTION ONE",
+        "preferred_source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide",
+        "query": "What should an electrical contractor know from NCCER Electrical Guides / NCCER Level 1 Trainee Guide page SECTION ONE?",
+        "results": [
+          {
+            "id": "2cf42dab5084f195",
+            "score": 58.0,
+            "section": "SECTION ONE",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "e461d86027aafbac",
+            "score": 58.0,
+            "section": "SECTION ONE",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "362d36466fffb523",
+            "score": 57.0,
+            "section": "SECTION ONE",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          }
+        ]
+      },
+      "section": "SECTION ONE",
+      "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
     },
     {
+      "benchmark_id": "njatc-overview-summary",
+      "category": "blueprint_reading",
       "judge": {
         "rationale": "LLM-as-judge not configured",
         "score": null
       },
-      "prediction": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 1.1.0 Company Organization\n\n1.1.0 Company Organization Every company, no matter what the size, has a certain structure to how it operates. Smaller companies may have fewer formal structures, while larger companies",
-      "prompt": "### Instruction:\nWhat estimating or industry reference information is available from NCCER Electrical Guides / NCCER Level 4 Trainee Guide?\n\n### Response:",
-      "reference": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 Objectives\n\nObjectives When you have completed this modu le, you will be able to do the folJowing: l. Describe the variou s codes and standard s that relate to fire alarm systems. a. Explain how codes and standar ds are implemented and list organization s responsible for their creation and maintenance.\n\nKey points:\n- When you have completed this modu le, you will be able to do the folJowing:\n- l. Describe the variou s codes and standard s that relate to fire alarm systems.\n- a. Explain how codes and standar ds are implemented and list organization s responsible for their creation and maintenance.\n- b. List the various FPA codes and standards that apply to fire alarm sys tems.\n- 2. Describe the basic types of fire alar m systems and their prim ary components."
+      "prediction": "Source: NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd3ff2d0b7e4c5badb2ab0 -- Anna\u2019s Archive \u2014 OVERVIEW\n\n- After completing this chapter, you will be able to:\n- Describe the information found on various schedules.\n- Apply the information found on schedules to a job site.\n- Describe the information found in specifications.",
+      "prompt": "### Instruction:\nSummarize the electrical construction reference source OVERVIEW.\n\n### Retrieved Context:\n[1] Source: NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive\nSection: OVERVIEW\nContent: OVERVIEW This chapter covers schedules and specifications. Schedules and specifications give additional information about a job that cannot be found on blueprints . Schedules and specifications are an integral part of the construction process, from bidding to the completion of the project. This chapter discusses the informat ion found in schedules and specifications and relates it to the electrical industry.\n\nKey points:\n- This chapter covers schedules and specifications. Schedules and specifications give additional information about a job that cannot be found on blueprints .\n- After completing this chapter, you will be able to:\n- Describe the information found on various schedules .\n- Apply the information found on schedules to a job site.\n- Describe the information found in specifications.\n\n### Response:",
+      "reference": "Source: NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive \u2014 OVERVIEW\n\nOVERVIEW Throughout history, tradespeople have relied on drawings and prints to build objects and structures. To read and interpret blueprints, it is necessary to understand how drawings are produced. It is also important to understand the use of basic drawing and layout tools. Finally, basic sketching concepts are needed to converse on the job, where drafting tools and computers often are not readily available.\n\nKey points:\n- This chapter covers these three areas to set the stage for the practice of proper blueprint reading.\n- After completing this chapter, you will be able to:\n- Recognize and identify the application and function of the different line types used in drawing.\n- Identify and give the function of the basic drawing tools .\n- List the advantages of computer-aided design over paper-and-pencil drawing.",
+      "retrieval": {
+        "preferred_section": "OVERVIEW",
+        "preferred_source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive",
+        "query": "Summarize the electrical construction reference source OVERVIEW.",
+        "results": [
+          {
+            "id": "5b9cf4107c1beccc",
+            "score": 41.0,
+            "section": "OVERVIEW",
+            "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+          },
+          {
+            "id": "867e529d31c843e0",
+            "score": 41.0,
+            "section": "OVERVIEW",
+            "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+          },
+          {
+            "id": "8e8aafa0c826f388",
+            "score": 41.0,
+            "section": "OVERVIEW",
+            "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+          }
+        ]
+      },
+      "section": "OVERVIEW",
+      "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
     },
     {
+      "benchmark_id": "njatc-long-break-line",
+      "category": "blueprint_reading",
       "judge": {
         "rationale": "LLM-as-judge not configured",
         "score": null
       },
-      "prediction": "Source: NCCER Electrical Guides / NCCER Level 3 Trainee Guide \u2014 3.2.2 Crest Factor\n\nThe crest factor is the ratio of the peak value to the RMS value. For a sine wave, the peak value is equal to 1.414 (VJ1.414 =",
-      "prompt": "### Instruction:\nSummarize the electrical construction reference source 3.2.2 Crest Factor.\n\n### Response:",
-      "reference": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 3.2.2 Crest Factor\n\nThe vast majority of low-cost, portab le clamp\u00ad on ammeters are average responding. These in\u00ad struments give correc t readings for pure sine waves on ly and typically read low when con\u00ad fronted with a distorted current waveform. The result is a reading that can be as much as 50% low. True rms meters give correct read ings for any waveshape within the instrum ent's crest factor and bandwidth spec ifications.\n\nKey points:\n- True rms meters give correct read ings for any waveshape within the instrum ent's crest factor and bandwidth spec ifications.\n- A quality true rms handh eld digital multimeter has a crest factor of 3.0 at full scale. This is more than adequate for most power distribution mea\u00ad surements. At half scale, the crest factor is double.\n- For example, a meter may have a crest factor speci\u00ad fication of 3.0 when measuring 400VAC and a crest factor of 6.0 when measuring 200YAC.\n- Three-phase current waveforms often exhibit the double-hump waveform; therefore, the crest fac\u00ad tor comparison method should not be applied to three-phase load currents.\n- Most true rms meters cannot be used for signals below 5% of scale because of the measurement noise problem. Use a lower range if it is available."
+      "prediction": "Source: NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-1 1) \u2014 4fd3 3ff2d0 4b7e4 1 5 2ec8c3badb2 9ab0 -- Anna\u2019s Archive \u2014 9. Ex tension line. Extension lin es are thin, strai ght lin es that extend th e featur e to be dimensi oned. They usuall y extend from the part a t 90\u00b0 to th e s urface being dimension ed.\n\n9. Ex tension line. Extension lin es are thin, strai ght lin es that extend th e featur e to be dimensi oned. They usuall y extend from the part a t 90\u00b0 to th e s urface being dimension ed.\n- The fun ction of the extension lin e",
+      "prompt": "### Instruction:\nSummarize the electrical construction reference source 8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h..\n\n### Retrieved Context:\n[1] Source: NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive\nSection: 8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h.\nContent: 8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h. They serve essentiall y the s am e fun ction as a s h ort-br eak lin e, ex\u00ad cept that they are used for large r areas .\n\nKey points:\n- fun ction as a s h ort-br eak lin e, ex\u00ad cept that they are used for large r areas . In print readin g, th ey are used t o pull out a sec tion of a drawing for enlarg ement and fur\u00ad th er d etail ed inspec tion.\n- 9. Ex tension line. Extension lin es are thin , strai ght lin es that extend th e featur e to be dimensi oned. They usuall y extend from the part a t 90\u00b0 to th e s urface being dimension ed.\n- The fun ction of the extension lin e is to tell the print reader where th e dimen sion start s and ends.\n- NOTE: Due Lo reproduction techniques and plotters used with some CAD sys-\n- terns. the line weight or thickness may not be distinguishable. In this case, the line type should be determined by its characteristics. location. and ap\u00ad parent function in the drawing. See\n\n### Response:",
+      "reference": "Source: NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive \u2014 8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h.\n\n8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h. They serve essentiall y the s am e fun ction as a s h ort-br eak lin e, ex\u00ad cept that they are used for large r areas .\n\nKey points:\n- fun ction as a s h ort-br eak lin e, ex\u00ad cept that they are used for large r areas . In print readin g, th ey are used t o pull out a sec tion of a drawing for enlarg ement and fur\u00ad th er d etail ed inspec tion.\n- 9. Ex tension line. Extension lin es are thin , strai ght lin es that extend th e featur e to be dimensi oned. They usuall y extend from the part a t 90\u00b0 to th e s urface being dimension ed.\n- The fun ction of the extension lin e is to tell the print reader where th e dimen sion start s and ends.\n- NOTE: Due Lo reproduction techniques and plotters used with some CAD sys-\n- terns. the line weight or thickness may not be distinguishable. In this case, the line type should be determined by its characteristics. location. and ap\u00ad parent function in the drawing. See",
+      "retrieval": {
+        "preferred_section": "8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h.",
+        "preferred_source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive",
+        "query": "Summarize the electrical construction reference source 8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h..",
+        "results": [
+          {
+            "id": "4596478c1d892562",
+            "score": 120.0,
+            "section": "8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h.",
+            "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+          },
+          {
+            "id": "8cfe4577011c81e4",
+            "score": 62.0,
+            "section": "8. lon g-break line. Long -break lin es are thin lin es int errup ted by a sharp zigzag abou t every inch.",
+            "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+          },
+          {
+            "id": "c7c0662ca6642211",
+            "score": 37.0,
+            "section": "4 . Darken the fini shed object Lines and erase the construction lin es.",
+            "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+          }
+        ]
+      },
+      "section": "8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h.",
+      "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+    },
+    {
+      "benchmark_id": "bids-contractor-blueprint",
+      "category": "estimating_methodology",
+      "judge": {
+        "rationale": "LLM-as-judge not configured",
+        "score": null
+      },
+      "prediction": "Response\nSource: https://bidsanalytics.com/how-to-estimate-electrical-construction-costs-a-contractor-s-blueprint/ \u2014 Chuck Wright \u2014 2023-06-12 14:00:00 \u2014 Bids Analytics electrical estimating \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna",
+      "prompt": "### Instruction:\nSummarize the electrical construction reference source How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint.\n\n### Retrieved Context:\n[1] Source: Bids Analytics electrical estimating\nSection: How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint\nContent: Master electrical construction cost estimation with proven methodologies. Material takeoffs, labor analysis, pricing strategies, and technology tools explained.\n\nLinked references:\n- Skip to content\n- Our Trades\n- Labor Estimating\n- Electrical Estimating Services\n- BIM Cost Estimating\n- Estimating Consulting\n- Understanding Electrical Estimation Fundamentals\n- Material Takeoff Methodologies\n\nSource: https://bidsanalytics.com/how-to-estimate-electrical-construction-costs-a-contractors-blueprint/\n\n[2] Source: Bids Analytics electrical estimating\nSection: Electrical Estimating Services\nContent: Professional electrical estimating services with material, labor, and equipment breakdowns for residential and commercial contractors.\n\nKey points:\n- Detailed Material Takeoffs\n- Labor Cost Estimation\n- Lighting System Estimates\n- Panel & Switchgear Cost Analysis\n- Fire Alarm & Security System Estimation\n- Networking & Communication System Costs\n- Finalized Cost Breakdown Reports\n- New Residential Construction Estimating Services\n\nLinked references:\n- Skip to content\n- Our Trades\n- Labor Estimating\n- Electrical Estimating Services\n- BIM Cost Estimating\n- Estimating Consulting\n- Add Plans\n- Start A Project\n\nSource: https://bidsanalytics.com/electrical-estimating-services/\n\n### Response:",
+      "reference": "Source: Bids Analytics electrical estimating \u2014 How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint\n\nMaster electrical construction cost estimation with proven methodologies. Material takeoffs, labor analysis, pricing strategies, and technology tools explained.\n\nLinked references:\n- Skip to content\n- Our Trades\n- Labor Estimating\n- Electrical Estimating Services\n- BIM Cost Estimating\n- Estimating Consulting\n- Understanding Electrical Estimation Fundamentals\n- Material Takeoff Methodologies\n\nSource: https://bidsanalytics.com/how-to-estimate-electrical-construction-costs-a-contractors-blueprint/",
+      "retrieval": {
+        "preferred_section": "How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint",
+        "preferred_source": "Bids Analytics electrical estimating",
+        "query": "Summarize the electrical construction reference source How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint.",
+        "results": [
+          {
+            "id": "a9a6bb1b55ac5eee",
+            "score": 68.0,
+            "section": "How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint",
+            "source": "Bids Analytics electrical estimating"
+          },
+          {
+            "id": "c76dc83b91b92019",
+            "score": 27.0,
+            "section": "Electrical Estimating Services",
+            "source": "Bids Analytics electrical estimating"
+          },
+          {
+            "id": "0daa4515b6b4e4e5",
+            "score": 23.0,
+            "section": "Labor Estimating Services",
+            "source": "Bids Analytics electrical estimating"
+          }
+        ]
+      },
+      "section": "How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint",
+      "source": "Bids Analytics electrical estimating"
+    },
+    {
+      "benchmark_id": "bids-labor-estimating-services",
+      "category": "estimating_methodology",
+      "judge": {
+        "rationale": "LLM-as-judge not configured",
+        "score": null
+      },
+      "prediction": "Response\nSource: Bids Analytics electrical estimating \u2014 Electrical Estimating Services\n\nDetailed Material Takeoffs Labor Cost Estimation Lighting System Estimates Panel & Switchgear Cost Analysis Fire Alarm & Security System Estimation Networking & Communication System Costs Finalized Cost Breakdown Reports\n\nKey points:\n- Detailed Material Takeoffs\n- Labor Cost Estimation\n- Lighting System Estimates\n- Panel & Switchgear Cost Analysis\n- Fire Alarm & Security System Estimation\n- Networking & Communication System Costs\n- Finalized Cost Breakdown Reports\n- New Residential Construction Estimating Services\n- Trusted Partner for Accurate Electrical Estimates\n- Our Electrical Estimating Services Include:\n- \u2666 Detailed Material Takeoffs\n- \u2666 Labor Cost Estimation\n- \u2666 Lighting System Estimates\n- \u2666 Panel & Switchgear Cost Analysis\n- \u2666 Fire Alarm & Security System Estimation\n- \u2666 Networking & Communication System Costs\n- \u2666 Finalized Cost Breakdown Reports\n\nLinked",
+      "prompt": "### Instruction:\nSummarize the electrical construction reference source Labor Estimating Services.\n\n### Retrieved Context:\n[1] Source: Bids Analytics electrical estimating\nSection: Labor Estimating Services\nContent: Reliable labor estimating services with precise workforce planning, productivity rates, and man-hour calculations for residential, commercial, and industrial construction projects.\n\nKey points:\n- Labor hour for estimating\n- Construction labor cost estimator\n- Auto labor estimator\n- Labor estimate for construction\n- Automotive labor estimator\n- Location-based labor estimate\n- Customized labor cost report\n- New Residential Construction Estimating Services\n\nLinked references:\n- Skip to content\n- Our Trades\n- Labor Estimating\n- Electrical Estimating Services\n- BIM Cost Estimating\n- Estimating Consulting\n- Start a Project\n- Add Plans\n\nSource: https://bidsanalytics.com/labor-estimating/\n\n[2] Source: Bids Analytics electrical estimating\nSection: Electrical Estimating Services\nContent: Professional electrical estimating services with material, labor, and equipment breakdowns for residential and commercial contractors.\n\nKey points:\n- Detailed Material Takeoffs\n- Labor Cost Estimation\n- Lighting System Estimates\n- Panel & Switchgear Cost Analysis\n- Fire Alarm & Security System Estimation\n- Networking & Communication System Costs\n- Finalized Cost Breakdown Reports\n- New Residential Construction Estimating Services\n\nLinked references:\n- Skip to content\n- Our Trades\n- Labor Estimating\n- Electrical Estimating Services\n- BIM Cost Estimating\n- Estimating Consulting\n- Add Plans\n- Start A Project\n\nSource: https://bidsanalytics.com/electrical-estimating-services/\n\n### Response:",
+      "reference": "Source: Bids Analytics electrical estimating \u2014 Labor Estimating Services\n\nReliable labor estimating services with precise workforce planning, productivity rates, and man-hour calculations for residential, commercial, and industrial construction projects.\n\nKey points:\n- Labor hour for estimating\n- Construction labor cost estimator\n- Auto labor estimator\n- Labor estimate for construction\n- Automotive labor estimator\n- Location-based labor estimate\n- Customized labor cost report\n- New Residential Construction Estimating Services\n\nLinked references:\n- Skip to content\n- Our Trades\n- Labor Estimating\n- Electrical Estimating Services\n- BIM Cost Estimating\n- Estimating Consulting\n- Start a Project\n- Add Plans\n\nSource: https://bidsanalytics.com/labor-estimating/",
+      "retrieval": {
+        "preferred_section": "Labor Estimating Services",
+        "preferred_source": "Bids Analytics electrical estimating",
+        "query": "Summarize the electrical construction reference source Labor Estimating Services.",
+        "results": [
+          {
+            "id": "0daa4515b6b4e4e5",
+            "score": 56.0,
+            "section": "Labor Estimating Services",
+            "source": "Bids Analytics electrical estimating"
+          },
+          {
+            "id": "c76dc83b91b92019",
+            "score": 38.0,
+            "section": "Electrical Estimating Services",
+            "source": "Bids Analytics electrical estimating"
+          },
+          {
+            "id": "a9a6bb1b55ac5eee",
+            "score": 34.0,
+            "section": "How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint",
+            "source": "Bids Analytics electrical estimating"
+          }
+        ]
+      },
+      "section": "Labor Estimating Services",
+      "source": "Bids Analytics electrical estimating"
+    },
+    {
+      "benchmark_id": "ebook-productivity",
+      "category": "estimating_methodology",
+      "judge": {
+        "rationale": "LLM-as-judge not configured",
+        "score": null
+      },
+      "prediction": "Response:\nSource: 2o26 national electrical estimator ebook \u2014 Other Factors That Affect Productivity\n\nOf course, there are exceptions. Sometimes a crew of one takes twice as long as a crew of two. When pulling feeder cable or setting floor-standing switchboards or motor control centers, more help usually cuts the labor cost per installed unit. Some jobs simply can't be done by a crew of one. These labor savings are obvious to anyone who has done this type of work and are assumed in this book's labor tables.\n\nThis book's labor hours are typical of what a trained and motivated journeyman electrician with tools can do on a typical site. The hours include all the time it takes to actually do the work, as well as the time it takes to go get the materials, make the connections, etc. It doesn't include the time it takes to pull, set up, or operate a generator.\n\n- This book's labor hours are typical",
+      "prompt": "### Instruction:\nSummarize the electrical construction reference source Other Factors That Affect Productivity.\n\n### Retrieved Context:\n[1] Source: 2026 national electrical estimator ebook\nSection: Other Factors That Affect Productivity\nContent: Other Factors That Affect Productivity This book's tables assume that the crew used for the job is the smallest crew appropriate for the work at hand. Usually this means that the crew is one journeyman electrician. Most experts on the productivity of construction trades agree that the smallest crew that can do the job is usually the most efficient. For example, it's foolish to have two men working together setting duplex receptacles - one handing tools and mate rial to the other as needed.\n\nKey points:\n- This book's tables assume that the crew used for the job is the smallest crew appropriate for the work at hand. Usually this means that the crew is one journeyman electrician.\n- Of course, there are exceptions. Sometimes a crew of one takes twice as long as a crew of two.\n- When pulling feeder cable or setting floor-standing switchboards or motor control centers, more help usually cuts the labor cost per installed unit. Some jobs simply can't be done by a crew of one.\n- These labor savings are obvious to anyone who has done this type of work and are assumed in this book's labor tables.\n- This book's labor hours are typical of what a trained and motivated journeyman electrician with\n\n### Response:",
+      "reference": "Source: 2026 national electrical estimator ebook \u2014 Other Factors That Affect Productivity\n\nOther Factors That Affect Productivity This book's tables assume that the crew used for the job is the smallest crew appropriate for the work at hand. Usually this means that the crew is one journeyman electrician. Most experts on the productivity of construction trades agree that the smallest crew that can do the job is usually the most efficient. For example, it's foolish to have two men working together setting duplex receptacles - one handing tools and mate rial to the other as needed.\n\nKey points:\n- This book's tables assume that the crew used for the job is the smallest crew appropriate for the work at hand. Usually this means that the crew is one journeyman electrician.\n- Of course, there are exceptions. Sometimes a crew of one takes twice as long as a crew of two.\n- When pulling feeder cable or setting floor-standing switchboards or motor control centers, more help usually cuts the labor cost per installed unit. Some jobs simply can't be done by a crew of one.\n- These labor savings are obvious to anyone who has done this type of work and are assumed in this book's labor tables.\n- This book's labor hours are typical of what a trained and motivated journeyman electrician with",
+      "retrieval": {
+        "preferred_section": "Other Factors That Affect Productivity",
+        "preferred_source": "2026 national electrical estimator ebook",
+        "query": "Summarize the electrical construction reference source Other Factors That Affect Productivity.",
+        "results": [
+          {
+            "id": "9a577a7bf36a8ca7",
+            "score": 57.0,
+            "section": "Other Factors That Affect Productivity",
+            "source": "2026 national electrical estimator ebook"
+          },
+          {
+            "id": "dca322a64432fdad",
+            "score": 23.0,
+            "section": "Taking Off Other Conduit",
+            "source": "2026 national electrical estimator ebook"
+          },
+          {
+            "id": "0ff857a0d89fa752",
+            "score": 19.0,
+            "section": "IMC Conduit",
+            "source": "2026 national electrical estimator ebook"
+          }
+        ]
+      },
+      "section": "Other Factors That Affect Productivity",
+      "source": "2026 national electrical estimator ebook"
+    },
+    {
+      "benchmark_id": "ebook-corrections",
+      "category": "estimating_methodology",
+      "judge": {
+        "rationale": "LLM-as-judge not configured",
+        "score": null
+      },
+      "prediction": "Source: 2e 6e 1026 national electrical estimator ebook \u2014 Electrical contractors should have very few callbacks.\n\n- Electrical contractors should have very few callbacks. When qualified electricians install quality materials, the risk of a callback is small. Occasionally a ballast will fail after 10 or 20 hours in use.\n- And sometimes an owner's negligence will damage a circuit or switch. But most electrical contractors encounter few callbacks for defects in their work.\n- When a contractor makes a mistake or is negligent, the cost of a callback can be high. The worker who made the mistake may no longer be on the job when the callback occurs. Finding the culprit takes time, which means higher labor costs. The crew's productivity suffers because a worker can't give 100% attention to the job at hand. And there's always the risk that the owner will sue the electrical contractor.\n- Avoiding callbacks requires attention to detail throughout a job.",
+      "prompt": "### Instruction:\nSummarize the electrical construction reference source Corrections.\n\n### Retrieved Context:\n[1] Source: 2026 national electrical estimator ebook\nSection: Corrections\nContent: If you're using a larger crew, don't have everyone work at the same time. Instead, break the crew into two units and encourage friendly competition between the two. Offer a reward for the winning crew. Corrections This book's tables assume that little or no time is spent making corrections after the work is done.\n\nKey points:\n- If you're using a larger crew, don't have everyone work at the same time. Instead, break the crew into two units and encourage friendly competition between the two. Offer a reward for the winning crew.\n- This book's tables assume that little or no time is spent making corrections after the work is done.\n- Electrical contractors should have very few callbacks.\n- When qualified electricians install quality materials, the risk of a callback is small. Occasionally a ballast will fail after 10 or 20 hours in use. And sometimes an owner's negligence will damage a circuit or switch.\n- Most electrical contractors prefer to handle specific types of work. Only a few have the capital, equipment and skills needed to handle the largest jobs.\n\n### Response:",
+      "reference": "Source: 2026 national electrical estimator ebook \u2014 Corrections\n\nIf you're using a larger crew, don't have everyone work at the same time. Instead, break the crew into two units and encourage friendly competition between the two. Offer a reward for the winning crew. Corrections This book's tables assume that little or no time is spent making corrections after the work is done.\n\nKey points:\n- If you're using a larger crew, don't have everyone work at the same time. Instead, break the crew into two units and encourage friendly competition between the two. Offer a reward for the winning crew.\n- This book's tables assume that little or no time is spent making corrections after the work is done.\n- Electrical contractors should have very few callbacks.\n- When qualified electricians install quality materials, the risk of a callback is small. Occasionally a ballast will fail after 10 or 20 hours in use. And sometimes an owner's negligence will damage a circuit or switch.\n- Most electrical contractors prefer to handle specific types of work. Only a few have the capital, equipment and skills needed to handle the largest jobs.",
+      "retrieval": {
+        "preferred_section": "Corrections",
+        "preferred_source": "2026 national electrical estimator ebook",
+        "query": "Summarize the electrical construction reference source Corrections.",
+        "results": [
+          {
+            "id": "719a20012aa921e6",
+            "score": 42.0,
+            "section": "Corrections",
+            "source": "2026 national electrical estimator ebook"
+          },
+          {
+            "id": "9a577a7bf36a8ca7",
+            "score": 19.0,
+            "section": "Other Factors That Affect Productivity",
+            "source": "2026 national electrical estimator ebook"
+          },
+          {
+            "id": "0ff857a0d89fa752",
+            "score": 18.0,
+            "section": "IMC Conduit",
+            "source": "2026 national electrical estimator ebook"
+          }
+        ]
+      },
+      "section": "Corrections",
+      "source": "2026 national electrical estimator ebook"
     }
   ],
   "release_gate": {
     "checks": [
       {
-        "actual": 0.2054,
+        "actual": 0.4295,
         "name": "rouge1",
         "passed": true,
         "status": "evaluated",
-        "threshold": 0.18
+        "threshold": 0.22
       },
       {
-        "actual": 0.118,
+        "actual": 0.2875,
         "name": "rouge2",
         "passed": true,
         "status": "evaluated",
-        "threshold": 0.1
+        "threshold": 0.12
       },
       {
-        "actual": 0.1777,
+        "actual": 0.3418,
         "name": "rougeL",
         "passed": true,
         "status": "evaluated",
-        "threshold": 0.16
+        "threshold": 0.18
       },
       {
         "actual": 0.0,
@@ -153,24 +585,420 @@
         "reason": "judge scores unavailable",
         "status": "skipped",
         "threshold": 3.5
+      },
+      {
+        "actual": 0.4681,
+        "name": "category:nccer_reference_summary:min_rouge1",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.16
+      },
+      {
+        "actual": 0.3401,
+        "name": "category:nccer_reference_summary:min_rouge2",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.08
+      },
+      {
+        "actual": 0.3853,
+        "name": "category:nccer_reference_summary:min_rougeL",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.14
+      },
+      {
+        "actual": 0.3777,
+        "name": "category:contractor_guidance:min_rouge1",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.16
+      },
+      {
+        "actual": 0.1545,
+        "name": "category:contractor_guidance:min_rouge2",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.08
+      },
+      {
+        "actual": 0.2591,
+        "name": "category:contractor_guidance:min_rougeL",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.14
+      },
+      {
+        "actual": 0.4144,
+        "name": "category:blueprint_reading:min_rouge1",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.16
+      },
+      {
+        "actual": 0.3004,
+        "name": "category:blueprint_reading:min_rouge2",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.08
+      },
+      {
+        "actual": 0.3628,
+        "name": "category:blueprint_reading:min_rougeL",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.14
+      },
+      {
+        "actual": 0.4244,
+        "name": "category:estimating_methodology:min_rouge1",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.16
+      },
+      {
+        "actual": 0.2949,
+        "name": "category:estimating_methodology:min_rouge2",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.08
+      },
+      {
+        "actual": 0.3292,
+        "name": "category:estimating_methodology:min_rougeL",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.14
       }
     ],
     "configured": true,
-    "mode": "quick",
+    "mode": "full",
     "passed": true
+  },
+  "retrieval": {
+    "corpus_path": "/home/paul/src/simcoe.ai/data/retrieval/electrician_reference_corpus.jsonl",
+    "corpus_size": 955,
+    "enabled": true,
+    "max_context_chars": 1600,
+    "min_score": 2.0,
+    "per_example": [
+      {
+        "preferred_section": "Module Nine",
+        "preferred_source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide",
+        "query": "Summarize the electrical construction reference source Module Nine.",
+        "results": [
+          {
+            "id": "d72c5a1ab542b5d7",
+            "score": 48.0,
+            "section": "Module Nine",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "de206dc0f9b327ec",
+            "score": 41.0,
+            "section": "Module Nine",
+            "source": "NCCER Electrical Guides / NCCER Level 2 Trainee Guide"
+          },
+          {
+            "id": "ba5b3c4c31cc206c",
+            "score": 40.0,
+            "section": "Module Nine",
+            "source": "NCCER Electrical Guides / NCCER Level 3 Trainee Guide"
+          }
+        ]
+      },
+      {
+        "preferred_section": "Module Nine",
+        "preferred_source": "NCCER Electrical Guides / NCCER Level 2 Trainee Guide",
+        "query": "Summarize the electrical construction reference source Module Nine.",
+        "results": [
+          {
+            "id": "de206dc0f9b327ec",
+            "score": 47.0,
+            "section": "Module Nine",
+            "source": "NCCER Electrical Guides / NCCER Level 2 Trainee Guide"
+          },
+          {
+            "id": "d72c5a1ab542b5d7",
+            "score": 42.0,
+            "section": "Module Nine",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "ba5b3c4c31cc206c",
+            "score": 40.0,
+            "section": "Module Nine",
+            "source": "NCCER Electrical Guides / NCCER Level 3 Trainee Guide"
+          }
+        ]
+      },
+      {
+        "preferred_section": "SECTION ONE",
+        "preferred_source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide",
+        "query": "Summarize the electrical construction reference source SECTION ONE.",
+        "results": [
+          {
+            "id": "2cf42dab5084f195",
+            "score": 47.0,
+            "section": "SECTION ONE",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "362d36466fffb523",
+            "score": 47.0,
+            "section": "SECTION ONE",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "a01cebc7871cfbfe",
+            "score": 47.0,
+            "section": "SECTION ONE",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          }
+        ]
+      },
+      {
+        "preferred_section": "Example:",
+        "preferred_source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide",
+        "query": "Summarize the electrical construction reference source Example:.",
+        "results": [
+          {
+            "id": "2cc07b453c415774",
+            "score": 41.0,
+            "section": "Example:",
+            "source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide"
+          },
+          {
+            "id": "3422a404a81e0c74",
+            "score": 30.0,
+            "section": "BASIC ELECTRICAL CONSTRUCTION DRAWINGS",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "04944a892dec8e67",
+            "score": 26.0,
+            "section": "Provide a summary of how you got started in the construction industry.",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          }
+        ]
+      },
+      {
+        "preferred_section": "Electrical calculations can be divided into three sections:",
+        "preferred_source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide",
+        "query": "What should an electrical contractor know from NCCER Electrical Guides / NCCER Level 4 Trainee Guide page Electrical calculations can be divided into three sections:?",
+        "results": [
+          {
+            "id": "ba1717dedd08d5c7",
+            "score": 78.0,
+            "section": "Electrical calculations can be divided into three sections:",
+            "source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide"
+          },
+          {
+            "id": "ff0f527c8dd3df02",
+            "score": 58.0,
+            "section": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide pages 445-446",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "57149a114adbd0ea",
+            "score": 56.0,
+            "section": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide pages 546-547",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          }
+        ]
+      },
+      {
+        "preferred_section": "SECTION ONE",
+        "preferred_source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide",
+        "query": "What should an electrical contractor know from NCCER Electrical Guides / NCCER Level 1 Trainee Guide page SECTION ONE?",
+        "results": [
+          {
+            "id": "2cf42dab5084f195",
+            "score": 58.0,
+            "section": "SECTION ONE",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "e461d86027aafbac",
+            "score": 58.0,
+            "section": "SECTION ONE",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          },
+          {
+            "id": "362d36466fffb523",
+            "score": 57.0,
+            "section": "SECTION ONE",
+            "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+          }
+        ]
+      },
+      {
+        "preferred_section": "OVERVIEW",
+        "preferred_source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive",
+        "query": "Summarize the electrical construction reference source OVERVIEW.",
+        "results": [
+          {
+            "id": "5b9cf4107c1beccc",
+            "score": 41.0,
+            "section": "OVERVIEW",
+            "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+          },
+          {
+            "id": "867e529d31c843e0",
+            "score": 41.0,
+            "section": "OVERVIEW",
+            "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+          },
+          {
+            "id": "8e8aafa0c826f388",
+            "score": 41.0,
+            "section": "OVERVIEW",
+            "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+          }
+        ]
+      },
+      {
+        "preferred_section": "8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h.",
+        "preferred_source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive",
+        "query": "Summarize the electrical construction reference source 8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h..",
+        "results": [
+          {
+            "id": "4596478c1d892562",
+            "score": 120.0,
+            "section": "8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h.",
+            "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+          },
+          {
+            "id": "8cfe4577011c81e4",
+            "score": 62.0,
+            "section": "8. lon g-break line. Long -break lin es are thin lin es int errup ted by a sharp zigzag abou t every inch.",
+            "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+          },
+          {
+            "id": "c7c0662ca6642211",
+            "score": 37.0,
+            "section": "4 . Darken the fini shed object Lines and erase the construction lin es.",
+            "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+          }
+        ]
+      },
+      {
+        "preferred_section": "How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint",
+        "preferred_source": "Bids Analytics electrical estimating",
+        "query": "Summarize the electrical construction reference source How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint.",
+        "results": [
+          {
+            "id": "a9a6bb1b55ac5eee",
+            "score": 68.0,
+            "section": "How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint",
+            "source": "Bids Analytics electrical estimating"
+          },
+          {
+            "id": "c76dc83b91b92019",
+            "score": 27.0,
+            "section": "Electrical Estimating Services",
+            "source": "Bids Analytics electrical estimating"
+          },
+          {
+            "id": "0daa4515b6b4e4e5",
+            "score": 23.0,
+            "section": "Labor Estimating Services",
+            "source": "Bids Analytics electrical estimating"
+          }
+        ]
+      },
+      {
+        "preferred_section": "Labor Estimating Services",
+        "preferred_source": "Bids Analytics electrical estimating",
+        "query": "Summarize the electrical construction reference source Labor Estimating Services.",
+        "results": [
+          {
+            "id": "0daa4515b6b4e4e5",
+            "score": 56.0,
+            "section": "Labor Estimating Services",
+            "source": "Bids Analytics electrical estimating"
+          },
+          {
+            "id": "c76dc83b91b92019",
+            "score": 38.0,
+            "section": "Electrical Estimating Services",
+            "source": "Bids Analytics electrical estimating"
+          },
+          {
+            "id": "a9a6bb1b55ac5eee",
+            "score": 34.0,
+            "section": "How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint",
+            "source": "Bids Analytics electrical estimating"
+          }
+        ]
+      },
+      {
+        "preferred_section": "Other Factors That Affect Productivity",
+        "preferred_source": "2026 national electrical estimator ebook",
+        "query": "Summarize the electrical construction reference source Other Factors That Affect Productivity.",
+        "results": [
+          {
+            "id": "9a577a7bf36a8ca7",
+            "score": 57.0,
+            "section": "Other Factors That Affect Productivity",
+            "source": "2026 national electrical estimator ebook"
+          },
+          {
+            "id": "dca322a64432fdad",
+            "score": 23.0,
+            "section": "Taking Off Other Conduit",
+            "source": "2026 national electrical estimator ebook"
+          },
+          {
+            "id": "0ff857a0d89fa752",
+            "score": 19.0,
+            "section": "IMC Conduit",
+            "source": "2026 national electrical estimator ebook"
+          }
+        ]
+      },
+      {
+        "preferred_section": "Corrections",
+        "preferred_source": "2026 national electrical estimator ebook",
+        "query": "Summarize the electrical construction reference source Corrections.",
+        "results": [
+          {
+            "id": "719a20012aa921e6",
+            "score": 42.0,
+            "section": "Corrections",
+            "source": "2026 national electrical estimator ebook"
+          },
+          {
+            "id": "9a577a7bf36a8ca7",
+            "score": 19.0,
+            "section": "Other Factors That Affect Productivity",
+            "source": "2026 national electrical estimator ebook"
+          },
+          {
+            "id": "0ff857a0d89fa752",
+            "score": 18.0,
+            "section": "IMC Conduit",
+            "source": "2026 national electrical estimator ebook"
+          }
+        ]
+      }
+    ],
+    "top_k": 3,
+    "used": true
   },
   "settings": {
     "fail_on_threshold_breach": false,
     "inference_batch_size": 1,
     "judge_concurrency": 2,
-    "max_new_tokens": 64,
+    "max_new_tokens": 192,
     "max_seq_length": 2048,
-    "metrics_only": true
+    "metrics_only": true,
+    "use_retrieval": true
   },
   "timings_sec": {
-    "inference": 318.8401,
+    "inference": 1865.9568,
     "judge": 0.0,
-    "model_load": 1.4525,
-    "total": 320.3296
+    "model_load": 1.5336,
+    "total": 1869.3409
   }
 }

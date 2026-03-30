@@ -36,7 +36,15 @@ except ImportError:
 from config_validation import load_config, validate_evaluate_config
 from datasets import load_from_disk
 from manifest_utils import current_utc_timestamp, read_json_file, write_json_file
-from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, pipeline
+from retrieval_utils import (
+    build_retrieval_augmented_prompt,
+    extract_instruction_text,
+    format_retrieved_context,
+    load_jsonl,
+    retrieve_documents,
+)
+from tokenizer_utils import load_tokenizer_with_compat
+from transformers import AutoModelForCausalLM, GenerationConfig, pipeline
 
 try:
     from rouge_score import rouge_scorer
@@ -75,6 +83,131 @@ def extract_reference(text: str) -> str:
     if len(parts) >= 2:
         return parts[1].strip()
     return ""
+
+
+def build_prompt(instruction: str, context: str | None = None) -> str:
+    instruction = instruction.strip()
+    context = (context or "").strip()
+    if context:
+        return (
+            f"### Instruction:\n{instruction}\n\n"
+            f"### Input:\n{context}\n\n"
+            f"### Response:"
+        )
+    return f"### Instruction:\n{instruction}\n\n### Response:"
+
+
+def build_example_from_text(text: str) -> dict:
+    return {
+        "prompt": extract_prompt(text),
+        "reference": extract_reference(text),
+        "category": None,
+        "benchmark_id": None,
+        "source": None,
+        "section": None,
+    }
+
+
+def build_example_from_benchmark_row(row: dict) -> dict:
+    instruction = str(row.get("instruction", "")).strip()
+    context = row.get("input")
+    reference = str(row.get("response") or row.get("output") or "").strip()
+    return {
+        "prompt": build_prompt(instruction, context if isinstance(context, str) else None),
+        "reference": reference,
+        "category": row.get("category"),
+        "benchmark_id": row.get("benchmark_id"),
+        "source": row.get("source"),
+        "section": row.get("section"),
+    }
+
+
+def load_evaluation_examples(cfg: dict, settings: dict) -> tuple[list[dict], dict]:
+    benchmark_path = cfg["evaluation"].get("golden_benchmark_path")
+    if settings["mode"] != "quick" and benchmark_path:
+        benchmark_rows = load_jsonl(benchmark_path)
+        example_count = min(settings["num_examples"], len(benchmark_rows))
+        selected_rows = benchmark_rows[:example_count]
+        examples = [build_example_from_benchmark_row(row) for row in selected_rows]
+        return examples, {
+            "kind": "golden_benchmark",
+            "path": os.path.abspath(benchmark_path),
+            "available_rows": len(benchmark_rows),
+            "selected_rows": example_count,
+        }
+
+    valid_dir = os.path.join(cfg["data"]["processed_dir"], "valid")
+    valid_ds = load_from_disk(valid_dir)
+    example_count = min(settings["num_examples"], len(valid_ds))
+    rows = list(valid_ds.select(range(example_count)))
+    examples = [build_example_from_text(row["text"]) for row in rows]
+    return examples, {
+        "kind": "processed_validation",
+        "path": os.path.abspath(valid_dir),
+        "available_rows": len(valid_ds),
+        "selected_rows": example_count,
+    }
+
+
+def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: dict) -> tuple[list[str], dict]:
+    retrieval_cfg = cfg.get("retrieval") if isinstance(cfg.get("retrieval"), dict) else None
+    if not retrieval_cfg:
+        return [example["prompt"] for example in examples], {"enabled": False}
+
+    use_retrieval = settings["use_retrieval"]
+    if not use_retrieval:
+        return [example["prompt"] for example in examples], {
+            "enabled": bool(retrieval_cfg.get("enabled", False)),
+            "used": False,
+        }
+
+    corpus_path = retrieval_cfg["corpus_path"]
+    corpus = load_jsonl(corpus_path)
+    top_k = int(retrieval_cfg.get("top_k", 3))
+    max_context_chars = int(retrieval_cfg.get("max_context_chars", 1600))
+    min_score = float(retrieval_cfg.get("min_score", 1.0))
+
+    prompts: list[str] = []
+    traces: list[dict] = []
+    for example in examples:
+        query = extract_instruction_text(example["prompt"])
+        retrieved = retrieve_documents(
+            query,
+            corpus,
+            top_k=top_k,
+            min_score=min_score,
+            preferred_source=example.get("source"),
+            preferred_section=example.get("section"),
+        )
+        retrieved_context = format_retrieved_context(retrieved, max_context_chars=max_context_chars)
+        prompts.append(build_retrieval_augmented_prompt(example["prompt"], retrieved_context))
+        traces.append(
+            {
+                "query": query,
+                "preferred_source": example.get("source"),
+                "preferred_section": example.get("section"),
+                "results": [
+                    {
+                        "id": item.get("id"),
+                        "source": item.get("source"),
+                        "section": item.get("section"),
+                        "score": item.get("score"),
+                    }
+                    for item in retrieved
+                ],
+            }
+        )
+
+    return prompts, {
+        "enabled": True,
+        "used": True,
+        "corpus_path": os.path.abspath(corpus_path),
+        "corpus_size": len(corpus),
+        "top_k": top_k,
+        "max_context_chars": max_context_chars,
+        "min_score": min_score,
+        "per_example": traces,
+    }
 
 
 def _chunked(items: list[str], chunk_size: int):
@@ -147,6 +280,7 @@ def build_generation_config(gen_pipeline, max_new_tokens: int, pad_token_id: int
 def resolve_evaluation_settings(cfg: dict, args: argparse.Namespace) -> dict:
     evaluation_cfg = cfg["evaluation"]
     release_cfg = cfg.get("release", {}) if isinstance(cfg.get("release"), dict) else {}
+    retrieval_cfg = cfg.get("retrieval", {}) if isinstance(cfg.get("retrieval"), dict) else {}
 
     full_num_examples = _resolve_int_setting(evaluation_cfg.get("num_examples"), 100)
     quick_num_examples = _resolve_int_setting(
@@ -183,6 +317,14 @@ def resolve_evaluation_settings(cfg: dict, args: argparse.Namespace) -> dict:
             args.fail_on_thresholds
             or bool(release_cfg.get("fail_on_threshold_breach", False))
         ),
+        "use_retrieval": (
+            args.use_retrieval
+            or (
+                bool(retrieval_cfg.get("enabled", False))
+                and not args.quick
+                and bool(retrieval_cfg.get("use_in_full_evaluation", False))
+            )
+        ),
     }
 
 
@@ -217,6 +359,7 @@ def build_release_gate(
     rouge_scores: dict,
     exact_match: float,
     judge_scores: list[dict],
+    per_category_metrics: dict | None = None,
 ) -> dict:
     release_cfg = cfg.get("release")
     if not isinstance(release_cfg, dict):
@@ -292,6 +435,44 @@ def build_release_gate(
                 }
             )
 
+    category_thresholds = release_cfg.get("category_thresholds")
+    if isinstance(category_thresholds, dict):
+        for category_name, thresholds in category_thresholds.items():
+            category_metrics = (per_category_metrics or {}).get(category_name)
+            if category_metrics is None:
+                checks.append(
+                    {
+                        "name": f"category:{category_name}",
+                        "threshold": "configured",
+                        "actual": None,
+                        "passed": False,
+                        "status": "missing",
+                    }
+                )
+                continue
+
+            metric_map = {
+                "min_rouge1": category_metrics.get("rouge", {}).get("rouge1"),
+                "min_rouge2": category_metrics.get("rouge", {}).get("rouge2"),
+                "min_rougeL": category_metrics.get("rouge", {}).get("rougeL"),
+                "min_exact_match": category_metrics.get("exact_match"),
+                "min_avg_judge_score": category_metrics.get("avg_judge_score"),
+            }
+            for threshold_key, actual in metric_map.items():
+                threshold = _resolve_float_setting(thresholds.get(threshold_key))
+                if threshold is None:
+                    continue
+
+                checks.append(
+                    {
+                        "name": f"category:{category_name}:{threshold_key}",
+                        "threshold": threshold,
+                        "actual": _round_metric(actual),
+                        "passed": actual is not None and actual >= threshold,
+                        "status": "evaluated" if actual is not None else "missing",
+                    }
+                )
+
     blocking_checks = [check for check in checks if check["status"] != "skipped"]
     if not checks:
         passed = None
@@ -308,11 +489,10 @@ def build_release_gate(
 
 def run_inference(
     gen_pipeline,
-    examples: list[dict],
+    prompts: list[str],
     batch_size: int,
     max_new_tokens: int = 256,
 ) -> tuple[list[str], dict]:
-    prompts = [extract_prompt(ex["text"]) for ex in examples]
     predictions = []
     total = len(prompts)
     requested_batch_size = max(1, batch_size)
@@ -393,6 +573,42 @@ def score_exact_match(predictions: list[str], references: list[str]) -> float:
         for p, r in zip(predictions, references)
     )
     return round(matches / len(predictions), 4) if predictions else 0.0
+
+
+def score_by_category(
+    predictions: list[str],
+    references: list[str],
+    examples: list[dict],
+    judge_scores: list[dict],
+) -> dict:
+    grouped_indexes: dict[str, list[int]] = {}
+    for index, example in enumerate(examples):
+        category = example.get("category")
+        if not isinstance(category, str) or not category.strip():
+            continue
+        grouped_indexes.setdefault(category, []).append(index)
+
+    category_metrics: dict[str, dict] = {}
+    for category, indexes in grouped_indexes.items():
+        category_predictions = [predictions[index] for index in indexes]
+        category_references = [references[index] for index in indexes]
+        category_judge_scores = [judge_scores[index] for index in indexes]
+        numeric_judge_scores = [
+            float(item["score"])
+            for item in category_judge_scores
+            if isinstance(item.get("score"), (int, float))
+        ]
+
+        category_metrics[category] = {
+            "count": len(indexes),
+            "rouge": score_rouge(category_predictions, category_references),
+            "exact_match": score_exact_match(category_predictions, category_references),
+            "avg_judge_score": _round_metric(
+                sum(numeric_judge_scores) / len(numeric_judge_scores)
+            ) if numeric_judge_scores else None,
+        }
+
+    return category_metrics
 
 
 # ── LLM-as-judge ───────────────────────────────────────────────────────────────
@@ -583,6 +799,11 @@ def main() -> None:
         help="Use quick evaluation defaults from the config.",
     )
     parser.add_argument(
+        "--use_retrieval",
+        action="store_true",
+        help="Augment prompts with retrieved context when retrieval is configured.",
+    )
+    parser.add_argument(
         "--fail_on_thresholds",
         action="store_true",
         help="Exit non-zero when configured release thresholds are not met.",
@@ -594,7 +815,6 @@ def main() -> None:
     validate_evaluate_config(cfg, settings["num_examples"])
 
     model_dir = cfg["export"]["merged_16bit_dir"]
-    valid_dir = os.path.join(cfg["data"]["processed_dir"], "valid")
     results_path = cfg["evaluation"]["results_path"]
     judge_model = settings["judge_model"]
     max_seq_length = cfg["model"]["max_seq_length"]
@@ -608,6 +828,7 @@ def main() -> None:
         f"batch_size={settings['inference_batch_size']}, "
         f"max_new_tokens={settings['max_new_tokens']}, "
         f"judge_concurrency={settings['judge_concurrency']}, "
+        f"use_retrieval={settings['use_retrieval']}, "
         f"metrics_only={settings['metrics_only']}, "
         f"fail_on_threshold_breach={settings['fail_on_threshold_breach']}"
     )
@@ -623,7 +844,7 @@ def main() -> None:
     # ── Load model ────────────────────────────────────────────────────────────
     print(f"\n🔍  Loading merged model from: {model_dir}")
     model_load_start = time.perf_counter()
-    tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True)
+    tokenizer = load_tokenizer_with_compat(model_dir)
     if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
         tokenizer.pad_token_id = tokenizer.eos_token_id
     model = AutoModelForCausalLM.from_pretrained(
@@ -640,22 +861,21 @@ def main() -> None:
     model_load_seconds = time.perf_counter() - model_load_start
     print(f"    Model ready in {model_load_seconds:.1f}s")
 
-    # ── Load validation data ──────────────────────────────────────────────────
-    print(f"\n📂  Loading validation set from: {valid_dir}")
-    valid_ds = load_from_disk(valid_dir)
-    example_count = min(settings["num_examples"], len(valid_ds))
-    examples = list(valid_ds.select(range(example_count)))
+    # ── Load evaluation data ──────────────────────────────────────────────────
+    examples, evaluation_source = load_evaluation_examples(cfg, settings)
+    print(f"\n📂  Loading evaluation rows from: {evaluation_source['path']}")
+    print(f"    Dataset kind: {evaluation_source['kind']}")
     print(f"    Evaluating on {len(examples)} examples.")
 
-    references = [extract_reference(ex["text"]) for ex in examples]
-    prompts = [extract_prompt(ex["text"]) for ex in examples]
+    references = [example["reference"] for example in examples]
+    prompts, retrieval_info = prepare_prompts_with_retrieval(examples, cfg, settings)
 
     # ── Run inference ─────────────────────────────────────────────────────────
     print("\n🤖  Running inference …")
     inference_start = time.perf_counter()
     predictions, inference_stats = run_inference(
         gen_pipeline,
-        examples,
+        prompts,
         batch_size=settings["inference_batch_size"],
         max_new_tokens=settings["max_new_tokens"],
     )
@@ -689,12 +909,15 @@ def main() -> None:
         )
         judge_seconds = time.perf_counter() - judge_start
 
+    per_category_metrics = score_by_category(predictions, references, examples, judge_scores)
+
     release_gate = build_release_gate(
         cfg,
         settings["mode"],
         rouge_scores,
         em_score,
         judge_scores,
+        per_category_metrics=per_category_metrics,
     )
 
     if release_gate["configured"]:
@@ -723,9 +946,12 @@ def main() -> None:
             "max_new_tokens": settings["max_new_tokens"],
             "inference_batch_size": settings["inference_batch_size"],
             "judge_concurrency": settings["judge_concurrency"],
+            "use_retrieval": settings["use_retrieval"],
             "metrics_only": settings["metrics_only"],
             "fail_on_threshold_breach": settings["fail_on_threshold_breach"],
         },
+        "evaluation_source": evaluation_source,
+        "retrieval": retrieval_info,
         "data_manifest": processed_manifest,
         "release_gate": release_gate,
         "timings_sec": {
@@ -735,12 +961,20 @@ def main() -> None:
             "total": round(time.perf_counter() - total_start, 4),
         },
         "inference_stats": inference_stats,
+        "per_category_metrics": per_category_metrics,
         "per_example": [
             {
                 "prompt": prompts[i],
                 "reference": references[i],
                 "prediction": predictions[i],
                 "judge": judge_scores[i],
+                "category": examples[i].get("category"),
+                "benchmark_id": examples[i].get("benchmark_id"),
+                "source": examples[i].get("source"),
+                "section": examples[i].get("section"),
+                "retrieval": retrieval_info.get("per_example", [None] * len(examples))[i]
+                if retrieval_info.get("used")
+                else None,
             }
             for i in range(len(examples))
         ],

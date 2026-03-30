@@ -1,0 +1,74 @@
+[
+  {
+    "benchmark_id": "nccer-l1-module-nine-summary",
+    "category": "nccer_reference_summary",
+    "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide",
+    "instruction": "Summarize the electrical construction reference source Module Nine."
+  },
+  {
+    "benchmark_id": "nccer-l2-module-nine-summary",
+    "category": "nccer_reference_summary",
+    "source": "NCCER Electrical Guides / NCCER Level 2 Trainee Guide",
+    "instruction": "Summarize the electrical construction reference source Module Nine."
+  },
+  {
+    "benchmark_id": "nccer-l1-section-one-summary",
+    "category": "nccer_reference_summary",
+    "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide",
+    "instruction": "Summarize the electrical construction reference source SECTION ONE."
+  },
+  {
+    "benchmark_id": "nccer-l4-example-summary",
+    "category": "nccer_reference_summary",
+    "source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide",
+    "instruction": "Summarize the electrical construction reference source Example:."
+  },
+  {
+    "benchmark_id": "nccer-l4-contractor-guidance",
+    "category": "contractor_guidance",
+    "source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide",
+    "instruction": "What should an electrical contractor know from NCCER Electrical Guides / NCCER Level 4 Trainee Guide page Electrical calculations can be divided into three sections:?"
+  },
+  {
+    "benchmark_id": "nccer-l1-contractor-guidance",
+    "category": "contractor_guidance",
+    "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide",
+    "instruction": "What should an electrical contractor know from NCCER Electrical Guides / NCCER Level 1 Trainee Guide page SECTION ONE?"
+  },
+  {
+    "benchmark_id": "njatc-overview-summary",
+    "category": "blueprint_reading",
+    "source": "NJATC School Materials / Blueprint Reading for Electricians",
+    "instruction": "Summarize the electrical construction reference source OVERVIEW."
+  },
+  {
+    "benchmark_id": "njatc-long-break-line",
+    "category": "blueprint_reading",
+    "source": "NJATC School Materials / Blueprint Reading for Electricians",
+    "instruction": "Summarize the electrical construction reference source 8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h.."
+  },
+  {
+    "benchmark_id": "bids-contractor-blueprint",
+    "category": "estimating_methodology",
+    "source": "Bids Analytics electrical estimating",
+    "instruction": "Summarize the electrical construction reference source How to Estimate Electrical Construction Costs: A Contractor’s Blueprint."
+  },
+  {
+    "benchmark_id": "bids-labor-estimating-services",
+    "category": "estimating_methodology",
+    "source": "Bids Analytics electrical estimating",
+    "instruction": "Summarize the electrical construction reference source Labor Estimating Services."
+  },
+  {
+    "benchmark_id": "ebook-productivity",
+    "category": "estimating_methodology",
+    "source": "2026 national electrical estimator ebook",
+    "instruction": "Summarize the electrical construction reference source Other Factors That Affect Productivity."
+  },
+  {
+    "benchmark_id": "ebook-corrections",
+    "category": "estimating_methodology",
+    "source": "2026 national electrical estimator ebook",
+    "instruction": "Summarize the electrical construction reference source Corrections."
+  }
+]

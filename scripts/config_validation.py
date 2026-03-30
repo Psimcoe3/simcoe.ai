@@ -5,6 +5,7 @@ Shared config and prerequisite validation helpers for pipeline entry points.
 import os
 import sys
 
+from data_contracts import REVIEW_STATES
 import yaml
 
 
@@ -34,6 +35,12 @@ def require_section(cfg: dict, section_name: str) -> dict:
     return section
 
 
+def require_mapping(value: object, label: str) -> dict:
+    if not isinstance(value, dict):
+        fail(f"{label} must be a mapping")
+    return value
+
+
 def require_keys(section: dict, section_name: str, keys: set[str]) -> None:
     missing_keys = sorted(key for key in keys if key not in section)
     if missing_keys:
@@ -50,6 +57,19 @@ def require_optional_string(value: object, label: str) -> str | None:
     if value is None:
         return None
     return require_non_empty_string(value, label)
+
+
+def require_choice(value: object, label: str, choices: set[str]) -> str:
+    cleaned = require_non_empty_string(value, label)
+    if cleaned not in choices:
+        fail(f"{label} must be one of: {', '.join(sorted(choices))}")
+    return cleaned
+
+
+def require_optional_choice(value: object, label: str, choices: set[str]) -> str | None:
+    if value is None:
+        return None
+    return require_choice(value, label, choices)
 
 
 def require_bool(value: object, label: str) -> bool:
@@ -126,6 +146,11 @@ def require_directory(path: str, label: str) -> None:
         fail(f"{label} not found: {path}")
 
 
+def require_file(path: str, label: str) -> None:
+    if not os.path.isfile(path):
+        fail(f"{label} not found: {path}")
+
+
 def require_environment_variables(variable_names: list[str]) -> None:
     missing = [name for name in variable_names if not os.environ.get(name)]
     if missing:
@@ -135,9 +160,220 @@ def require_environment_variables(variable_names: list[str]) -> None:
         )
 
 
+def validate_architecture_config(cfg: dict) -> None:
+    architecture = cfg.get("architecture")
+    if architecture is None:
+        return
+
+    if not isinstance(architecture, dict):
+        fail("architecture must be a mapping when present")
+
+    require_keys(
+        architecture,
+        "architecture",
+        {
+            "system_type",
+            "primary_runtime",
+            "multimodal_runtime_enabled",
+            "retrieval_layer_enabled",
+            "geometry_rules_enabled",
+            "grounded_answers_require_retrieval",
+        },
+    )
+
+    require_non_empty_string(architecture["system_type"], "architecture.system_type")
+    require_choice(
+        architecture["primary_runtime"],
+        "architecture.primary_runtime",
+        {"text", "multimodal"},
+    )
+    retrieval_layer_enabled = require_bool(
+        architecture["retrieval_layer_enabled"],
+        "architecture.retrieval_layer_enabled",
+    )
+    require_bool(
+        architecture["multimodal_runtime_enabled"],
+        "architecture.multimodal_runtime_enabled",
+    )
+    require_bool(
+        architecture["geometry_rules_enabled"],
+        "architecture.geometry_rules_enabled",
+    )
+    grounded_answers_require_retrieval = require_bool(
+        architecture["grounded_answers_require_retrieval"],
+        "architecture.grounded_answers_require_retrieval",
+    )
+    if grounded_answers_require_retrieval and not retrieval_layer_enabled:
+        fail(
+            "architecture.grounded_answers_require_retrieval cannot be true when "
+            "architecture.retrieval_layer_enabled is false"
+        )
+
+    retrieval = cfg.get("retrieval")
+    if isinstance(retrieval, dict) and retrieval.get("enabled") and not retrieval_layer_enabled:
+        fail("retrieval.enabled cannot be true when architecture.retrieval_layer_enabled is false")
+
+
+def validate_source_registry_config(cfg: dict) -> None:
+    source_registry = cfg.get("source_registry")
+    if source_registry is None:
+        return
+
+    if not isinstance(source_registry, dict):
+        fail("source_registry must be a mapping when present")
+
+    require_keys(
+        source_registry,
+        "source_registry",
+        {"root", "manifest_path", "default_review_state", "default_data_family", "allow_auto_sft"},
+    )
+    require_non_empty_string(source_registry["root"], "source_registry.root")
+    require_non_empty_string(source_registry["manifest_path"], "source_registry.manifest_path")
+    require_choice(
+        source_registry["default_review_state"],
+        "source_registry.default_review_state",
+        REVIEW_STATES,
+    )
+    require_non_empty_string(
+        source_registry["default_data_family"],
+        "source_registry.default_data_family",
+    )
+    allow_auto_sft = require_bool(
+        source_registry["allow_auto_sft"],
+        "source_registry.allow_auto_sft",
+    )
+    if allow_auto_sft:
+        fail(
+            "source_registry.allow_auto_sft must remain false; external sources cannot enter SFT automatically"
+        )
+
+
+def validate_release_config(cfg: dict) -> None:
+    release = cfg.get("release")
+    if release is None:
+        return
+
+    if not isinstance(release, dict):
+        fail("release must be a mapping when present")
+
+    require_optional_bool(
+        release.get("fail_on_threshold_breach"),
+        "release.fail_on_threshold_breach",
+    )
+
+    for key in (
+        "quick_min_rouge1",
+        "quick_min_rouge2",
+        "quick_min_rougeL",
+        "quick_min_exact_match",
+        "full_min_rouge1",
+        "full_min_rouge2",
+        "full_min_rougeL",
+        "full_min_exact_match",
+    ):
+        require_optional_number_in_closed_range(release.get(key), f"release.{key}", 0, 1)
+
+    require_optional_number_in_closed_range(
+        release.get("min_avg_judge_score"),
+        "release.min_avg_judge_score",
+        1,
+        5,
+    )
+    require_optional_bool(
+        release.get("require_merged_smoke_test"),
+        "release.require_merged_smoke_test",
+    )
+    require_optional_bool(
+        release.get("require_gguf_smoke_test"),
+        "release.require_gguf_smoke_test",
+    )
+    require_optional_string(release.get("smoke_test_prompt"), "release.smoke_test_prompt")
+    require_optional_positive_int(
+        release.get("smoke_test_max_new_tokens"),
+        "release.smoke_test_max_new_tokens",
+    )
+    require_optional_positive_int(
+        release.get("smoke_test_min_response_chars"),
+        "release.smoke_test_min_response_chars",
+    )
+    require_optional_string(
+        release.get("ollama_model_name"),
+        "release.ollama_model_name",
+    )
+
+    category_thresholds = release.get("category_thresholds")
+    if category_thresholds is None:
+        return
+
+    threshold_map = require_mapping(category_thresholds, "release.category_thresholds")
+    for category_name, category_threshold in threshold_map.items():
+        if not isinstance(category_name, str) or not category_name.strip():
+            fail("release.category_thresholds keys must be non-empty strings")
+
+        thresholds = require_mapping(
+            category_threshold,
+            f"release.category_thresholds.{category_name}",
+        )
+
+        for key in ("min_rouge1", "min_rouge2", "min_rougeL", "min_exact_match"):
+            require_optional_number_in_closed_range(
+                thresholds.get(key),
+                f"release.category_thresholds.{category_name}.{key}",
+                0,
+                1,
+            )
+
+        require_optional_number_in_closed_range(
+            thresholds.get("min_avg_judge_score"),
+            f"release.category_thresholds.{category_name}.min_avg_judge_score",
+            1,
+            5,
+        )
+
+
+def validate_retrieval_config(cfg: dict) -> None:
+    retrieval = cfg.get("retrieval")
+    if retrieval is None:
+        return
+
+    if not isinstance(retrieval, dict):
+        fail("retrieval must be a mapping when present")
+
+    enabled = require_optional_bool(retrieval.get("enabled"), "retrieval.enabled")
+    corpus_path = require_optional_string(retrieval.get("corpus_path"), "retrieval.corpus_path")
+    manifest_path = require_optional_string(retrieval.get("manifest_path"), "retrieval.manifest_path")
+    require_optional_positive_int(retrieval.get("top_k"), "retrieval.top_k")
+    require_optional_positive_int(
+        retrieval.get("max_context_chars"),
+        "retrieval.max_context_chars",
+    )
+    require_optional_number_in_closed_range(
+        retrieval.get("min_score"),
+        "retrieval.min_score",
+        0,
+        1_000_000,
+    )
+    require_optional_bool(
+        retrieval.get("use_in_full_evaluation"),
+        "retrieval.use_in_full_evaluation",
+    )
+
+    if enabled:
+        if corpus_path is None:
+            fail("retrieval.corpus_path is required when retrieval.enabled is true")
+        require_file(corpus_path, "Retrieval corpus file")
+        if manifest_path is not None:
+            require_file(manifest_path, "Retrieval manifest file")
+
+
 def validate_prepare_data_config(cfg: dict) -> None:
     data = require_section(cfg, "data")
     model = require_section(cfg, "model")
+
+    validate_architecture_config(cfg)
+    validate_release_config(cfg)
+    validate_retrieval_config(cfg)
+    validate_source_registry_config(cfg)
 
     require_keys(data, "data", {"raw_path", "processed_dir", "validation_split", "random_state"})
     require_keys(model, "model", {"max_seq_length", "name"})
@@ -155,6 +391,11 @@ def validate_train_config(cfg: dict) -> None:
     lora = require_section(cfg, "lora")
     training = require_section(cfg, "training")
     data = require_section(cfg, "data")
+
+    validate_architecture_config(cfg)
+    validate_release_config(cfg)
+    validate_retrieval_config(cfg)
+    validate_source_registry_config(cfg)
 
     require_keys(model, "model", {"name", "max_seq_length", "load_in_4bit", "dtype"})
     require_keys(lora, "lora", {"r", "lora_alpha", "lora_dropout", "bias", "target_modules", "use_dora", "use_rslora"})
@@ -207,6 +448,11 @@ def validate_export_config(cfg: dict) -> None:
     training = require_section(cfg, "training")
     export = require_section(cfg, "export")
 
+    validate_architecture_config(cfg)
+    validate_release_config(cfg)
+    validate_retrieval_config(cfg)
+    validate_source_registry_config(cfg)
+
     require_keys(model, "model", {"name", "max_seq_length", "load_in_4bit", "dtype"})
     require_keys(training, "training", {"output_dir"})
     require_keys(export, "export", {"merged_16bit_dir", "gguf_dir", "gguf_quantisation", "ollama_modelfile"})
@@ -247,6 +493,12 @@ def validate_evaluate_config(cfg: dict, num_examples: int) -> None:
 
     require_non_empty_string(evaluation["results_path"], "evaluation.results_path")
     require_optional_string(evaluation["judge_model"], "evaluation.judge_model")
+    benchmark_path = require_optional_string(
+        evaluation.get("golden_benchmark_path"),
+        "evaluation.golden_benchmark_path",
+    )
+    if benchmark_path is not None:
+        require_file(benchmark_path, "Golden benchmark file")
 
     configured_num_examples = require_optional_positive_int(
         evaluation.get("num_examples"),
@@ -287,68 +539,7 @@ def validate_evaluate_config(cfg: dict, num_examples: int) -> None:
     if judge_concurrency is not None and judge_concurrency < 1:
         fail("evaluation.judge_concurrency must be a positive integer")
 
-    release = cfg.get("release")
-    if release is None:
-        return
-
-    if not isinstance(release, dict):
-        fail("release must be a mapping when present")
-
-    require_optional_bool(
-        release.get("fail_on_threshold_breach"),
-        "release.fail_on_threshold_breach",
-    )
-    require_optional_number_in_closed_range(
-        release.get("quick_min_rouge1"),
-        "release.quick_min_rouge1",
-        0,
-        1,
-    )
-    require_optional_number_in_closed_range(
-        release.get("quick_min_rouge2"),
-        "release.quick_min_rouge2",
-        0,
-        1,
-    )
-    require_optional_number_in_closed_range(
-        release.get("quick_min_rougeL"),
-        "release.quick_min_rougeL",
-        0,
-        1,
-    )
-    require_optional_number_in_closed_range(
-        release.get("quick_min_exact_match"),
-        "release.quick_min_exact_match",
-        0,
-        1,
-    )
-    require_optional_number_in_closed_range(
-        release.get("full_min_rouge1"),
-        "release.full_min_rouge1",
-        0,
-        1,
-    )
-    require_optional_number_in_closed_range(
-        release.get("full_min_rouge2"),
-        "release.full_min_rouge2",
-        0,
-        1,
-    )
-    require_optional_number_in_closed_range(
-        release.get("full_min_rougeL"),
-        "release.full_min_rougeL",
-        0,
-        1,
-    )
-    require_optional_number_in_closed_range(
-        release.get("full_min_exact_match"),
-        "release.full_min_exact_match",
-        0,
-        1,
-    )
-    require_optional_number_in_closed_range(
-        release.get("min_avg_judge_score"),
-        "release.min_avg_judge_score",
-        1,
-        5,
-    )
+    validate_architecture_config(cfg)
+    validate_release_config(cfg)
+    validate_retrieval_config(cfg)
+    validate_source_registry_config(cfg)
