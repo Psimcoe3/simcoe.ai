@@ -84,9 +84,12 @@ simcoe.ai/
 │
 ├── scripts/
 │   ├── check_env.py       # Pre-flight validator
+│   ├── build_estimate_index.py # Build lookup-ready RSMeans estimate records
+│   ├── build_catalog_data.py # Turn structured product/reference data into training rows
 │   ├── config_validation.py # Shared config/prerequisite validation
 │   ├── generate_data.py   # Synthetic data generation via OpenAI API
 │   ├── prepare_data.py    # JSONL → formatted + split dataset
+│   ├── revit_ingestion.py # Normalize Revit exports or family files for retrieval
 │   ├── train.py           # QLoRA training with Unsloth + SFTTrainer
 │   ├── export.py          # Merge adapters → 16-bit + GGUF
 │   └── evaluate.py        # ROUGE / exact match / LLM-as-judge
@@ -194,7 +197,8 @@ Key sections:
 ### 1. Prepare data (`scripts/prepare_data.py`)
 
 - Loads a JSONL file where each line is `{"instruction": "...", "input": "...", "response": "..."}`.
-- Fails early on invalid JSON, blank lines, missing `instruction`, or missing `response`/`output` fields.
+- Enforces a strict raw schema: `instruction` must be a non-empty string, `input` must be a string when present, and each row must provide a non-empty `response` or `output`.
+- Rejects conflicting `response` and `output` values, invalid `metadata` or `tags` fields, and chat-style rows such as `messages` or `conversations` that have not been converted yet.
 - Formats into an Alpaca-style instruction template.
 - Splits 90 % / 10 % (train / validation) using `random_state=3407`.
 - Validates that no example exceeds `max_seq_length` tokens and drops over-length examples.
@@ -239,11 +243,85 @@ make prepare      # prepare dataset only
 make train        # fine-tune (requires prepared data)
 make export       # export (requires trained adapters)
 make evaluate     # evaluate (requires exported model)
+make pdf-notes    # extract short attributed notes from a local PDF
+make ingest-reference-folder # ingest a mixed local docs/code folder into JSONL
+make merge-examples # merge reviewed example JSONLs into one corpus
+make revit-ingest # normalize Revit exports or family files into retrieval data
+make estimate-index # build RSMeans-based price/labor lookup data
 make clean        # remove all generated artifacts
 make help         # show all targets
 ```
 
 Override the config file: `make all CONFIG=my_config.yaml`
+
+---
+
+## Revit Estimation Workflow
+
+The Revit estimation path in this repo is retrieval-first.
+
+- Revit families, schedule exports, and Stratus-style metadata are normalized into reference records.
+- RSMeans or crosswalk data is normalized into lookup-ready estimate records.
+- The model can explain the matched item and estimate context, but current price and labor stay in external lookup data instead of model weights.
+
+### 1. Build Revit family references
+
+Use a structured export when you have one:
+
+```bash
+python scripts/revit_ingestion.py \
+   --source /path/to/revit_schedule_export.csv \
+   --out data/raw/revit_family_index.jsonl
+```
+
+Or bootstrap a reference catalog directly from a family directory:
+
+```bash
+python scripts/revit_ingestion.py \
+   --family-dir /mnt/c/Users/Paul/Revit/Families \
+   --out data/raw/revit_family_index.jsonl
+```
+
+Equivalent Make target:
+
+```bash
+make revit-ingest FAMILY_DIR=/mnt/c/Users/Paul/Revit/Families OUT=data/raw/revit_family_index.jsonl
+```
+
+### 2. Build the estimate index
+
+Normalize crosswalk and RSMeans records into lookup entries:
+
+```bash
+python scripts/build_estimate_index.py \
+   --mapping /mnt/c/Users/Paul/RSmeans/stratus_rsmeans_map_FULL.csv \
+   --rsmeans-har-dir /mnt/c/Users/Paul/RSmeans \
+   --out data/raw/estimate_index.jsonl
+```
+
+The checked-in `rsmeans_parsed.csv` path may be misaligned if it was generated with the old fixed column map. The estimate builder now rejects obviously code-shifted CSVs and prefers parsing the raw HAR files directly.
+
+When both `--mapping` and `--rsmeans-har-dir` are provided, the builder keeps the family/category/manufacturer metadata from the crosswalk file but replaces estimate fields with the trusted HAR-derived values whenever the RSMeans description matches.
+
+Equivalent Make target:
+
+```bash
+make estimate-index \
+   MAPPING=/mnt/c/Users/Paul/RSmeans/stratus_rsmeans_map_FULL.csv \
+   RSMEANS_HAR_DIR=/mnt/c/Users/Paul/RSmeans \
+   OUT=data/raw/estimate_index.jsonl
+```
+
+### 3. Keep training and retrieval separate
+
+Keep volatile fields like material pricing, labor hours, and installed totals in retrieval data. Use training data for:
+
+- family identification language
+- estimate explanation and assumptions
+- output formatting
+- interpretation of category, type, and assembly context
+
+Use `scripts/build_catalog_data.py` only after reviewing whether a structured source should become training examples or stay as reference data.
 
 ---
 
@@ -277,7 +355,63 @@ python scripts/build_catalog_data.py \
 Current source coverage in [sources/public_sources.yaml](sources/public_sources.yaml)
 includes material manufacturers such as ABB, nVent HOFFMAN, Atkore, Leviton,
 Hubbell, and Legrand, plus public reference sources such as BLS OEWS,
-California DIR prevailing wage pages, and Electrical Contractor Magazine.
+California DIR prevailing wage pages, Electrical Contractor Magazine, and
+electrical estimating workflow references from Bids Analytics.
+
+Local manuals or ebooks placed in [sources/README.md](sources/README.md) should stay reference-only unless their licensing has been reviewed for broader dataset use.
+
+### 4. Extract reference notes from local PDFs
+
+Use a dedicated PDF-to-notes step for local manuals and estimator books:
+
+```bash
+python scripts/extract_reference_pdf.py \
+   --source sources/2026_national_electrical_estimator_ebook.pdf \
+   --start-page 4 \
+   --out data/raw/estimator_ebook_notes.jsonl
+```
+
+Equivalent Make target:
+
+```bash
+make pdf-notes \
+   SOURCE=sources/2026_national_electrical_estimator_ebook.pdf \
+   START_PAGE=4 \
+   OUT=data/raw/estimator_ebook_notes.jsonl
+```
+
+This step creates short, attributed reference-note records with page ranges and summaries. It is intended for retrieval context and reviewed methodology examples, not raw page dumping.
+
+### 5. Ingest a local reference folder
+
+Use a mixed-folder ingestion step when a local tree contains manuals, notes, and code-like files:
+
+```bash
+make ingest-reference-folder \
+   ROOT="/mnt/c/Users/Paul/source/repos/Psimcoe3/Simcoe-Design/References/docs/Electrical Material" \
+   SOURCE_NAME="Electrical Material" \
+   OUT=data/raw/electrical_material_reference.jsonl
+```
+
+This step recursively scans the folder and emits:
+
+- PDF-derived reference notes for manuals and code books
+- text reference notes for `.txt`, `.md`, `.yaml`, and `.json` files
+- code reference records for source files such as `.py`, `.cs`, `.js`, and `.ts`
+
+The output can be reviewed directly for retrieval use or passed into `scripts/build_catalog_data.py` to generate distilled examples.
+
+### 6. Merge reviewed example sets
+
+When you have multiple approved example files, merge and deduplicate them into a single corpus:
+
+```bash
+make merge-examples \
+   SOURCES="data/raw/nccer_examples.jsonl data/raw/njatc_examples.jsonl data/raw/bids_analytics_examples.jsonl data/raw/estimator_ebook_methodology_examples.jsonl" \
+   OUT=data/raw/electrician_reference_examples.jsonl
+```
+
+This is the easiest path for building a larger electrician-focused dataset from multiple reviewed source families before running `scripts/prepare_data.py`.
 ```
 
 Edit `topics.yaml` to define your domains. The included topics cover:

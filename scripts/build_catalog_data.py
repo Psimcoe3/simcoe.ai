@@ -332,7 +332,7 @@ def _build_reference_examples(record: dict) -> list[dict]:
     label = page_title or source_name
     examples = [
         {
-            "instruction": f"Summarize the public electrical construction reference page {label}.",
+            "instruction": f"Summarize the electrical construction reference source {label}.",
             "response": summary,
         }
     ]
@@ -340,7 +340,7 @@ def _build_reference_examples(record: dict) -> list[dict]:
     if source_name:
         examples.append(
             {
-                "instruction": f"What public estimating or industry reference information is available from {source_name}?",
+                "instruction": f"What estimating or industry reference information is available from {source_name}?",
                 "response": summary,
             }
         )
@@ -399,11 +399,15 @@ def _build_labor_rate_examples(record: dict) -> list[dict]:
 def build_examples(records: list[dict]) -> list[dict]:
     normalized_records = []
     reference_records = []
+    code_reference_records = []
     labor_rate_records = []
     for record in records:
         kind = _clean_value(record.get("kind"))
         if kind in {"reference", "labor_reference", "industry_reference"}:
             reference_records.append(record)
+            continue
+        if kind == "code_reference":
+            code_reference_records.append(record)
             continue
         if kind == "labor_rate":
             labor_rate_records.append(record)
@@ -434,6 +438,8 @@ def build_examples(records: list[dict]) -> list[dict]:
         examples.extend(_build_product_examples(record))
     examples.extend(_build_manufacturer_examples(normalized_records))
     for record in reference_records:
+        examples.extend(_build_reference_examples(record))
+    for record in code_reference_records:
         examples.extend(_build_reference_examples(record))
     for record in labor_rate_records:
         examples.extend(_build_labor_rate_examples(record))

@@ -13,6 +13,15 @@ Input JSONL format (each line is a JSON object):
     The "input" field is optional — it is appended to the instruction when
     present (Alpaca-style).
 
+Schema rules:
+    - instruction: required non-empty string
+    - input: optional string
+    - response or output: at least one required non-empty string
+    - response and output may both be present only when they match
+    - metadata: optional JSON object
+    - tags: optional list of non-empty strings
+    - chat-style rows such as messages/conversations must be converted first
+
 Output:
     data/processed/train/   — Arrow dataset shard
     data/processed/valid/   — Arrow dataset shard
@@ -26,6 +35,37 @@ import sys
 from datasets import Dataset, load_dataset
 from transformers import AutoTokenizer
 from config_validation import load_config, validate_prepare_data_config
+
+
+SUPPORTED_RESPONSE_KEYS = ("response", "output")
+
+
+def _is_non_empty_string(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _normalise_text(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    return value.strip()
+
+
+def _validate_tags(tags: object, line_number: int, errors: list[str]) -> None:
+    if not isinstance(tags, list):
+        errors.append(f"line {line_number}: 'tags' must be a list of non-empty strings")
+        return
+
+    invalid_indexes = [
+        index for index, item in enumerate(tags, start=1)
+        if not isinstance(item, str) or not item.strip()
+    ]
+    if invalid_indexes:
+        positions = ", ".join(str(index) for index in invalid_indexes[:5])
+        if len(invalid_indexes) > 5:
+            positions += ", ..."
+        errors.append(
+            f"line {line_number}: 'tags' contains invalid entries at positions {positions}"
+        )
 
 
 # ── Chat template ──────────────────────────────────────────────────────────────
@@ -81,8 +121,9 @@ def validate_raw_jsonl(raw_path: str) -> None:
                 continue
 
             instruction = record.get("instruction")
-            context = record.get("input", "")
-            response = record.get("response", record.get("output"))
+            context = record.get("input")
+            response = record.get("response")
+            output = record.get("output")
 
             if not isinstance(instruction, str) or not instruction.strip():
                 errors.append(
@@ -92,9 +133,32 @@ def validate_raw_jsonl(raw_path: str) -> None:
             if "input" in record and not isinstance(context, str):
                 errors.append(f"line {line_number}: 'input' must be a string when present")
 
-            if not isinstance(response, str) or not response.strip():
+            if not _is_non_empty_string(response) and not _is_non_empty_string(output):
                 errors.append(
-                    f"line {line_number}: provide a non-empty 'response' or 'output' string"
+                    f"line {line_number}: provide a non-empty '{SUPPORTED_RESPONSE_KEYS[0]}' or '{SUPPORTED_RESPONSE_KEYS[1]}' string"
+                )
+
+            if response is not None and not isinstance(response, str):
+                errors.append(f"line {line_number}: 'response' must be a string when present")
+
+            if output is not None and not isinstance(output, str):
+                errors.append(f"line {line_number}: 'output' must be a string when present")
+
+            if _is_non_empty_string(response) and _is_non_empty_string(output):
+                if _normalise_text(response) != _normalise_text(output):
+                    errors.append(
+                        f"line {line_number}: 'response' and 'output' are both present but differ"
+                    )
+
+            if "metadata" in record and not isinstance(record["metadata"], dict):
+                errors.append(f"line {line_number}: 'metadata' must be an object when present")
+
+            if "tags" in record:
+                _validate_tags(record["tags"], line_number, errors)
+
+            if "messages" in record or "conversations" in record:
+                errors.append(
+                    f"line {line_number}: chat-style datasets are not supported directly; convert them to instruction/response rows first"
                 )
 
             record_count += 1

@@ -215,3 +215,18 @@ sources:
       - /magazine/articles/article-detail/
       - /topics/your-business
     max_pages: 10
+
+  - kind: reference
+    source_name: Bids Analytics electrical estimating
+    start_urls:
+      - https://bidsanalytics.com/how-to-estimate-electrical-construction-costs-a-contractors-blueprint/
+    allowed_domains:
+      - bidsanalytics.com
+      - www.bidsanalytics.com
+    include_patterns:
+      - /how-to-estimate-electrical-construction-costs-a-contractors-blueprint/
+      - /electrical-estimating-services/
+      - /labor-estimating/
+      - /estimating-consulting/
+      - /services/bim-cost-estimating/
+    max_pages: 6
