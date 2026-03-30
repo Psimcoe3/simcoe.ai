@@ -18,6 +18,8 @@ Prerequisites:
 
 import argparse
 import os
+import subprocess
+import sys
 
 from config_validation import load_config, validate_export_config
 from unsloth import FastLanguageModel
@@ -68,7 +70,64 @@ def export_merged_16bit(model, tokenizer, out_dir: str) -> None:
 
 # ── GGUF export ───────────────────────────────────────────────────────────────
 
-def export_gguf(model, tokenizer, gguf_dir: str, quantisation: str) -> str:
+def _find_gguf_files(gguf_dir: str) -> list[str]:
+    if not os.path.isdir(gguf_dir):
+        return []
+    return sorted(
+        os.path.join(gguf_dir, filename)
+        for filename in os.listdir(gguf_dir)
+        if filename.endswith(".gguf")
+    )
+
+
+def _export_gguf_with_llama_cpp(merged_dir: str, gguf_dir: str, quantisation: str) -> str:
+    llama_cpp_dir = os.environ.get(
+        "LLAMA_CPP_DIR",
+        os.path.expanduser("~/src/llama.cpp"),
+    )
+    convert_script = os.path.join(llama_cpp_dir, "convert_hf_to_gguf.py")
+    quantize_bin = os.path.join(llama_cpp_dir, "build", "bin", "llama-quantize")
+
+    if not os.path.isfile(convert_script) or not os.path.isfile(quantize_bin):
+        raise FileNotFoundError(
+            "llama.cpp conversion tools not found. Set LLAMA_CPP_DIR or install "
+            "convert_hf_to_gguf.py and llama-quantize."
+        )
+
+    os.makedirs(gguf_dir, exist_ok=True)
+    f16_path = os.path.join(gguf_dir, "model-f16.gguf")
+    quantized_path = os.path.join(gguf_dir, f"model-{quantisation.upper()}.gguf")
+
+    print("  Falling back to llama.cpp conversion …")
+    subprocess.run(
+        [
+            sys.executable,
+            convert_script,
+            merged_dir,
+            "--outfile",
+            f16_path,
+            "--outtype",
+            "f16",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [quantize_bin, f16_path, quantized_path, quantisation.upper()],
+        check=True,
+    )
+
+    if os.path.isfile(f16_path):
+        os.remove(f16_path)
+
+    return quantized_path
+
+def export_gguf(
+    model,
+    tokenizer,
+    merged_dir: str,
+    gguf_dir: str,
+    quantisation: str,
+) -> str:
     """
     Export the merged model as a GGUF file using the specified quantisation
     level.  Q4_K_M offers an excellent size / quality trade-off for Ollama
@@ -78,21 +137,25 @@ def export_gguf(model, tokenizer, gguf_dir: str, quantisation: str) -> str:
     """
     os.makedirs(gguf_dir, exist_ok=True)
     print(f"\n  Exporting GGUF ({quantisation.upper()}) → {gguf_dir}")
-    model.save_pretrained_gguf(
-        gguf_dir,
-        tokenizer,
-        quantization_method=quantisation,
-    )
+    try:
+        model.save_pretrained_gguf(
+            gguf_dir,
+            tokenizer,
+            quantization_method=quantisation,
+        )
+    except Exception as exc:
+        print(f"  ⚠️   Unsloth GGUF export failed ({exc})")
+        gguf_path = _export_gguf_with_llama_cpp(merged_dir, gguf_dir, quantisation)
+        print(f"  ✅  GGUF file saved to: {gguf_path}")
+        return gguf_path
 
-    # Unsloth names the file after the quantisation method
-    gguf_filename = f"model-{quantisation.upper()}.gguf"
-    gguf_path = os.path.join(gguf_dir, gguf_filename)
-
-    # Unsloth may use a different naming convention; find the actual file.
-    gguf_files = [f for f in os.listdir(gguf_dir) if f.endswith(".gguf")]
+    gguf_files = _find_gguf_files(gguf_dir)
     if gguf_files:
-        gguf_path = os.path.join(gguf_dir, gguf_files[0])
+        print(f"  ✅  GGUF file saved to: {gguf_files[0]}")
+        return gguf_files[0]
 
+    print("  ⚠️   Unsloth GGUF export produced no .gguf file in the target directory.")
+    gguf_path = _export_gguf_with_llama_cpp(merged_dir, gguf_dir, quantisation)
     print(f"  ✅  GGUF file saved to: {gguf_path}")
     return gguf_path
 
@@ -109,6 +172,9 @@ def generate_modelfile(gguf_path: str, modelfile_path: str, cfg: dict) -> None:
     Then run inference:
         ollama run simcoe "Your prompt here"
     """
+    if not os.path.isfile(gguf_path):
+        raise FileNotFoundError(f"GGUF file not found: {gguf_path}")
+
     model_name = cfg["model"]["name"].split("/")[-1]
     max_seq_length = cfg["model"]["max_seq_length"]
 
@@ -152,11 +218,18 @@ def main() -> None:
     model, tokenizer = load_finetuned(cfg)
 
     # ── 16-bit merged export (for vLLM) ───────────────────────────────────────
-    export_merged_16bit(model, tokenizer, exp["merged_16bit_dir"])
+    merged_dir = exp["merged_16bit_dir"]
+    export_merged_16bit(model, tokenizer, merged_dir)
 
     # ── GGUF export (for Ollama / llama.cpp) ──────────────────────────────────
     try:
-        gguf_path = export_gguf(model, tokenizer, exp["gguf_dir"], exp["gguf_quantisation"])
+        gguf_path = export_gguf(
+            model,
+            tokenizer,
+            merged_dir,
+            exp["gguf_dir"],
+            exp["gguf_quantisation"],
+        )
     except Exception as exc:
         print(f"\n  ⚠️   GGUF export failed: {exc}")
         print("  The 16-bit merged model is still available for inference.")

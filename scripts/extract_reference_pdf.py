@@ -30,6 +30,87 @@ from pypdf import PdfReader
 MAX_SUMMARY_CHARS = 700
 MAX_POINT_CHARS = 220
 
+SKIP_TITLE_PATTERNS = (
+    "acknowledg",
+    "preface",
+    "copyright",
+    "contents",
+    "table of contents",
+    "glossary",
+    "index",
+    "appendix",
+    "review questions",
+    "supplemental exercises",
+    "practice problems",
+    "section review",
+    "answer key",
+    "instructor resource",
+    "case history",
+)
+
+SKIP_TEXT_PATTERNS = (
+    "all rights reserved",
+    "printed in the united states",
+    "published by",
+    "isbn",
+    "technical editors",
+    "this material is for the exclusive use",
+    "possession and/or use by others is strictly prohibited",
+    "pearson education",
+    "user update",
+    "powerpoint",
+    "lesson plans",
+    "answer the following questions",
+    "use figure",
+    "review questions",
+    "supplemental exercises",
+    "practice problems",
+)
+
+NORMALIZED_SKIP_TITLES = tuple(
+    pattern.replace(" ", "")
+    for pattern in (
+        "acknowledgments",
+        "preface",
+        "copyright",
+        "contents",
+        "tableofcontents",
+        "glossary",
+        "index",
+        "appendix",
+        "reviewquestions",
+        "supplementalexercises",
+        "practiceproblems",
+        "sectionreview",
+        "sectionreviewcalculations",
+        "sectionreviewanswerkey",
+        "answerkey",
+        "instructorresource",
+        "casehistory",
+    )
+)
+
+NORMALIZED_SKIP_TEXT_PATTERNS = tuple(
+    re.sub(r"[^a-z]", "", pattern.lower())
+    for pattern in (
+        *SKIP_TEXT_PATTERNS,
+        "curriculum@nccer.org",
+        "feedback is welcome",
+        "power points",
+        "true or false",
+        "which of the following",
+        "fill in the blank",
+        "review questions",
+        "practice exercises",
+        "practice problems",
+        "supplemental exercises",
+        "answer key",
+        "use figure",
+        "refer to figure",
+        "answer the following questions",
+    )
+)
+
 
 def _clean_line(value: str | None) -> str | None:
     if not value:
@@ -142,11 +223,96 @@ def _build_key_points(lines: list[str], title: str) -> list[str]:
             continue
         if line.lower().startswith(("page ", "section ", "chapter ")):
             continue
+        if _ocr_noise_ratio(line.lower()) >= 0.20:
+            continue
         seen.add(line)
         points.append(line)
         if len(points) >= 5:
             break
     return points
+
+
+def _normalise_title_for_matching(value: str) -> str:
+    lowered = value.lower().replace("vv", "w")
+    return re.sub(r"[^a-z]", "", lowered)
+
+
+def _looks_like_low_value_title(title: str) -> bool:
+    lowered = title.lower().strip()
+    normalized = _normalise_title_for_matching(title)
+    if lowered in {"electrical", "njatc", "nccer"}:
+        return True
+    if lowered.startswith(("figure ", "review questions", "supplemental exercises", "practice problems")):
+        return True
+    if any(pattern in lowered for pattern in SKIP_TITLE_PATTERNS):
+        return True
+    return any(pattern in normalized for pattern in NORMALIZED_SKIP_TITLES)
+
+
+def _ocr_noise_ratio(text: str) -> float:
+    tokens = re.findall(r"\S+", text)
+    if not tokens:
+        return 1.0
+
+    noisy = 0
+    for token in tokens:
+        punctuation_count = sum(not ch.isalnum() for ch in token)
+        digit_count = sum(ch.isdigit() for ch in token)
+        alpha_count = sum(ch.isalpha() for ch in token)
+        if "�" in token:
+            noisy += 1
+            continue
+        if punctuation_count >= max(3, len(token) // 2):
+            noisy += 1
+            continue
+        if digit_count >= 3 and alpha_count >= 2:
+            noisy += 1
+            continue
+        if re.search(r"[\"'`~^*_]{2,}", token):
+            noisy += 1
+            continue
+    return noisy / len(tokens)
+
+
+def _numbered_prompt_count(lines: list[str]) -> int:
+    return sum(bool(re.match(r"^(?:[0-9]+|[A-Z])(?:[.)]|\s+-)", line.strip())) for line in lines)
+
+
+def _looks_like_exercise_record(title: str, summary: str | None, key_points: list[str]) -> bool:
+    joined = " ".join(part for part in [title, summary or "", *key_points] if part)
+    lowered = joined.lower()
+    normalized = re.sub(r"[^a-z]", "", _normalise_title_for_matching(joined))
+
+    if any(pattern in normalized for pattern in NORMALIZED_SKIP_TEXT_PATTERNS):
+        return True
+    if title.lower().startswith("figure "):
+        return True
+    if _numbered_prompt_count(key_points) >= 2:
+        return True
+    if lowered.count("review questions") >= 1 and lowered.count("?") >= 2:
+        return True
+    if lowered.count("what ") + lowered.count("which ") + lowered.count("true or false") >= 3:
+        return True
+    return False
+
+
+def _is_low_quality_record(title: str, summary: str | None, key_points: list[str], page_start: int, page_end: int) -> bool:
+    joined = " ".join(part for part in [title, summary or "", *key_points] if part).lower()
+    normalized_joined = re.sub(r"[^a-z]", "", _normalise_title_for_matching(joined))
+
+    if _looks_like_low_value_title(title):
+        return True
+    if any(pattern in joined for pattern in SKIP_TEXT_PATTERNS):
+        return True
+    if any(pattern in normalized_joined for pattern in NORMALIZED_SKIP_TEXT_PATTERNS):
+        return True
+    if _looks_like_exercise_record(title, summary, key_points):
+        return True
+    if page_end <= 12 and any(pattern in joined for pattern in ("pearson", "edition", "published", "president", "vice president")):
+        return True
+    if _ocr_noise_ratio(joined) >= 0.18:
+        return True
+    return False
 
 
 def _iter_page_text(reader: PdfReader):
@@ -193,6 +359,8 @@ def _build_records(
         summary = _build_summary(chunk_text)
         key_points = _build_key_points(lines, title)
         if not summary and not key_points:
+            continue
+        if _is_low_quality_record(title, summary, key_points, page_numbers[0], page_numbers[-1]):
             continue
 
         record = {
