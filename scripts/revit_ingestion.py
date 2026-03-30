@@ -31,6 +31,7 @@ import json
 from pathlib import Path
 
 from data_contracts import build_data_contract, stable_identifier
+from managed_source_defaults import load_managed_source_settings, resolve_managed_source_path
 
 
 SCAN_EXTENSIONS = {".rfa"}
@@ -303,6 +304,7 @@ def _write_jsonl(records: list[dict], out_path: str) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Normalize Revit-derived reference data")
+    parser.add_argument("--config", default="config.yaml", help="Config file with managed source defaults")
     parser.add_argument("--source", action="append", default=[], help="CSV or JSONL export to ingest")
     parser.add_argument(
         "--family-dir",
@@ -321,6 +323,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if not args.source and not args.family_dir:
+        managed_sources = load_managed_source_settings(args.config)
+        default_family_dir = resolve_managed_source_path(managed_sources, "revit_family_dir")
+        if default_family_dir:
+            args.family_dir = [default_family_dir]
+            print(f"Using managed default Revit family directory from config: {default_family_dir}")
+
     if not args.source and not args.family_dir:
         raise SystemExit("Provide at least one --source or --family-dir input")
 

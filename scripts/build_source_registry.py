@@ -15,6 +15,12 @@ from config_validation import (
 )
 from data_contracts import infer_asset_kind, stable_identifier, suggested_ingestion_contract
 from manifest_utils import current_utc_timestamp, file_metadata, write_json_file
+from source_registry_utils import (
+    managed_relative_path,
+    materialized_manifest_path,
+    repo_sync_dir,
+    source_registry_namespace,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,20 +45,30 @@ def main() -> int:
     if not isinstance(registry_cfg, dict):
         raise SystemExit("Config must define a source_registry section")
 
-    root = Path(args.root or registry_cfg["root"])
+    configured_root = Path(registry_cfg["root"])
+    scan_root = Path(args.root or registry_cfg["root"])
     out_path = args.out or registry_cfg["manifest_path"]
-    require_directory(str(root), "Source registry root")
+    require_directory(str(scan_root), "Source registry root")
+
+    relative_base = scan_root.resolve()
+    if args.root:
+        configured_root_resolved = configured_root.resolve()
+        if relative_base.is_relative_to(configured_root_resolved):
+            relative_base = configured_root_resolved
+
+    namespace = source_registry_namespace(registry_cfg, str(relative_base))
+    repo_sync_root = repo_sync_dir(registry_cfg)
 
     assets = []
     asset_kind_counts = Counter()
     extension_counts = Counter()
     total_bytes = 0
 
-    for path in sorted(root.rglob("*")):
+    for path in sorted(scan_root.rglob("*")):
         if not path.is_file():
             continue
 
-        relative_path = path.relative_to(root)
+        relative_path = path.resolve().relative_to(relative_base)
         asset_kind = infer_asset_kind(str(path))
         suggested = suggested_ingestion_contract(asset_kind)
         metadata = file_metadata(str(path), include_sha256=not args.skip_sha256)
@@ -71,6 +87,15 @@ def main() -> int:
                 "default_data_family": registry_cfg["default_data_family"],
                 "default_sft_candidate": False,
                 "suggested_ingestion": suggested,
+                "repo_managed_path": str(
+                    Path(repo_sync_root)
+                    / managed_relative_path(
+                        str(relative_path),
+                        asset_kind,
+                        suggested.get("runtime_owner"),
+                        namespace,
+                    )
+                ),
                 **metadata,
             }
         )
@@ -79,11 +104,17 @@ def main() -> int:
         "schema_version": 1,
         "generated_at": current_utc_timestamp(),
         "config_path": str(Path(args.config).resolve()),
-        "root": str(root.resolve()),
+        "root": str(relative_base),
+        "scan_root": str(scan_root.resolve()),
         "defaults": {
             "review_state": registry_cfg["default_review_state"],
             "data_family": registry_cfg["default_data_family"],
             "allow_auto_sft": False,
+        },
+        "repo_sync": {
+            "namespace": namespace,
+            "root": repo_sync_root,
+            "materialized_manifest_path": materialized_manifest_path(registry_cfg),
         },
         "summary": {
             "asset_count": len(assets),

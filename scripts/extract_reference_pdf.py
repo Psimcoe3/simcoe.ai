@@ -24,6 +24,7 @@ import json
 import re
 from pathlib import Path
 
+from managed_source_defaults import load_managed_source_settings, resolve_managed_source_path
 from pypdf import PdfReader
 
 
@@ -420,7 +421,8 @@ def extract_pdf_records(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Extract structured reference notes from a PDF")
-    parser.add_argument("--source", required=True, help="Path to the local PDF")
+    parser.add_argument("--config", default="config.yaml", help="Config file with managed source defaults")
+    parser.add_argument("--source", help="Path to the local PDF")
     parser.add_argument("--out", required=True, help="Output JSONL path")
     parser.add_argument(
         "--source-name",
@@ -454,10 +456,17 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    source_path = Path(args.source)
+    managed_sources = load_managed_source_settings(args.config)
+    source = args.source or resolve_managed_source_path(managed_sources, "estimating_pdf")
+    if not source:
+        raise SystemExit(
+            "Provide --source or configure managed_sources.estimating_pdf in the selected config"
+        )
+
+    source_path = Path(source)
     try:
         records, start_page, end_page = extract_pdf_records(
-            args.source,
+            str(source_path),
             source_name=args.source_name,
             chunk_size=args.chunk_size,
             min_chars=args.min_chars,

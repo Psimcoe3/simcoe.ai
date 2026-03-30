@@ -196,6 +196,7 @@ Key sections:
 | `retrieval` | `enabled`, corpus path, benchmark-time retrieval settings |
 | `architecture` | primary runtime, retrieval requirement, multimodal/geometry feature flags |
 | `source_registry` | external source root, registry manifest path, review-safe defaults |
+| `managed_sources` | repo-owned mirror paths used as defaults by PDF, folder-ingest, and estimate-index workflows |
 
 ---
 
@@ -257,9 +258,12 @@ Key sections:
 ### 6. Source Registry And Review Contracts
 
 - `scripts/build_source_registry.py` snapshots the configured external root into a machine-readable registry manifest with stable asset IDs, file hashes, and ingestion recommendations.
+- Registry entries now include a suggested repo-managed destination path so selected external assets can be mirrored into this repo in a predictable layout.
+- `scripts/materialize_sources.py` copies selected registry assets into `sources/managed/<namespace>/<runtime_owner>/<asset_kind>/...` and writes a materialization manifest.
 - `scripts/ingest_reference_folder.py`, `scripts/revit_ingestion.py`, and `scripts/build_estimate_index.py` now stamp output records with `record_id` and a `data_contract` block.
 - Contract-marked non-SFT records default to `review_state: review_required` and `sft_candidate: false`.
 - `scripts/build_catalog_data.py` refuses to promote contract-marked unreviewed records into training examples unless `--allow_contract_override` is passed deliberately.
+- Operational rule: once an external file is targeted for actual use, materialize it into the repo first and run downstream ingestion from the repo-managed copy instead of the external path.
 
 ---
 
@@ -279,6 +283,7 @@ make evaluate     # evaluate (requires exported model)
 make evaluate-quick # faster metrics-only evaluation
 make evaluate-release # fail if configured release thresholds are missed
 make source-registry # build the configured external source registry manifest
+make source-materialize # copy selected external assets into sources/managed/
 make retrieval-corpus # build the local retrieval corpus
 make golden-benchmark # build the curated golden benchmark
 make pdf-notes    # extract short attributed notes from a local PDF
@@ -296,6 +301,7 @@ For the electrician workflow, the release-oriented sequence is typically:
 
 ```bash
 make source-registry CONFIG=config.electrician.yaml
+make source-materialize CONFIG=config.electrician.yaml ARGS='--registry-id source_asset:...'
 make retrieval-corpus
 make golden-benchmark
 make train-manifest CONFIG=config.electrician.yaml
@@ -339,12 +345,11 @@ make revit-ingest FAMILY_DIR=/mnt/c/Users/Paul/Revit/Families OUT=data/raw/revit
 
 ### 2. Build the estimate index
 
-Normalize crosswalk and RSMeans records into lookup entries:
+Normalize crosswalk and RSMeans records into lookup entries. When `managed_sources.estimating_har_dir` is configured, the repo-managed HAR mirror becomes the default input:
 
 ```bash
 python scripts/build_estimate_index.py \
-   --mapping /mnt/c/Users/Paul/RSmeans/stratus_rsmeans_map_FULL.csv \
-   --rsmeans-har-dir /mnt/c/Users/Paul/RSmeans \
+   --config config.electrician.yaml \
    --out data/raw/estimate_index.jsonl
 ```
 
@@ -355,9 +360,14 @@ When both `--mapping` and `--rsmeans-har-dir` are provided, the builder keeps th
 Equivalent Make target:
 
 ```bash
-make estimate-index \
-   MAPPING=/mnt/c/Users/Paul/RSmeans/stratus_rsmeans_map_FULL.csv \
-   RSMEANS_HAR_DIR=/mnt/c/Users/Paul/RSmeans \
+make estimate-index CONFIG=config.electrician.yaml OUT=data/raw/estimate_index.jsonl
+```
+
+If you want to enrich the managed HAR data with a crosswalk file, pass it explicitly:
+
+```bash
+make estimate-index CONFIG=config.electrician.yaml \
+   MAPPING=/path/to/stratus_rsmeans_map_FULL.csv \
    OUT=data/raw/estimate_index.jsonl
 ```
 
@@ -377,6 +387,15 @@ Raw external-root assets should first be registered with:
 ```bash
 make source-registry CONFIG=config.electrician.yaml
 ```
+
+When a registered asset is actually selected for use, mirror it into the repo before ingestion:
+
+```bash
+make source-materialize CONFIG=config.electrician.yaml \
+   ARGS='--registry data/registry/electricalai_docs_registry.json --path-prefix estimating'
+```
+
+That command copies matching files into `sources/managed/electricalai_docs/...` and records the copy set in `data/registry/materialized_sources.json`.
 
 When records carry a `data_contract` block, `build_catalog_data.py` will block automatic SFT conversion unless the record is explicitly marked reviewed/approved and `sft_candidate: true`.
 
@@ -423,7 +442,7 @@ Use a dedicated PDF-to-notes step for local manuals and estimator books:
 
 ```bash
 python scripts/extract_reference_pdf.py \
-   --source sources/2026_national_electrical_estimator_ebook.pdf \
+   --config config.electrician.yaml \
    --start-page 4 \
    --out data/raw/estimator_ebook_notes.jsonl
 ```
@@ -432,7 +451,7 @@ Equivalent Make target:
 
 ```bash
 make pdf-notes \
-   SOURCE=sources/2026_national_electrical_estimator_ebook.pdf \
+   CONFIG=config.electrician.yaml \
    START_PAGE=4 \
    OUT=data/raw/estimator_ebook_notes.jsonl
 ```
@@ -444,11 +463,20 @@ This step creates short, attributed reference-note records with page ranges and 
 Use a mixed-folder ingestion step when a local tree contains manuals, notes, and code-like files:
 
 ```bash
+python scripts/ingest_reference_folder.py \
+   --config config.electrician.yaml \
+   --out data/raw/electrical_material_reference.jsonl
+```
+
+Equivalent Make target:
+
+```bash
 make ingest-reference-folder \
-   ROOT="/mnt/c/Users/Paul/source/repos/Psimcoe3/Simcoe-Design/References/docs/Electrical Material" \
-   SOURCE_NAME="Electrical Material" \
+   CONFIG=config.electrician.yaml \
    OUT=data/raw/electrical_material_reference.jsonl
 ```
+
+With the electrician config, that defaults to the repo-managed folder at `sources/managed/electricalai_docs/retrieval/document/estimating` unless you pass `ROOT=...` explicitly.
 
 This step recursively scans the folder and emits:
 

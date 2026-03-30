@@ -14,6 +14,16 @@ source_registry:
   default_review_state: "review_required"
   default_data_family: "reference_unassigned"
   allow_auto_sft: false
+  repo_namespace: "electricalai_docs"
+  repo_sync_dir: "sources/managed"
+  materialized_manifest_path: "data/registry/materialized_sources.json"
+
+managed_sources:
+  root: "sources/managed/electricalai_docs"
+  reference_root: "sources/managed/electricalai_docs/retrieval/document"
+  estimating_reference_root: "sources/managed/electricalai_docs/retrieval/document/estimating"
+  estimating_pdf: "sources/managed/electricalai_docs/retrieval/document/estimating/2026_national_electrical_estimator_ebook.pdf"
+  estimating_har_dir: "sources/managed/electricalai_docs/manual_review/other/estimating/RSmeans"
 
 model:
   name: "unsloth/Meta-Llama-3.1-8B-bnb-4bit"

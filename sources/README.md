@@ -8,6 +8,12 @@ This folder can hold both public source configuration and user-supplied local re
 - `2026_national_electrical_estimator_ebook.pdf` is present as a local estimating source and can be summarized into attributed notes or distilled examples.
 - Prefer summarized, attributed records over raw bulk page dumps even when full local use is authorized.
 
+## Managed Copies
+
+- External files should not stay as ad hoc dependencies once they are selected for real use in this repo.
+- Use `scripts/build_source_registry.py` to inventory the external root, then `scripts/materialize_sources.py` to copy selected assets into `sources/managed/<namespace>/<runtime_owner>/<asset_kind>/...`.
+- Preserve downstream processing against the repo-managed copy so retrieval, training, and review workflows remain reproducible even if the original external folder changes.
+
 ## Current Estimating References
 
 - Public article: Bids Analytics, "How To Estimate Electrical Construction Costs: A Contractor's Blueprint"

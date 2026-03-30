@@ -247,6 +247,32 @@ def validate_source_registry_config(cfg: dict) -> None:
             "source_registry.allow_auto_sft must remain false; external sources cannot enter SFT automatically"
         )
 
+    require_optional_string(source_registry.get("repo_namespace"), "source_registry.repo_namespace")
+    require_optional_string(source_registry.get("repo_sync_dir"), "source_registry.repo_sync_dir")
+    require_optional_string(
+        source_registry.get("materialized_manifest_path"),
+        "source_registry.materialized_manifest_path",
+    )
+
+
+def validate_managed_sources_config(cfg: dict) -> None:
+    managed_sources = cfg.get("managed_sources")
+    if managed_sources is None:
+        return
+
+    if not isinstance(managed_sources, dict):
+        fail("managed_sources must be a mapping when present")
+
+    for key in (
+        "root",
+        "reference_root",
+        "estimating_reference_root",
+        "estimating_pdf",
+        "estimating_har_dir",
+        "revit_family_dir",
+    ):
+        require_optional_string(managed_sources.get(key), f"managed_sources.{key}")
+
 
 def validate_release_config(cfg: dict) -> None:
     release = cfg.get("release")
@@ -374,6 +400,7 @@ def validate_prepare_data_config(cfg: dict) -> None:
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
     validate_source_registry_config(cfg)
+    validate_managed_sources_config(cfg)
 
     require_keys(data, "data", {"raw_path", "processed_dir", "validation_split", "random_state"})
     require_keys(model, "model", {"max_seq_length", "name"})
@@ -396,6 +423,7 @@ def validate_train_config(cfg: dict) -> None:
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
     validate_source_registry_config(cfg)
+    validate_managed_sources_config(cfg)
 
     require_keys(model, "model", {"name", "max_seq_length", "load_in_4bit", "dtype"})
     require_keys(lora, "lora", {"r", "lora_alpha", "lora_dropout", "bias", "target_modules", "use_dora", "use_rslora"})
@@ -452,6 +480,7 @@ def validate_export_config(cfg: dict) -> None:
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
     validate_source_registry_config(cfg)
+    validate_managed_sources_config(cfg)
 
     require_keys(model, "model", {"name", "max_seq_length", "load_in_4bit", "dtype"})
     require_keys(training, "training", {"output_dir"})
@@ -543,3 +572,4 @@ def validate_evaluate_config(cfg: dict, num_examples: int) -> None:
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
     validate_source_registry_config(cfg)
+    validate_managed_sources_config(cfg)

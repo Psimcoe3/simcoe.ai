@@ -25,6 +25,7 @@ from pathlib import Path
 
 from data_contracts import build_data_contract, stable_identifier
 from extract_reference_pdf import extract_pdf_records
+from managed_source_defaults import load_managed_source_settings, resolve_managed_source_path
 
 
 TEXT_EXTENSIONS = {".txt", ".md", ".rst", ".yaml", ".yml", ".json"}
@@ -183,7 +184,8 @@ def _collect_files(root: Path):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Ingest a local mixed reference folder into JSONL")
-    parser.add_argument("--root", required=True, help="Root folder to scan recursively")
+    parser.add_argument("--config", default="config.yaml", help="Config file with managed source defaults")
+    parser.add_argument("--root", help="Root folder to scan recursively")
     parser.add_argument("--out", required=True, help="Output JSONL path")
     parser.add_argument("--source-name", help="Optional source label for all emitted records")
     parser.add_argument(
@@ -209,7 +211,18 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    root = Path(args.root)
+    managed_sources = load_managed_source_settings(args.config)
+    root_value = args.root or resolve_managed_source_path(
+        managed_sources,
+        "estimating_reference_root",
+        "reference_root",
+    )
+    if not root_value:
+        raise SystemExit(
+            "Provide --root or configure managed_sources.estimating_reference_root/reference_root"
+        )
+
+    root = Path(root_value)
     if not root.exists() or not root.is_dir():
         raise SystemExit(f"Folder not found: {root}")
 

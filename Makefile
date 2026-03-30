@@ -11,6 +11,7 @@
 #   make gguf         # convert merged model to GGUF and register with Ollama
 #   make evaluate     # evaluate only (requires exported model)
 #   make source-registry # snapshot the configured external source root into a registry manifest
+#   make source-materialize # copy selected registry assets into repo-managed sources/
 #   make retrieval-corpus # build a local retrieval corpus for source-grounded evaluation
 #   make golden-benchmark # build the curated golden benchmark from the checked-in spec
 #   make generate     # generate synthetic data using Ollama (requires running model)
@@ -38,8 +39,9 @@ GOLDEN_SOURCE      ?= $(RETRIEVAL_SOURCE)
 GOLDEN_SPEC        ?= evals/golden_electrician_spec.json
 GOLDEN_OUT         ?= evals/golden_electrician.jsonl
 GOLDEN_MANIFEST    ?= evals/golden_electrician.manifest.json
+ARGS               ?=
 
-.PHONY: all check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release source-registry retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest estimate-index clean help
+.PHONY: all check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest estimate-index clean help
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -91,6 +93,9 @@ evaluate-release: ## Evaluate and fail if configured release thresholds are not 
 source-registry: ## Build a registry manifest for the configured external source root
 	$(PYTHON) scripts/build_source_registry.py --config $(CONFIG)
 
+source-materialize: ## Copy selected registry assets into repo-managed sources/ (pass selectors via ARGS)
+	$(PYTHON) scripts/materialize_sources.py --config $(CONFIG) $(ARGS)
+
 retrieval-corpus: ## Build a deduplicated retrieval corpus from source-grounded examples
 	$(PYTHON) scripts/build_retrieval_corpus.py \
 		--source $(RETRIEVAL_SOURCE) \
@@ -126,13 +131,10 @@ scrape-public: ## Scrape public manufacturer/spec pages and public labor-rate pa
 	@echo "    To turn product, wage, and reference records into training examples:"
 	@echo "    $(PYTHON) scripts/build_catalog_data.py --source data/raw/public_scrape.jsonl --out data/raw/public_catalog_examples.jsonl"
 
-pdf-notes: ## Extract short attributed reference notes from a local PDF
-	@if [[ -z "$(SOURCE)" ]]; then \
-		echo "Usage: make pdf-notes SOURCE=sources/manual.pdf OUT=data/raw/manual_notes.jsonl"; \
-		exit 1; \
-	fi
+pdf-notes: ## Extract short attributed reference notes from a local PDF or configured managed default
 	$(PYTHON) scripts/extract_reference_pdf.py \
-		--source $(SOURCE) \
+		--config $(CONFIG) \
+		$(if $(SOURCE),--source $(SOURCE),) \
 		$(if $(SOURCE_NAME),--source-name "$(SOURCE_NAME)",) \
 		$(if $(CHUNK_SIZE),--chunk-size $(CHUNK_SIZE),) \
 		$(if $(MIN_CHARS),--min-chars $(MIN_CHARS),) \
@@ -143,13 +145,10 @@ pdf-notes: ## Extract short attributed reference notes from a local PDF
 	@echo "    To turn notes into examples when appropriate:"
 	@echo "    $(PYTHON) scripts/build_catalog_data.py --source $(if $(OUT),$(OUT),data/raw/pdf_reference_notes.jsonl) --out data/raw/pdf_reference_examples.jsonl"
 
-ingest-reference-folder: ## Extract mixed local manuals, notes, and code files into JSONL
-	@if [[ -z "$(ROOT)" ]]; then \
-		echo "Usage: make ingest-reference-folder ROOT=/path/to/folder OUT=data/raw/reference_folder.jsonl"; \
-		exit 1; \
-	fi
+ingest-reference-folder: ## Extract mixed local manuals, notes, and code files into JSONL from a managed default or explicit root
 	$(PYTHON) scripts/ingest_reference_folder.py \
-		--root "$(ROOT)" \
+		--config $(CONFIG) \
+		$(if $(ROOT),--root "$(ROOT)",) \
 		$(if $(SOURCE_NAME),--source-name "$(SOURCE_NAME)",) \
 		$(if $(TEXT_CHUNK_LINES),--text-chunk-lines $(TEXT_CHUNK_LINES),) \
 		$(if $(PDF_CHUNK_SIZE),--pdf-chunk-size $(PDF_CHUNK_SIZE),) \
@@ -169,27 +168,18 @@ merge-examples: ## Merge multiple example JSONL files into one deduplicated corp
 		--out $(if $(OUT),$(OUT),data/raw/merged_examples.jsonl)
 	@echo "✅  Example sets merged"
 
-revit-ingest: ## Normalize Revit exports or family directories into reference JSONL
-	@if [[ -z "$(SOURCE)" && -z "$(FAMILY_DIR)" ]]; then \
-		echo "Usage: make revit-ingest SOURCE=path/to/export.csv OUT=data/raw/revit_family_index.jsonl"; \
-		echo "   or: make revit-ingest FAMILY_DIR=/path/to/Revit/Families OUT=data/raw/revit_family_index.jsonl"; \
-		exit 1; \
-	fi
+revit-ingest: ## Normalize Revit exports or family directories into reference JSONL, using managed defaults when configured
 	$(PYTHON) scripts/revit_ingestion.py \
+		--config $(CONFIG) \
 		$(if $(SOURCE),--source $(SOURCE),) \
 		$(if $(FAMILY_DIR),--family-dir $(FAMILY_DIR),) \
 		$(if $(INCLUDE_RVT),--include-rvt,) \
 		--out $(if $(OUT),$(OUT),data/raw/revit_family_index.jsonl)
 	@echo "✅  Revit reference data built for retrieval workflows"
 
-estimate-index: ## Build estimate lookup records, preferring HAR costs over stale crosswalk totals
-	@if [[ -z "$(MAPPING)" && -z "$(RSMEANS)" && -z "$(RSMEANS_HAR_DIR)" ]]; then \
-		echo "Usage: make estimate-index MAPPING=path/to/stratus_rsmeans_map_FULL.csv OUT=data/raw/estimate_index.jsonl"; \
-		echo "   or: make estimate-index RSMEANS_HAR_DIR=/path/to/RSmeans OUT=data/raw/estimate_index.jsonl"; \
-		echo "   or: make estimate-index RSMEANS=path/to/corrected_rsmeans.csv OUT=data/raw/estimate_index.jsonl"; \
-		exit 1; \
-	fi
+estimate-index: ## Build estimate lookup records, preferring managed HAR defaults when available
 	$(PYTHON) scripts/build_estimate_index.py \
+		--config $(CONFIG) \
 		$(if $(MAPPING),--mapping $(MAPPING),) \
 		$(if $(RSMEANS),--rsmeans $(RSMEANS),) \
 		$(if $(RSMEANS_HAR_DIR),--rsmeans-har-dir $(RSMEANS_HAR_DIR),) \
