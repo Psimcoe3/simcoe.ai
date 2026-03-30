@@ -58,6 +58,12 @@ def require_bool(value: object, label: str) -> bool:
     return value
 
 
+def require_optional_bool(value: object, label: str) -> bool | None:
+    if value is None:
+        return None
+    return require_bool(value, label)
+
+
 def require_positive_int(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         fail(f"{label} must be a positive integer")
@@ -80,6 +86,23 @@ def require_number_in_range(value: object, label: str, low: float, high: float) 
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not low < value < high:
         fail(f"{label} must be a number between {low} and {high}")
     return float(value)
+
+
+def require_number_in_closed_range(value: object, label: str, low: float, high: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= value <= high:
+        fail(f"{label} must be a number between {low} and {high}, inclusive")
+    return float(value)
+
+
+def require_optional_number_in_closed_range(
+    value: object,
+    label: str,
+    low: float,
+    high: float,
+) -> float | None:
+    if value is None:
+        return None
+    return require_number_in_closed_range(value, label, low, high)
 
 
 def require_non_negative_number(value: object, label: str) -> float:
@@ -224,3 +247,108 @@ def validate_evaluate_config(cfg: dict, num_examples: int) -> None:
 
     require_non_empty_string(evaluation["results_path"], "evaluation.results_path")
     require_optional_string(evaluation["judge_model"], "evaluation.judge_model")
+
+    configured_num_examples = require_optional_positive_int(
+        evaluation.get("num_examples"),
+        "evaluation.num_examples",
+    )
+    quick_num_examples = require_optional_positive_int(
+        evaluation.get("quick_num_examples"),
+        "evaluation.quick_num_examples",
+    )
+    max_new_tokens = require_optional_positive_int(
+        evaluation.get("max_new_tokens"),
+        "evaluation.max_new_tokens",
+    )
+    quick_max_new_tokens = require_optional_positive_int(
+        evaluation.get("quick_max_new_tokens"),
+        "evaluation.quick_max_new_tokens",
+    )
+    inference_batch_size = require_optional_positive_int(
+        evaluation.get("inference_batch_size"),
+        "evaluation.inference_batch_size",
+    )
+    judge_concurrency = require_optional_positive_int(
+        evaluation.get("judge_concurrency"),
+        "evaluation.judge_concurrency",
+    )
+
+    if configured_num_examples is not None and quick_num_examples is not None:
+        if quick_num_examples > configured_num_examples:
+            fail("evaluation.quick_num_examples cannot exceed evaluation.num_examples")
+
+    if max_new_tokens is not None and quick_max_new_tokens is not None:
+        if quick_max_new_tokens > max_new_tokens:
+            fail("evaluation.quick_max_new_tokens cannot exceed evaluation.max_new_tokens")
+
+    if inference_batch_size is not None and inference_batch_size < 1:
+        fail("evaluation.inference_batch_size must be a positive integer")
+
+    if judge_concurrency is not None and judge_concurrency < 1:
+        fail("evaluation.judge_concurrency must be a positive integer")
+
+    release = cfg.get("release")
+    if release is None:
+        return
+
+    if not isinstance(release, dict):
+        fail("release must be a mapping when present")
+
+    require_optional_bool(
+        release.get("fail_on_threshold_breach"),
+        "release.fail_on_threshold_breach",
+    )
+    require_optional_number_in_closed_range(
+        release.get("quick_min_rouge1"),
+        "release.quick_min_rouge1",
+        0,
+        1,
+    )
+    require_optional_number_in_closed_range(
+        release.get("quick_min_rouge2"),
+        "release.quick_min_rouge2",
+        0,
+        1,
+    )
+    require_optional_number_in_closed_range(
+        release.get("quick_min_rougeL"),
+        "release.quick_min_rougeL",
+        0,
+        1,
+    )
+    require_optional_number_in_closed_range(
+        release.get("quick_min_exact_match"),
+        "release.quick_min_exact_match",
+        0,
+        1,
+    )
+    require_optional_number_in_closed_range(
+        release.get("full_min_rouge1"),
+        "release.full_min_rouge1",
+        0,
+        1,
+    )
+    require_optional_number_in_closed_range(
+        release.get("full_min_rouge2"),
+        "release.full_min_rouge2",
+        0,
+        1,
+    )
+    require_optional_number_in_closed_range(
+        release.get("full_min_rougeL"),
+        "release.full_min_rougeL",
+        0,
+        1,
+    )
+    require_optional_number_in_closed_range(
+        release.get("full_min_exact_match"),
+        "release.full_min_exact_match",
+        0,
+        1,
+    )
+    require_optional_number_in_closed_range(
+        release.get("min_avg_judge_score"),
+        "release.min_avg_judge_score",
+        1,
+        5,
+    )

@@ -52,6 +52,24 @@ export:
 evaluation:
   results_path: "evals/results_electrician.json"
   judge_model: "simcoe"
+  num_examples: 100
+  quick_num_examples: 8
+  max_new_tokens: 192
+  quick_max_new_tokens: 64
+  inference_batch_size: 1
+  judge_concurrency: 2
+
+release:
+  fail_on_threshold_breach: false
+  quick_min_rouge1: 0.18
+  quick_min_rouge2: 0.10
+  quick_min_rougeL: 0.16
+  quick_min_exact_match: 0.0
+  full_min_rouge1: 0.22
+  full_min_rouge2: 0.12
+  full_min_rougeL: 0.18
+  full_min_exact_match: 0.0
+  min_avg_judge_score: 3.5
 
 privacy:
   tracking: "tensorboard"

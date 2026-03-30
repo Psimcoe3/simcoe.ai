@@ -27,7 +27,7 @@ GGUF_Q4       := $(GGUF_DIR)/model-Q4_K_M.gguf
 MODELFILE     := $(GGUF_DIR)/Modelfile
 OLLAMA        := $(HOME)/.local/bin/ollama
 
-.PHONY: all check prepare train export gguf evaluate generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest estimate-index clean help
+.PHONY: all check prepare train export gguf evaluate evaluate-quick evaluate-release generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest estimate-index clean help
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -63,6 +63,12 @@ $(GGUF_Q4): $(MERGED_DIR)/config.json
 
 evaluate: ## Score outputs with ROUGE, exact match, and LLM-as-judge
 	$(PYTHON) scripts/evaluate.py --config $(CONFIG)
+
+evaluate-quick: ## Run a faster metrics-only evaluation profile
+	$(PYTHON) scripts/evaluate.py --config $(CONFIG) --quick --metrics_only
+
+evaluate-release: ## Evaluate and fail if configured release thresholds are not met
+	$(PYTHON) scripts/evaluate.py --config $(CONFIG) --fail_on_thresholds
 
 generate: ## Generate synthetic training data using Ollama
 	$(PYTHON) scripts/generate_data.py --topics topics.yaml \

@@ -188,7 +188,8 @@ Key sections:
 | `training` | `learning_rate`, `num_train_epochs`, `per_device_train_batch_size` |
 | `data`  | `raw_path`, `validation_split`, `random_state` |
 | `export` | `gguf_quantisation`, output directories |
-| `evaluation` | `judge_model`, `results_path` |
+| `evaluation` | `judge_model`, `results_path`, `inference_batch_size`, `max_new_tokens` |
+| `release` | `fail_on_threshold_breach`, metric thresholds for quick/full evaluation |
 
 ---
 
@@ -203,6 +204,7 @@ Key sections:
 - Splits 90 % / 10 % (train / validation) using `random_state=3407`.
 - Validates that no example exceeds `max_seq_length` tokens and drops over-length examples.
 - Saves Arrow datasets to `data/processed/`.
+- Writes `manifest.json` in the processed dataset directory with source hash, row counts, token-length summaries, and dataset fingerprints.
 
 ### 2. Train (`scripts/train.py`)
 
@@ -223,11 +225,13 @@ Key sections:
 ### 4. Evaluate (`scripts/evaluate.py`)
 
 - Fails early if the merged model, processed validation set, or evaluation config is missing.
-- Loads the merged model and runs inference on the validation set.
+- Loads the merged model and runs batched inference on the validation set with timing and progress output.
 - Scores outputs with ROUGE-1/2/L and exact match.
 - LLM-as-judge scoring via OpenAI API (set `evaluation.judge_model` in `config.yaml`; requires `OPENAI_API_KEY`).
   Rates each response 1–5 with a structured rationale.
   Set `judge_model: null` to disable.
+- Supports quick and full evaluation profiles via config plus CLI overrides for example count, batch size, and generation length.
+- Emits release-gate results from the optional `release` section and can fail non-zero when thresholds are breached.
 - Saves results to `evals/results.json`.
 
 ---
@@ -243,6 +247,8 @@ make prepare      # prepare dataset only
 make train        # fine-tune (requires prepared data)
 make export       # export (requires trained adapters)
 make evaluate     # evaluate (requires exported model)
+make evaluate-quick # faster metrics-only evaluation
+make evaluate-release # fail if configured release thresholds are missed
 make pdf-notes    # extract short attributed notes from a local PDF
 make ingest-reference-folder # ingest a mixed local docs/code folder into JSONL
 make merge-examples # merge reviewed example JSONLs into one corpus

@@ -60,6 +60,24 @@ export:
 evaluation:
   results_path: "evals/results.json"
   judge_model: "simcoe"  # Ollama model name for local judging, "openai/<model>" for API, null to disable
+  num_examples: 100
+  quick_num_examples: 20
+  max_new_tokens: 192
+  quick_max_new_tokens: 96
+  inference_batch_size: 2
+  judge_concurrency: 2
+
+release:
+  fail_on_threshold_breach: false
+  quick_min_rouge1: 0.15
+  quick_min_rouge2: 0.08
+  quick_min_rougeL: 0.12
+  quick_min_exact_match: 0.0
+  full_min_rouge1: 0.18
+  full_min_rouge2: 0.10
+  full_min_rougeL: 0.14
+  full_min_exact_match: 0.0
+  min_avg_judge_score: 3.5
 
 # ── Privacy ───────────────────────────────────────────────────────────────
 # All tracking and telemetry is local-only.  No data leaves this machine.

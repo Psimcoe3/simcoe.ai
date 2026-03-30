@@ -35,6 +35,7 @@ import sys
 from datasets import Dataset, load_dataset
 from transformers import AutoTokenizer
 from config_validation import load_config, validate_prepare_data_config
+from manifest_utils import current_utc_timestamp, sha256_file, summarise_numeric, write_json_file
 
 
 SUPPORTED_RESPONSE_KEYS = ("response", "output")
@@ -66,6 +67,14 @@ def _validate_tags(tags: object, line_number: int, errors: list[str]) -> None:
         errors.append(
             f"line {line_number}: 'tags' contains invalid entries at positions {positions}"
         )
+
+
+def _summarise_unique_texts(texts: list[str]) -> dict[str, int]:
+    unique_text_count = len(set(texts))
+    return {
+        "unique_text_rows": unique_text_count,
+        "duplicate_text_rows": len(texts) - unique_text_count,
+    }
 
 
 # ── Chat template ──────────────────────────────────────────────────────────────
@@ -182,7 +191,7 @@ def validate_lengths(
     dataset: Dataset,
     tokenizer: AutoTokenizer,
     max_seq_length: int,
-) -> Dataset:
+) -> tuple[Dataset, dict]:
     """
     Tokenise every example and remove any whose token count exceeds
     max_seq_length.  Prints a summary of how many examples were dropped.
@@ -200,13 +209,16 @@ def validate_lengths(
 
     dataset = dataset.map(_tokenize, batched=True, desc="Tokenising for length check")
 
+    token_counts = dataset["token_count"]
     before = len(dataset)
     dataset = dataset.filter(
         lambda ex: ex["token_count"] <= max_seq_length,
         desc="Filtering over-length examples",
     )
+    kept_token_counts = dataset["token_count"]
     after = len(dataset)
     dropped = before - after
+    dropped_token_counts = [count for count in token_counts if count > max_seq_length]
 
     if dropped:
         print(
@@ -216,8 +228,17 @@ def validate_lengths(
     else:
         print(f"  ✅  All {before} examples are within max_seq_length={max_seq_length}.")
 
+    summary = {
+        "before_rows": before,
+        "after_rows": after,
+        "dropped_rows": dropped,
+        "max_seq_length": max_seq_length,
+        "kept_token_count": summarise_numeric(kept_token_counts),
+        "dropped_token_count": summarise_numeric(dropped_token_counts),
+    }
+
     dataset = dataset.remove_columns(["token_count"])
-    return dataset
+    return dataset, summary
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -262,6 +283,7 @@ def main() -> None:
 
     columns_to_remove = [c for c in formatted.column_names if c != "text"]
     formatted = formatted.remove_columns(columns_to_remove)
+    text_dedupe_summary = _summarise_unique_texts(formatted["text"])
 
     print(f"\n✂️   Splitting dataset: {100*(1-validation_split):.0f}% train / "
           f"{100*validation_split:.0f}% validation (seed={random_state}) …")
@@ -288,12 +310,20 @@ def main() -> None:
     except Exception as exc:
         print(f"  ⚠️   Could not load tokeniser ({exc}).  Skipping length validation.")
         tokenizer = None
+        train_length_summary = {
+            "skipped": True,
+            "reason": str(exc),
+        }
+        valid_length_summary = {
+            "skipped": True,
+            "reason": str(exc),
+        }
 
     if tokenizer is not None:
         print("  Validating train set …")
-        train_ds = validate_lengths(train_ds, tokenizer, max_seq_length)
+        train_ds, train_length_summary = validate_lengths(train_ds, tokenizer, max_seq_length)
         print("  Validating validation set …")
-        valid_ds = validate_lengths(valid_ds, tokenizer, max_seq_length)
+        valid_ds, valid_length_summary = validate_lengths(valid_ds, tokenizer, max_seq_length)
 
     if len(train_ds) == 0 or len(valid_ds) == 0:
         print(
@@ -305,13 +335,57 @@ def main() -> None:
     os.makedirs(processed_dir, exist_ok=True)
     train_path = os.path.join(processed_dir, "train")
     valid_path = os.path.join(processed_dir, "valid")
+    manifest_path = os.path.join(processed_dir, "manifest.json")
 
     print(f"\n💾  Saving processed datasets …")
     train_ds.save_to_disk(train_path)
     valid_ds.save_to_disk(valid_path)
 
+    manifest = {
+        "schema_version": 1,
+        "generated_at": current_utc_timestamp(),
+        "config_path": os.path.abspath(args.config),
+        "source": {
+            "raw_path": os.path.abspath(raw_path),
+            "sha256": sha256_file(raw_path),
+            "size_bytes": os.path.getsize(raw_path),
+        },
+        "processing": {
+            "model_name": model_name,
+            "max_seq_length": max_seq_length,
+            "validation_split": validation_split,
+            "random_state": random_state,
+        },
+        "counts": {
+            "raw_rows": len(raw_dataset),
+            "formatted_rows": len(formatted),
+            **text_dedupe_summary,
+            "train_rows": len(train_ds),
+            "valid_rows": len(valid_ds),
+        },
+        "length_validation": {
+            "tokenizer_model": model_name if tokenizer is not None else None,
+            "skipped": tokenizer is None,
+            "train": train_length_summary,
+            "valid": valid_length_summary,
+        },
+        "dataset_fingerprints": {
+            "raw": getattr(raw_dataset, "_fingerprint", None),
+            "formatted": getattr(formatted, "_fingerprint", None),
+            "train": getattr(train_ds, "_fingerprint", None),
+            "valid": getattr(valid_ds, "_fingerprint", None),
+        },
+        "outputs": {
+            "processed_dir": os.path.abspath(processed_dir),
+            "train_path": os.path.abspath(train_path),
+            "valid_path": os.path.abspath(valid_path),
+        },
+    }
+    write_json_file(manifest_path, manifest)
+
     print(f"    Train → {train_path}")
     print(f"    Valid → {valid_path}")
+    print(f"    Manifest → {manifest_path}")
     print("\n✅  Data preparation complete.\n")
 
 

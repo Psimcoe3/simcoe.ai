@@ -20,14 +20,23 @@ Prerequisites:
 """
 
 import argparse
+import copy
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 import re
 import string
+import time
+
+try:
+    import torch
+except ImportError:
+    torch = None
 
 from config_validation import load_config, validate_evaluate_config
 from datasets import load_from_disk
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from manifest_utils import current_utc_timestamp, read_json_file, write_json_file
+from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, pipeline
 
 try:
     from rouge_score import rouge_scorer
@@ -68,28 +77,299 @@ def extract_reference(text: str) -> str:
     return ""
 
 
+def _chunked(items: list[str], chunk_size: int):
+    for start in range(0, len(items), chunk_size):
+        yield start, items[start:start + chunk_size]
+
+
+def _clear_cuda_cache() -> None:
+    if torch is not None and torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+def _extract_prediction(generated_text: str) -> str:
+    parts = generated_text.split("### Response:")
+    return parts[-1].strip() if len(parts) >= 2 else generated_text.strip()
+
+
+def _is_recoverable_cuda_error(exc: RuntimeError) -> bool:
+    message = str(exc).lower()
+    return any(
+        marker in message
+        for marker in (
+            "out of memory",
+            "cuda error",
+            "cublas",
+            "device-side assert",
+        )
+    )
+
+
+def _resolve_int_setting(value: object, default: int) -> int:
+    if isinstance(value, int) and value > 0:
+        return value
+    return default
+
+
+def _resolve_float_setting(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _round_metric(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), 4)
+
+
+def build_generation_config(gen_pipeline, max_new_tokens: int, pad_token_id: int) -> GenerationConfig:
+    base_generation_config = getattr(gen_pipeline.model, "generation_config", None)
+    if base_generation_config is None:
+        generation_config = GenerationConfig()
+    else:
+        generation_config = copy.deepcopy(base_generation_config)
+
+    generation_config.max_new_tokens = max_new_tokens
+    generation_config.do_sample = False
+    generation_config.pad_token_id = pad_token_id
+    generation_config.eos_token_id = gen_pipeline.tokenizer.eos_token_id
+    generation_config.max_length = None
+
+    if hasattr(generation_config, "temperature"):
+        generation_config.temperature = None
+    if hasattr(generation_config, "top_p"):
+        generation_config.top_p = None
+
+    return generation_config
+
+
+def resolve_evaluation_settings(cfg: dict, args: argparse.Namespace) -> dict:
+    evaluation_cfg = cfg["evaluation"]
+    release_cfg = cfg.get("release", {}) if isinstance(cfg.get("release"), dict) else {}
+
+    full_num_examples = _resolve_int_setting(evaluation_cfg.get("num_examples"), 100)
+    quick_num_examples = _resolve_int_setting(
+        evaluation_cfg.get("quick_num_examples"),
+        min(20, full_num_examples),
+    )
+    full_max_new_tokens = _resolve_int_setting(evaluation_cfg.get("max_new_tokens"), 256)
+    quick_max_new_tokens = _resolve_int_setting(
+        evaluation_cfg.get("quick_max_new_tokens"),
+        min(128, full_max_new_tokens),
+    )
+    inference_batch_size = _resolve_int_setting(
+        evaluation_cfg.get("inference_batch_size"),
+        1,
+    )
+    judge_concurrency = _resolve_int_setting(
+        evaluation_cfg.get("judge_concurrency"),
+        1,
+    )
+
+    return {
+        "mode": "quick" if args.quick else "full",
+        "num_examples": args.num_examples or (
+            quick_num_examples if args.quick else full_num_examples
+        ),
+        "max_new_tokens": args.max_new_tokens or (
+            quick_max_new_tokens if args.quick else full_max_new_tokens
+        ),
+        "inference_batch_size": args.batch_size or inference_batch_size,
+        "judge_concurrency": args.judge_concurrency or judge_concurrency,
+        "judge_model": None if args.metrics_only else evaluation_cfg.get("judge_model"),
+        "metrics_only": args.metrics_only,
+        "fail_on_threshold_breach": (
+            args.fail_on_thresholds
+            or bool(release_cfg.get("fail_on_threshold_breach", False))
+        ),
+    }
+
+
+def load_processed_manifest(processed_dir: str) -> dict | None:
+    manifest_path = os.path.join(processed_dir, "manifest.json")
+    if not os.path.isfile(manifest_path):
+        return None
+
+    try:
+        manifest = read_json_file(manifest_path)
+    except Exception as exc:
+        return {
+            "path": os.path.abspath(manifest_path),
+            "exists": True,
+            "error": str(exc),
+        }
+
+    return {
+        "path": os.path.abspath(manifest_path),
+        "exists": True,
+        "schema_version": manifest.get("schema_version"),
+        "generated_at": manifest.get("generated_at"),
+        "source": manifest.get("source"),
+        "counts": manifest.get("counts"),
+        "dataset_fingerprints": manifest.get("dataset_fingerprints"),
+    }
+
+
+def build_release_gate(
+    cfg: dict,
+    mode: str,
+    rouge_scores: dict,
+    exact_match: float,
+    judge_scores: list[dict],
+) -> dict:
+    release_cfg = cfg.get("release")
+    if not isinstance(release_cfg, dict):
+        return {
+            "configured": False,
+            "mode": mode,
+            "passed": None,
+            "checks": [],
+        }
+
+    checks: list[dict] = []
+    mode_prefix = "quick" if mode == "quick" else "full"
+
+    def add_metric_check(name: str, threshold_key: str, actual_value: float | None) -> None:
+        threshold = _resolve_float_setting(release_cfg.get(threshold_key))
+        if threshold is None:
+            return
+
+        if actual_value is None:
+            checks.append(
+                {
+                    "name": name,
+                    "threshold": threshold,
+                    "actual": None,
+                    "passed": False,
+                    "status": "missing",
+                }
+            )
+            return
+
+        checks.append(
+            {
+                "name": name,
+                "threshold": threshold,
+                "actual": _round_metric(actual_value),
+                "passed": actual_value >= threshold,
+                "status": "evaluated",
+            }
+        )
+
+    add_metric_check("rouge1", f"{mode_prefix}_min_rouge1", rouge_scores.get("rouge1"))
+    add_metric_check("rouge2", f"{mode_prefix}_min_rouge2", rouge_scores.get("rouge2"))
+    add_metric_check("rougeL", f"{mode_prefix}_min_rougeL", rouge_scores.get("rougeL"))
+    add_metric_check("exact_match", f"{mode_prefix}_min_exact_match", exact_match)
+
+    judge_threshold = _resolve_float_setting(release_cfg.get("min_avg_judge_score"))
+    if judge_threshold is not None:
+        numeric_judge_scores = [
+            float(item["score"])
+            for item in judge_scores
+            if isinstance(item.get("score"), (int, float))
+        ]
+        if numeric_judge_scores:
+            average_judge_score = sum(numeric_judge_scores) / len(numeric_judge_scores)
+            checks.append(
+                {
+                    "name": "avg_judge_score",
+                    "threshold": judge_threshold,
+                    "actual": _round_metric(average_judge_score),
+                    "passed": average_judge_score >= judge_threshold,
+                    "status": "evaluated",
+                }
+            )
+        else:
+            checks.append(
+                {
+                    "name": "avg_judge_score",
+                    "threshold": judge_threshold,
+                    "actual": None,
+                    "passed": True,
+                    "status": "skipped",
+                    "reason": "judge scores unavailable",
+                }
+            )
+
+    blocking_checks = [check for check in checks if check["status"] != "skipped"]
+    if not checks:
+        passed = None
+    else:
+        passed = all(check["passed"] for check in blocking_checks)
+
+    return {
+        "configured": bool(checks),
+        "mode": mode,
+        "passed": passed,
+        "checks": checks,
+    }
+
+
 def run_inference(
     gen_pipeline,
     examples: list[dict],
+    batch_size: int,
     max_new_tokens: int = 256,
-) -> list[str]:
+) -> tuple[list[str], dict]:
     prompts = [extract_prompt(ex["text"]) for ex in examples]
-    outputs = gen_pipeline(
-        prompts,
-        max_new_tokens=max_new_tokens,
-        do_sample=False,
-        temperature=1.0,
-        pad_token_id=gen_pipeline.tokenizer.eos_token_id,
-    )
     predictions = []
-    for out in outputs:
-        # The pipeline returns the full sequence; strip the prompt prefix.
-        generated = out[0]["generated_text"]
-        # Extract text after '### Response:'
-        parts = generated.split("### Response:")
-        pred = parts[-1].strip() if len(parts) >= 2 else generated.strip()
-        predictions.append(pred)
-    return predictions
+    total = len(prompts)
+    requested_batch_size = max(1, batch_size)
+    current_batch_size = max(1, requested_batch_size)
+    oom_retries = 0
+    start_time = time.perf_counter()
+    start_index = 0
+
+    if hasattr(gen_pipeline.tokenizer, "pad_token_id") and gen_pipeline.tokenizer.pad_token_id is not None:
+        pad_token_id = gen_pipeline.tokenizer.pad_token_id
+    else:
+        pad_token_id = gen_pipeline.tokenizer.eos_token_id
+    generation_config = build_generation_config(gen_pipeline, max_new_tokens, pad_token_id)
+
+    while start_index < total:
+        try:
+            prompt_batch = prompts[start_index:start_index + current_batch_size]
+            batch_start = time.perf_counter()
+            outputs = gen_pipeline(
+                prompt_batch,
+                batch_size=current_batch_size,
+                generation_config=generation_config,
+            )
+            for out in outputs:
+                generated = out[0]["generated_text"]
+                predictions.append(_extract_prediction(generated))
+
+            start_index += len(prompt_batch)
+            batch_elapsed = time.perf_counter() - batch_start
+            overall_elapsed = max(time.perf_counter() - start_time, 1e-6)
+            print(
+                "    Inference "
+                f"{start_index}/{total} examples "
+                f"(batch_size={current_batch_size}, "
+                f"{batch_elapsed:.1f}s batch, "
+                f"{start_index / overall_elapsed:.2f} ex/s)"
+            )
+        except RuntimeError as exc:
+            if not _is_recoverable_cuda_error(exc) or current_batch_size == 1:
+                raise
+
+            oom_retries += 1
+            next_batch_size = max(1, current_batch_size // 2)
+            print(
+                "    ⚠️   CUDA generation failure; retrying with "
+                f"batch_size={next_batch_size}."
+            )
+            current_batch_size = next_batch_size
+            _clear_cuda_cache()
+
+    total_elapsed = time.perf_counter() - start_time
+    return predictions, {
+        "requested_batch_size": requested_batch_size,
+        "final_batch_size": current_batch_size,
+        "oom_retries": oom_retries,
+        "examples_per_second": round(total / max(total_elapsed, 1e-6), 4),
+    }
 
 
 # ── Scoring ───────────────────────────────────────────────────────────────────
@@ -139,11 +419,71 @@ def _build_judge_message(prompt: str, prediction: str, reference: str) -> str:
     )
 
 
+def _get_judge_client_factory(judge_model: str):
+    try:
+        from openai import OpenAI
+    except ImportError:
+        print("  ⚠️   openai package not installed; skipping LLM-as-judge.")
+        return None, None
+
+    if judge_model.startswith("openai/"):
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            print("  ⚠️   OPENAI_API_KEY not set; skipping LLM-as-judge.")
+            return None, None
+
+        model_name = judge_model.removeprefix("openai/")
+
+        def create_client():
+            return OpenAI(api_key=api_key)
+    else:
+        model_name = judge_model
+
+        def create_client():
+            return OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+
+    return create_client, model_name
+
+
+def _score_single_judgement(
+    create_client,
+    model_name: str,
+    prompt: str,
+    prediction: str,
+    reference: str,
+) -> dict:
+    try:
+        client = create_client()
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": _JUDGE_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": _build_judge_message(prompt, prediction, reference),
+                },
+            ],
+            temperature=0.0,
+            max_tokens=256,
+        )
+        raw = response.choices[0].message.content.strip()
+        json_match = re.search(r'\{[^}]+\}', raw)
+        parsed = json.loads(json_match.group() if json_match else raw)
+        score = int(parsed.get("score", 0))
+        rationale = str(parsed.get("rationale", ""))
+        if not 1 <= score <= 5:
+            raise ValueError(f"score {score} out of range")
+        return {"score": score, "rationale": rationale}
+    except Exception as exc:
+        return {"score": None, "rationale": f"judge error: {exc}"}
+
+
 def llm_judge(
     judge_model: str | None,
     prompts: list[str],
     predictions: list[str],
     references: list[str],
+    concurrency: int = 1,
 ) -> list[dict]:
     """
     Score each prediction using a local Ollama model or OpenAI-compatible judge.
@@ -159,62 +499,46 @@ def llm_judge(
             for _ in predictions
         ]
 
-    use_openai = judge_model.startswith("openai/")
-
-    if use_openai:
-        try:
-            from openai import OpenAI
-        except ImportError:
-            print("  ⚠️   openai package not installed; skipping LLM-as-judge.")
-            return [{"score": None, "rationale": "openai package not installed"} for _ in predictions]
-
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            print("  ⚠️   OPENAI_API_KEY not set; skipping LLM-as-judge.")
-            return [{"score": None, "rationale": "OPENAI_API_KEY not set"} for _ in predictions]
-
-        client = OpenAI(api_key=api_key)
-        model_name = judge_model.removeprefix("openai/")
-    else:
-        # Use Ollama via its OpenAI-compatible API
-        try:
-            from openai import OpenAI
-        except ImportError:
-            print("  ⚠️   openai package not installed; skipping LLM-as-judge.")
-            return [{"score": None, "rationale": "openai package not installed"} for _ in predictions]
-
-        client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
-        model_name = judge_model
+    create_client, model_name = _get_judge_client_factory(judge_model)
+    if create_client is None:
+        return [
+            {"score": None, "rationale": "judge backend unavailable"}
+            for _ in predictions
+        ]
 
     results: list[dict] = []
-    for i, (prompt, pred, ref) in enumerate(zip(prompts, predictions, references)):
-        try:
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": _JUDGE_SYSTEM_PROMPT},
-                    {"role": "user", "content": _build_judge_message(prompt, pred, ref)},
-                ],
-                temperature=0.0,
-                max_tokens=256,
-            )
-            raw = response.choices[0].message.content.strip()
-            # Try to extract JSON from the response
-            json_match = re.search(r'\{[^}]+\}', raw)
-            if json_match:
-                parsed = json.loads(json_match.group())
-            else:
-                parsed = json.loads(raw)
-            score = int(parsed.get("score", 0))
-            rationale = str(parsed.get("rationale", ""))
-            if not 1 <= score <= 5:
-                raise ValueError(f"score {score} out of range")
-            results.append({"score": score, "rationale": rationale})
-        except Exception as exc:
-            results.append({"score": None, "rationale": f"judge error: {exc}"})
+    total = len(predictions)
+    if concurrency <= 1 or total <= 1:
+        for i, (prompt, pred, ref) in enumerate(zip(prompts, predictions, references)):
+            results.append(_score_single_judgement(create_client, model_name, prompt, pred, ref))
+            if (i + 1) % 10 == 0 or (i + 1) == total:
+                print(f"    Judged {i + 1}/{total} examples …")
+        return results
 
-        if (i + 1) % 10 == 0:
-            print(f"    Judged {i + 1}/{len(predictions)} examples …")
+    results = [None] * total
+    max_workers = min(concurrency, total)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_index = {
+            executor.submit(
+                _score_single_judgement,
+                create_client,
+                model_name,
+                prompts[i],
+                predictions[i],
+                references[i],
+            ): i
+            for i in range(total)
+        }
+        completed = 0
+        for future in as_completed(future_to_index):
+            index = future_to_index[future]
+            try:
+                results[index] = future.result()
+            except Exception as exc:
+                results[index] = {"score": None, "rationale": f"judge error: {exc}"}
+            completed += 1
+            if completed % 10 == 0 or completed == total:
+                print(f"    Judged {completed}/{total} examples …")
 
     return results
 
@@ -227,39 +551,100 @@ def main() -> None:
     parser.add_argument(
         "--num_examples",
         type=int,
-        default=100,
-        help="Number of validation examples to evaluate (default: 100).",
+        default=None,
+        help="Number of validation examples to evaluate. Defaults to the config profile.",
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=None,
+        help="Override evaluation.inference_batch_size for generation.",
+    )
+    parser.add_argument(
+        "--max_new_tokens",
+        type=int,
+        default=None,
+        help="Override evaluation.max_new_tokens for generation.",
+    )
+    parser.add_argument(
+        "--judge_concurrency",
+        type=int,
+        default=None,
+        help="Override evaluation.judge_concurrency for LLM-as-judge requests.",
+    )
+    parser.add_argument(
+        "--metrics_only",
+        action="store_true",
+        help="Skip LLM-as-judge scoring and compute automatic metrics only.",
+    )
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Use quick evaluation defaults from the config.",
+    )
+    parser.add_argument(
+        "--fail_on_thresholds",
+        action="store_true",
+        help="Exit non-zero when configured release thresholds are not met.",
     )
     args = parser.parse_args()
 
     cfg = load_config(args.config)
-    validate_evaluate_config(cfg, args.num_examples)
+    settings = resolve_evaluation_settings(cfg, args)
+    validate_evaluate_config(cfg, settings["num_examples"])
 
     model_dir = cfg["export"]["merged_16bit_dir"]
     valid_dir = os.path.join(cfg["data"]["processed_dir"], "valid")
     results_path = cfg["evaluation"]["results_path"]
-    judge_model = cfg["evaluation"].get("judge_model")
+    judge_model = settings["judge_model"]
     max_seq_length = cfg["model"]["max_seq_length"]
+    total_start = time.perf_counter()
+    processed_manifest = load_processed_manifest(cfg["data"]["processed_dir"])
+
+    print(
+        "\n⚙️   Evaluation settings: "
+        f"mode={settings['mode']}, "
+        f"num_examples={settings['num_examples']}, "
+        f"batch_size={settings['inference_batch_size']}, "
+        f"max_new_tokens={settings['max_new_tokens']}, "
+        f"judge_concurrency={settings['judge_concurrency']}, "
+        f"metrics_only={settings['metrics_only']}, "
+        f"fail_on_threshold_breach={settings['fail_on_threshold_breach']}"
+    )
+
+    if processed_manifest is None:
+        print("  ⚠️   Processed dataset manifest not found. Re-run prepare_data to capture lineage metadata.")
+    elif processed_manifest.get("error"):
+        print(f"  ⚠️   Could not read processed dataset manifest ({processed_manifest['error']}).")
+    else:
+        manifest_path = processed_manifest["path"]
+        print(f"  📄  Loaded processed dataset manifest: {manifest_path}")
 
     # ── Load model ────────────────────────────────────────────────────────────
     print(f"\n🔍  Loading merged model from: {model_dir}")
+    model_load_start = time.perf_counter()
     tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True)
+    if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
+        tokenizer.pad_token_id = tokenizer.eos_token_id
     model = AutoModelForCausalLM.from_pretrained(
         model_dir,
         device_map="auto",
+        torch_dtype="auto",
         trust_remote_code=True,
     )
     gen_pipeline = pipeline(
         "text-generation",
         model=model,
         tokenizer=tokenizer,
-        max_length=max_seq_length,
     )
+    model_load_seconds = time.perf_counter() - model_load_start
+    print(f"    Model ready in {model_load_seconds:.1f}s")
 
     # ── Load validation data ──────────────────────────────────────────────────
     print(f"\n📂  Loading validation set from: {valid_dir}")
     valid_ds = load_from_disk(valid_dir)
-    examples = list(valid_ds)[:args.num_examples]
+    example_count = min(settings["num_examples"], len(valid_ds))
+    examples = list(valid_ds.select(range(example_count)))
     print(f"    Evaluating on {len(examples)} examples.")
 
     references = [extract_reference(ex["text"]) for ex in examples]
@@ -267,7 +652,14 @@ def main() -> None:
 
     # ── Run inference ─────────────────────────────────────────────────────────
     print("\n🤖  Running inference …")
-    predictions = run_inference(gen_pipeline, examples)
+    inference_start = time.perf_counter()
+    predictions, inference_stats = run_inference(
+        gen_pipeline,
+        examples,
+        batch_size=settings["inference_batch_size"],
+        max_new_tokens=settings["max_new_tokens"],
+    )
+    inference_seconds = time.perf_counter() - inference_start
 
     # ── Automatic metrics ─────────────────────────────────────────────────────
     print("\n📊  Computing automatic metrics …")
@@ -278,17 +670,71 @@ def main() -> None:
     print(f"    Exact match:  {em_score:.4f}")
 
     # ── LLM-as-judge ─────────────────────────────────────────────────────────
-    print("\n🧑‍⚖️  Running LLM-as-judge evaluation …")
-    judge_scores = llm_judge(judge_model, prompts, predictions, references)
+    if judge_model is None:
+        print("\n🧑‍⚖️  Skipping LLM-as-judge evaluation.")
+        judge_scores = [
+            {"score": None, "rationale": "LLM-as-judge not configured"}
+            for _ in predictions
+        ]
+        judge_seconds = 0.0
+    else:
+        print("\n🧑‍⚖️  Running LLM-as-judge evaluation …")
+        judge_start = time.perf_counter()
+        judge_scores = llm_judge(
+            judge_model,
+            prompts,
+            predictions,
+            references,
+            concurrency=settings["judge_concurrency"],
+        )
+        judge_seconds = time.perf_counter() - judge_start
+
+    release_gate = build_release_gate(
+        cfg,
+        settings["mode"],
+        rouge_scores,
+        em_score,
+        judge_scores,
+    )
+
+    if release_gate["configured"]:
+        print(
+            "\n🚦  Release gate: "
+            f"{'PASS' if release_gate['passed'] else 'FAIL'}"
+        )
+        failed_checks = [check for check in release_gate["checks"] if check["status"] != "skipped" and not check["passed"]]
+        for check in failed_checks[:5]:
+            print(
+                f"    - {check['name']}: actual={check['actual']} threshold={check['threshold']}"
+            )
 
     # ── Save results ──────────────────────────────────────────────────────────
     results = {
+        "generated_at": current_utc_timestamp(),
         "num_examples": len(examples),
+        "mode": settings["mode"],
         "metrics": {
             "rouge": rouge_scores,
             "exact_match": em_score,
         },
         "judge_model": judge_model,
+        "settings": {
+            "max_seq_length": max_seq_length,
+            "max_new_tokens": settings["max_new_tokens"],
+            "inference_batch_size": settings["inference_batch_size"],
+            "judge_concurrency": settings["judge_concurrency"],
+            "metrics_only": settings["metrics_only"],
+            "fail_on_threshold_breach": settings["fail_on_threshold_breach"],
+        },
+        "data_manifest": processed_manifest,
+        "release_gate": release_gate,
+        "timings_sec": {
+            "model_load": round(model_load_seconds, 4),
+            "inference": round(inference_seconds, 4),
+            "judge": round(judge_seconds, 4),
+            "total": round(time.perf_counter() - total_start, 4),
+        },
+        "inference_stats": inference_stats,
         "per_example": [
             {
                 "prompt": prompts[i],
@@ -300,11 +746,18 @@ def main() -> None:
         ],
     }
 
-    os.makedirs(os.path.dirname(results_path), exist_ok=True)
-    with open(results_path, "w") as f:
-        json.dump(results, f, indent=2)
+    write_json_file(results_path, results)
 
     print(f"\n💾  Results saved to: {results_path}")
+
+    if (
+        release_gate["configured"]
+        and settings["fail_on_threshold_breach"]
+        and release_gate["passed"] is False
+    ):
+        print("\n❌  Evaluation failed configured release thresholds.\n")
+        raise SystemExit(2)
+
     print("\n✅  Evaluation complete.\n")
 
 

@@ -1,0 +1,176 @@
+{
+  "data_manifest": {
+    "counts": {
+      "duplicate_text_rows": 0,
+      "formatted_rows": 2865,
+      "raw_rows": 2865,
+      "train_rows": 2578,
+      "unique_text_rows": 2865,
+      "valid_rows": 287
+    },
+    "dataset_fingerprints": {
+      "formatted": "49dd1773e00a694d",
+      "raw": "94c88ebd93999e20",
+      "train": "54c0c586c803f74c",
+      "valid": "e3c50a7641c7fb25"
+    },
+    "exists": true,
+    "generated_at": "2026-03-30T20:08:02.213437+00:00",
+    "path": "/home/paul/src/simcoe.ai/data/processed_electrician/manifest.json",
+    "schema_version": 1,
+    "source": {
+      "raw_path": "/home/paul/src/simcoe.ai/data/raw/electrician_reference_examples.jsonl",
+      "sha256": "ad673cdc8270db120d57ee8e9c405a1a81c3e6ee07233a7f87f6c345bd109b73",
+      "size_bytes": 3479872
+    }
+  },
+  "generated_at": "2026-03-30T20:21:00.355425+00:00",
+  "inference_stats": {
+    "examples_per_second": 0.0251,
+    "final_batch_size": 1,
+    "oom_retries": 0,
+    "requested_batch_size": 1
+  },
+  "judge_model": null,
+  "metrics": {
+    "exact_match": 0.0,
+    "rouge": {
+      "rouge1": 0.2054,
+      "rouge2": 0.118,
+      "rougeL": 0.1777
+    }
+  },
+  "mode": "quick",
+  "num_examples": 8,
+  "per_example": [
+    {
+      "judge": {
+        "rationale": "LLM-as-judge not configured",
+        "score": null
+      },
+      "prediction": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 1.1.0 Company Organization\n\n1.1.0 Company Organization Every company, no matter what the size, has a certain structure to how it operates. Smaller companies may have fewer formal structures, while larger companies",
+      "prompt": "### Instruction:\nWhat estimating or industry reference information is available from NCCER Electrical Guides / NCCER Level 4 Trainee Guide?\n\n### Response:",
+      "reference": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 Remote Duct Smoke\n\nRemote Duct Smoke Indicator This duct smoke indicator includes a horn and a test and reset function. LEDs on the device pro vide a visual indication of system condi tions. This unit is also equipped with an optional strobe and smoke lens that provides an enhanced visual indicatio n of an alarm. Figure Credit: System Sensor ligh t in the elevator car itself.\n\nKey points:\n- 5.4.4 Special Door Locking Arrangements\n- There a re dry and wet d ,emical exting uish ing systems, and this section discusses them both.\n- Exti11g11islzing Systems) does not require the .instal\u00ad lation of a building fire alarm system if one was not requ ired elsewhere. Also see NFPA 12 (Carbon\n- Dioxide Exting11ishing Systems), NFPA 12A (Halon\n- 1301 Fire Exting11ishing Systems), and NFPA 2001"
+    },
+    {
+      "judge": {
+        "rationale": "LLM-as-judge not configured",
+        "score": null
+      },
+      "prediction": "Source: NCCER Electrical Guides / NCCER Level 2 Trainee Guide \u2014 1.1.1 Frequency\n\n1.1.1 Frequency The frequency of a waveform is the number of times per second an identica l pattern repeats it\u00ad self. It is expressed in hertz (Hz). For",
+      "prompt": "### Instruction:\nWhat estimating or industry reference information is available from NCCER Electrical Guides / NCCER Level 2 Trainee Guide?\n\n### Response:",
+      "reference": "Source: NCCER Electrical Guides / NCCER Level 2 Trainee Guide \u2014 RIGHT-ANGLE---'\n\nRIGHT-ANGLE---' CONVEYOR SHEAVE CABLE ROLLER----- .;;;; - Figure 28 Typical cable tray cable-pulling arrangement. In general, the pull exerted on the cables pttlled with a basket grip shou ld not exceed 1,000 lbs (4.4 kN) . . For heavier pulls, a pulling eye should be used.\n\nKey points:\n- Figure 28 Typical cable tray cable-pulling arrangement.\n- Cables or special constru ction such as wire armor and high-voltage cables require a larger radius bend.\n- Best results are obtained by pulling the cable in one continuous operation at a speed of 20' to 25'\n- (6.1 m to 7.6 m) per minute. It may be necessary to brake the reel to reduce sagging of the cables between rollers and sheaves.\n- Figu re Credit: Greenlee/ A Tcxtro11 Company"
+    },
+    {
+      "judge": {
+        "rationale": "LLM-as-judge not configured",
+        "score": null
+      },
+      "prediction": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 Example 2:\n\nExample 2: What size THHN conduc tor would be needed to supply a 150A load when there are 4 to 6 cur\u00ad rent-carrying conductors in a raceway with an",
+      "prompt": "### Instruction:\nSummarize the electrical construction reference source Example 2:.\n\n### Response:",
+      "reference": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 Example 2:\n\nExample 2: The lighting load of 21' of track lighting is de\u00ad termined as follows: 21' ~ 2 = 10.5' (rou nd fractio ns up) = 11 ' 11 ' X 150VA = 1,650VA Any loads that are continuous duty are multip lied by 125% to determine the overcurre nt protect ion device and conductor size. All others are calculated at 100%. 3.1.5 Outside Lighting Loads Outsid e lighting loads are calculated by multiply\u00ad ing the rati ng in VA by the number of fixture s. Refer to NEC Section 220.14(D) .\n\nKey points:\n- The lighting load of 21' of track lighting is de\u00ad termined as follows:\n- 21' ~ 2 = 10.5' (rou nd fractio ns up) = 11 '\n- Any loads that are continuous duty are multip lied by 125% to determine the overcurre nt protect ion device and conductor size. All others are calculated at 100%.\n- Outsid e lighting loads are calculated by multiply\u00ad ing the rati ng in VA by the number of fixture s.\n- Determin e the load for 30 outside lighting fix\u00ad tures, each rated at 250VA, including the ballast."
+    },
+    {
+      "judge": {
+        "rationale": "LLM-as-judge not configured",
+        "score": null
+      },
+      "prediction": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 NCCER Electrical Guides / NCCER Level 1 Trainee Guide pages 413-414\n\n\u2666 \"\"\"\"'.,,.,~ CABLE BUS 1.3.1 Operation The cable bus is a factory",
+      "prompt": "### Instruction:\nWhat should an electrical contractor know from NCCER Electrical Guides / NCCER Level 1 Trainee Guide page NCCER Electrical Guides / NCCER Level 1 Trainee Guide pages 413-414?\n\n### Response:",
+      "reference": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 NCCER Electrical Guides / NCCER Level 1 Trainee Guide pages 413-414\n\n., ri 0 -~~-- I, r. . N \\ ~~-------------\u2022\u2022 r \u2022\u00b7\u2022 ;Ct.03\".'T; : : ' . r .~ ~t=--------------- ., .\n\nKey points:\n- Figure 3 Floor plans of a building.\n- 4 N CC ER - Electrica l Level One 2& 110-11\n- Elevation drawings may also show the heights of win dows, doors, and porches, the pitch of roofs, etc., because all of these measurements cannot be shown conveniently on floo r plans.\n- f'ig11re 4 Front and rear elevation s.\n- \u2666 2e 11 0-11 Basic Electrical Construction Drawings Module Ten 5"
+    },
+    {
+      "judge": {
+        "rationale": "LLM-as-judge not configured",
+        "score": null
+      },
+      "prediction": "Source: NCCER Electrical Guides / NCCER Level 3 Trainee Guide \u2014 1.1.0 NE~ Requirements for Conformity\n\n1.1.0 NE~ Requirements for Conformity The NEc\u00ae requirements for conformity are in Sec\u00ad tion 110.10. The general requirements",
+      "prompt": "### Instruction:\nWhat estimating or industry reference information is available from NCCER Electrical Guides / NCCER Level 3 Trainee Guide?\n\n### Response:",
+      "reference": "Source: NCCER Electrical Guides / NCCER Level 3 Trainee Guide \u2014 Table 7 NE<:' Application Rules for Motor Fuel Dispensing Facilities\n\nTable 7 NE<:' Application Rules for Motor Fuel Dispensing Facilities Application Code Requirement Code Reference Equipment in hazardous locations All wiring and componen ts must confo rm to the rules tor NEC Section 514.4 Class I locations. Equlpmont above hazardous locations All wiring must confo rm 10 tho rulos for suoh equipment In NEC Section 514.7 commercial garages. Gasoline di.spenser A disconnecting means must be provided for each circuit NEC Section 514.13 leading to or through a dispens ing pump to disconnect all voltag e sources, including feedbadc, during periods of service and maintenance. An approved seal 1sealotf) is required in each condu it entering or leaving a dispenser.\n\nKey points:\n- Application Code Requirement Code Reference\n- All wiring and componen ts must confo rm to the rules tor NEC Section 514.4\n- All wiring must confo rm 10 tho rulos for suoh equipment In NEC Section 514.7 commercial garages.\n- Grounding Metal port ions of all noncurrent \u2022carrying parts of dispensers NEC Section 514. 16 must be effectively grounded and bonded .\n- locations. NEC A ,-tic/L\u2022 517, f1111\u00b7t V covers the re\u00ad quirements for electrical wiring and equipment in"
+    },
+    {
+      "judge": {
+        "rationale": "LLM-as-judge not configured",
+        "score": null
+      },
+      "prediction": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 TORQUE\n\nTORQUE INCH-POUNDS = (2 X PI) X (TENSION IN LBS) OR TORQUE INCH-POUNDS = (2 X PI) X (COMPRESSED SPRING",
+      "prompt": "### Instruction:\nSummarize the electrical construction reference source TORQUE.\n\n### Response:",
+      "reference": "Source: NCCER Electrical Guides / NCCER Level 2 Trainee Guide \u2014 TORQUE\n\nTORQUE . \u2022, NEUTRAL PLANE----~\u00b7 \u2022 , : . ;\" : \u2022' . \u2022 \u2022 ' INERTIA BRUSH (Al (Bl Figure 9 Neutral p lane in a single-loop DC motor.\n\nKey points:\n- Figure 9 Neutral p lane in a single-loop DC motor.\n- A motor provides torque (a turning force) similar to that needed to turn a nut. In the illustration shown here, which wrench should be able to turn the nut more easily?\n- N CC ER - Electrica l Leve/ Two 262 02-11 \u2666\n- Figure 1.0 Two-loop armat11rc DC motor.\n- Commutation, or the switdting of the armature polarity, must take place at the neutral plane in _or\u00ad der to allow the output current from the machine"
+    },
+    {
+      "judge": {
+        "rationale": "LLM-as-judge not configured",
+        "score": null
+      },
+      "prediction": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 1.1.0 Company Organization\n\n1.1.0 Company Organization Every company, no matter what the size, has a certain structure to how it operates. Smaller companies may have fewer formal structures, while larger companies",
+      "prompt": "### Instruction:\nWhat estimating or industry reference information is available from NCCER Electrical Guides / NCCER Level 4 Trainee Guide?\n\n### Response:",
+      "reference": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 Objectives\n\nObjectives When you have completed this modu le, you will be able to do the folJowing: l. Describe the variou s codes and standard s that relate to fire alarm systems. a. Explain how codes and standar ds are implemented and list organization s responsible for their creation and maintenance.\n\nKey points:\n- When you have completed this modu le, you will be able to do the folJowing:\n- l. Describe the variou s codes and standard s that relate to fire alarm systems.\n- a. Explain how codes and standar ds are implemented and list organization s responsible for their creation and maintenance.\n- b. List the various FPA codes and standards that apply to fire alarm sys tems.\n- 2. Describe the basic types of fire alar m systems and their prim ary components."
+    },
+    {
+      "judge": {
+        "rationale": "LLM-as-judge not configured",
+        "score": null
+      },
+      "prediction": "Source: NCCER Electrical Guides / NCCER Level 3 Trainee Guide \u2014 3.2.2 Crest Factor\n\nThe crest factor is the ratio of the peak value to the RMS value. For a sine wave, the peak value is equal to 1.414 (VJ1.414 =",
+      "prompt": "### Instruction:\nSummarize the electrical construction reference source 3.2.2 Crest Factor.\n\n### Response:",
+      "reference": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 3.2.2 Crest Factor\n\nThe vast majority of low-cost, portab le clamp\u00ad on ammeters are average responding. These in\u00ad struments give correc t readings for pure sine waves on ly and typically read low when con\u00ad fronted with a distorted current waveform. The result is a reading that can be as much as 50% low. True rms meters give correct read ings for any waveshape within the instrum ent's crest factor and bandwidth spec ifications.\n\nKey points:\n- True rms meters give correct read ings for any waveshape within the instrum ent's crest factor and bandwidth spec ifications.\n- A quality true rms handh eld digital multimeter has a crest factor of 3.0 at full scale. This is more than adequate for most power distribution mea\u00ad surements. At half scale, the crest factor is double.\n- For example, a meter may have a crest factor speci\u00ad fication of 3.0 when measuring 400VAC and a crest factor of 6.0 when measuring 200YAC.\n- Three-phase current waveforms often exhibit the double-hump waveform; therefore, the crest fac\u00ad tor comparison method should not be applied to three-phase load currents.\n- Most true rms meters cannot be used for signals below 5% of scale because of the measurement noise problem. Use a lower range if it is available."
+    }
+  ],
+  "release_gate": {
+    "checks": [
+      {
+        "actual": 0.2054,
+        "name": "rouge1",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.18
+      },
+      {
+        "actual": 0.118,
+        "name": "rouge2",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.1
+      },
+      {
+        "actual": 0.1777,
+        "name": "rougeL",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.16
+      },
+      {
+        "actual": 0.0,
+        "name": "exact_match",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 0.0
+      },
+      {
+        "actual": null,
+        "name": "avg_judge_score",
+        "passed": true,
+        "reason": "judge scores unavailable",
+        "status": "skipped",
+        "threshold": 3.5
+      }
+    ],
+    "configured": true,
+    "mode": "quick",
+    "passed": true
+  },
+  "settings": {
+    "fail_on_threshold_breach": false,
+    "inference_batch_size": 1,
+    "judge_concurrency": 2,
+    "max_new_tokens": 64,
+    "max_seq_length": 2048,
+    "metrics_only": true
+  },
+  "timings_sec": {
+    "inference": 318.8401,
+    "judge": 0.0,
+    "model_load": 1.4525,
+    "total": 320.3296
+  }
+}
