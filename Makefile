@@ -48,7 +48,7 @@ GOLDEN_OUT         ?= evals/golden_electrician.jsonl
 GOLDEN_MANIFEST    ?= evals/golden_electrician.manifest.json
 ARGS               ?=
 
-.PHONY: all check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest estimate-index estimating-reference-examples estimating-canonical electrician-corpus clean help
+.PHONY: all check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -95,7 +95,7 @@ evaluate-quick: ## Run a faster metrics-only evaluation profile
 	$(PYTHON) scripts/evaluate.py --config $(CONFIG) --quick --metrics_only
 
 evaluate-release: ## Evaluate and fail if configured release thresholds are not met
-	$(PYTHON) scripts/evaluate.py --config $(CONFIG) --fail_on_thresholds
+	$(PYTHON) scripts/evaluate.py --config $(CONFIG) --release
 
 source-registry: ## Build a registry manifest for the configured external source root
 	$(PYTHON) scripts/build_source_registry.py --config $(CONFIG)
@@ -196,6 +196,23 @@ estimate-index: ## Build estimate lookup records, preferring managed HAR default
 		$(if $(RSMEANS_HAR_DIR),--rsmeans-har-dir $(RSMEANS_HAR_DIR),) \
 		--out $(if $(OUT),$(OUT),data/raw/estimate_index.jsonl)
 	@echo "✅  Estimate index built for live lookup"
+
+estimate-lookup: ## Query the deterministic estimate lookup runtime
+	$(PYTHON) scripts/estimate_lookup.py \
+		--config $(CONFIG) \
+		$(if $(INDEX),--index $(INDEX),) \
+		$(if $(QUERY),--query "$(QUERY)",) \
+		$(if $(RECORD_ID),--record-id $(RECORD_ID),) \
+		$(if $(LOOKUP_KEY),--lookup-key $(LOOKUP_KEY),) \
+		$(if $(FAMILY_NAME),--family-name "$(FAMILY_NAME)",) \
+		$(if $(CATEGORY),--category "$(CATEGORY)",) \
+		$(if $(MANUFACTURER),--manufacturer "$(MANUFACTURER)",) \
+		$(if $(UNIT),--unit "$(UNIT)",) \
+		$(if $(SOURCE_NAME),--source-name "$(SOURCE_NAME)",) \
+		$(if $(TOP_K),--top-k $(TOP_K),) \
+		$(if $(MIN_SCORE),--min-score $(MIN_SCORE),) \
+		$(if $(QUANTITY),--quantity $(QUANTITY),) \
+		$(if $(OUT),--out $(OUT),)
 
 estimating-reference-examples: ## Convert managed estimating reference records into examples only after explicit training approval
 	$(PYTHON) scripts/build_catalog_data.py --source $(ESTIMATING_REFERENCE_OUT) \

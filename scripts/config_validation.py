@@ -278,6 +278,49 @@ def validate_managed_sources_config(cfg: dict) -> None:
         require_optional_string(managed_sources.get(key), f"managed_sources.{key}")
 
 
+def validate_deterministic_tools_config(cfg: dict) -> None:
+    deterministic_tools = cfg.get("deterministic_tools")
+    if deterministic_tools is None:
+        return
+
+    if not isinstance(deterministic_tools, dict):
+        fail("deterministic_tools must be a mapping when present")
+
+    for tool_name, tool_cfg in deterministic_tools.items():
+        if not isinstance(tool_name, str) or not tool_name.strip():
+            fail("deterministic_tools keys must be non-empty strings")
+
+        tool_settings = require_mapping(tool_cfg, f"deterministic_tools.{tool_name}")
+        require_optional_bool(
+            tool_settings.get("enabled"),
+            f"deterministic_tools.{tool_name}.enabled",
+        )
+        require_optional_string(
+            tool_settings.get("index_path"),
+            f"deterministic_tools.{tool_name}.index_path",
+        )
+        require_optional_positive_int(
+            tool_settings.get("default_top_k"),
+            f"deterministic_tools.{tool_name}.default_top_k",
+        )
+        require_optional_positive_int(
+            tool_settings.get("max_results"),
+            f"deterministic_tools.{tool_name}.max_results",
+        )
+        require_optional_number_in_closed_range(
+            tool_settings.get("min_score"),
+            f"deterministic_tools.{tool_name}.min_score",
+            0,
+            1_000_000,
+        )
+        default_quantity = tool_settings.get("default_quantity")
+        if default_quantity is not None:
+            require_positive_number(
+                default_quantity,
+                f"deterministic_tools.{tool_name}.default_quantity",
+            )
+
+
 def validate_release_config(cfg: dict) -> None:
     release = cfg.get("release")
     if release is None:
@@ -289,6 +332,10 @@ def validate_release_config(cfg: dict) -> None:
     require_optional_bool(
         release.get("fail_on_threshold_breach"),
         "release.fail_on_threshold_breach",
+    )
+    require_optional_bool(
+        release.get("require_retrieval_for_grounded_benchmark"),
+        "release.require_retrieval_for_grounded_benchmark",
     )
 
     for key in (
@@ -331,6 +378,14 @@ def validate_release_config(cfg: dict) -> None:
         "release.ollama_model_name",
     )
 
+    if bool(release.get("require_retrieval_for_grounded_benchmark")):
+        retrieval = cfg.get("retrieval")
+        if not isinstance(retrieval, dict) or not bool(retrieval.get("enabled", False)):
+            fail(
+                "release.require_retrieval_for_grounded_benchmark cannot be true when "
+                "retrieval.enabled is not true"
+            )
+
     category_thresholds = release.get("category_thresholds")
     if category_thresholds is None:
         return
@@ -352,6 +407,19 @@ def validate_release_config(cfg: dict) -> None:
                 0,
                 1,
             )
+
+        require_optional_number_in_closed_range(
+            thresholds.get("min_tool_success_rate"),
+            f"release.category_thresholds.{category_name}.min_tool_success_rate",
+            0,
+            1,
+        )
+        require_optional_number_in_closed_range(
+            thresholds.get("min_avg_tool_match_score"),
+            f"release.category_thresholds.{category_name}.min_avg_tool_match_score",
+            0,
+            1,
+        )
 
         require_optional_number_in_closed_range(
             thresholds.get("min_avg_judge_score"),
@@ -405,6 +473,7 @@ def validate_prepare_data_config(cfg: dict) -> None:
     validate_retrieval_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
+    validate_deterministic_tools_config(cfg)
 
     require_keys(data, "data", {"raw_path", "processed_dir", "validation_split", "random_state"})
     require_keys(model, "model", {"max_seq_length", "name"})
@@ -428,6 +497,7 @@ def validate_train_config(cfg: dict) -> None:
     validate_retrieval_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
+    validate_deterministic_tools_config(cfg)
 
     require_keys(model, "model", {"name", "max_seq_length", "load_in_4bit", "dtype"})
     require_keys(lora, "lora", {"r", "lora_alpha", "lora_dropout", "bias", "target_modules", "use_dora", "use_rslora"})
@@ -485,6 +555,7 @@ def validate_export_config(cfg: dict) -> None:
     validate_retrieval_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
+    validate_deterministic_tools_config(cfg)
 
     require_keys(model, "model", {"name", "max_seq_length", "load_in_4bit", "dtype"})
     require_keys(training, "training", {"output_dir"})
@@ -577,3 +648,4 @@ def validate_evaluate_config(cfg: dict, num_examples: int) -> None:
     validate_retrieval_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
+    validate_deterministic_tools_config(cfg)

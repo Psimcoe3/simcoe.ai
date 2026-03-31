@@ -70,5 +70,100 @@
     "category": "estimating_methodology",
     "source": "2026 national electrical estimator ebook",
     "instruction": "Summarize the electrical construction reference source Corrections."
+  },
+  {
+    "benchmark_id": "estimate-emt-adapter-3-4",
+    "category": "estimate_lookup",
+    "route": "deterministic_tool",
+    "runtime_owner": "geometry_rules",
+    "tool_name": "estimate_lookup",
+    "source": "RSMeans estimate index",
+    "section": "EMT to conduit adapters, (compression), 3/4\" diameter, to 15' H",
+    "instruction": "Find the estimate lookup for EMT to conduit adapters, (compression), 3/4\" diameter, to 15' H.",
+    "tool_request": {
+      "query": "EMT to conduit adapters, (compression), 3/4\" diameter, to 15' H",
+      "quantity": 120,
+      "top_k": 1
+    },
+    "tool_expectation": {
+      "result_count_at_least": 1,
+      "top_result": {
+        "record_id": "estimate_lookup:2347b5ec5124f0c8",
+        "lookup_key": "emt-to-conduit-adapters-compression-3-4-diameter-to-15-h",
+        "unit": "Ea.",
+        "estimate": {
+          "bare_total": 17.0,
+          "labor_hours": 0.133
+        },
+        "quantity_rollup": {
+          "supported": true,
+          "estimated_days": 2.0,
+          "totals": {
+            "bare_total": 2040.0
+          }
+        }
+      }
+    }
+  },
+  {
+    "benchmark_id": "estimate-emt-adapter-1-inch",
+    "category": "estimate_lookup",
+    "route": "deterministic_tool",
+    "runtime_owner": "geometry_rules",
+    "tool_name": "estimate_lookup",
+    "source": "RSMeans estimate index",
+    "section": "EMT to conduit adapters, (compression), 1\" diameter, to 15' H",
+    "instruction": "Find the estimate lookup for EMT to conduit adapters, (compression), 1\" diameter, to 15' H.",
+    "tool_request": {
+      "query": "EMT to conduit adapters, (compression), 1\" diameter, to 15' H",
+      "quantity": 50,
+      "top_k": 1
+    },
+    "tool_expectation": {
+      "result_count_at_least": 1,
+      "top_result": {
+        "record_id": "estimate_lookup:26f50e1946608f39",
+        "lookup_key": "emt-to-conduit-adapters-compression-1-diameter-to-15-h",
+        "unit": "Ea.",
+        "estimate": {
+          "bare_total": 22.15,
+          "labor_hours": 0.16
+        },
+        "quantity_rollup": {
+          "supported": true,
+          "estimated_days": 1.0,
+          "totals": {
+            "bare_total": 1107.5
+          }
+        }
+      }
+    }
+  },
+  {
+    "benchmark_id": "estimate-main-office-expense-over-10m",
+    "category": "estimate_lookup",
+    "route": "deterministic_tool",
+    "runtime_owner": "geometry_rules",
+    "tool_name": "estimate_lookup",
+    "source": "RSMeans estimate index",
+    "section": "Main office expense, average for General Contractors as a percentage of annual volume, annual volume over $10,000,000",
+    "instruction": "Find the estimate lookup for main office expense, average for General Contractors as a percentage of annual volume over $10,000,000.",
+    "tool_request": {
+      "query": "Main office expense, average for General Contractors as a percentage of annual volume, annual volume over $10,000,000",
+      "quantity": 10,
+      "top_k": 1
+    },
+    "tool_expectation": {
+      "result_count_at_least": 1,
+      "top_result": {
+        "record_id": "estimate_lookup:2ce93ae914611337",
+        "lookup_key": "main-office-expense-average-for-general-contractors-as-a-percentage-of-annual-volume-annual-volume-over-10-000-000",
+        "unit": "% Vol.",
+        "quantity_rollup": {
+          "supported": false,
+          "reason": "unit_not_rollup_safe"
+        }
+      }
+    }
   }
 ]

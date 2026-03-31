@@ -15,6 +15,44 @@ def load_json(path: str) -> object:
         return json.load(handle)
 
 
+def _optional_string(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _direct_tool_row_from_spec(spec: dict, index: int, benchmark_id: str, category: str) -> dict:
+    instruction = _optional_string(spec.get("instruction"))
+    tool_name = _optional_string(spec.get("tool_name"))
+    if instruction is None or tool_name is None:
+        raise SystemExit(
+            f"Spec entry {index} must define non-empty instruction and tool_name for deterministic tool rows"
+        )
+
+    tool_request = spec.get("tool_request")
+    tool_expectation = spec.get("tool_expectation")
+    if not isinstance(tool_request, dict) or not tool_request:
+        raise SystemExit(f"Spec entry {index} must define a non-empty tool_request mapping")
+    if not isinstance(tool_expectation, dict) or not tool_expectation:
+        raise SystemExit(f"Spec entry {index} must define a non-empty tool_expectation mapping")
+
+    return {
+        "benchmark_id": benchmark_id,
+        "category": category,
+        "route": _optional_string(spec.get("route")) or "deterministic_tool",
+        "runtime_owner": _optional_string(spec.get("runtime_owner")) or "geometry_rules",
+        "tool_name": tool_name,
+        "tool_request": tool_request,
+        "tool_expectation": tool_expectation,
+        "source": _optional_string(spec.get("source")),
+        "section": _optional_string(spec.get("section")),
+        "instruction": instruction,
+        "input": spec.get("input") if isinstance(spec.get("input"), str) else None,
+        "response": spec.get("response") or spec.get("output"),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build a curated golden benchmark from a spec file.")
     parser.add_argument("--source", required=True, help="Source example JSONL file.")
@@ -37,8 +75,16 @@ def main() -> None:
 
         instruction = spec.get("instruction")
         source_match = spec.get("source")
-        category = spec.get("category")
+        category = _optional_string(spec.get("category"))
         benchmark_id = spec.get("benchmark_id") or f"electrician-{index:03d}"
+        if category is None:
+            raise SystemExit(f"Spec entry {index} must define a non-empty category")
+
+        tool_name = _optional_string(spec.get("tool_name"))
+        if tool_name is not None:
+            benchmark_rows.append(_direct_tool_row_from_spec(spec, index, benchmark_id, category))
+            continue
+
         if not all(isinstance(value, str) and value.strip() for value in (instruction, source_match, category)):
             raise SystemExit(f"Spec entry {index} must define non-empty instruction, source, and category")
 
@@ -67,6 +113,11 @@ def main() -> None:
         benchmark_rows.append({
             "benchmark_id": benchmark_id,
             "category": category,
+            "route": _optional_string(spec.get("route")) or "text",
+            "runtime_owner": _optional_string(spec.get("runtime_owner")) or "text",
+            "tool_name": None,
+            "tool_request": None,
+            "tool_expectation": None,
             "source": matched_source,
             "section": matched_section,
             "instruction": matched_row.get("instruction"),
@@ -81,11 +132,14 @@ def main() -> None:
             handle.write("\n")
 
     category_counts: dict[str, int] = {}
+    route_counts: dict[str, int] = {}
     for row in benchmark_rows:
         category_counts[row["category"]] = category_counts.get(row["category"], 0) + 1
+        route_name = row.get("route") or "text"
+        route_counts[route_name] = route_counts.get(route_name, 0) + 1
 
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": current_utc_timestamp(),
         "source": {
             "path": os.path.abspath(args.source),
@@ -100,6 +154,7 @@ def main() -> None:
             "count": len(benchmark_rows),
         },
         "categories": category_counts,
+        "routes": route_counts,
         "benchmark_ids": [row["benchmark_id"] for row in benchmark_rows],
     }
     write_json_file(args.manifest, manifest)

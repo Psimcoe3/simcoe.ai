@@ -246,6 +246,8 @@ Key sections:
 - Supports quick and full evaluation profiles via config plus CLI overrides for example count, batch size, and generation length.
 - Uses `evaluation.golden_benchmark_path` for full-mode benchmark runs when configured.
 - Can inject retrieved context from a local corpus when `retrieval.enabled` and `retrieval.use_in_full_evaluation` are set.
+- Supports mixed-route golden benchmarks where some rows are evaluated through deterministic tools instead of text generation.
+- Reports deterministic-tool success and match-score metrics separately so text and tool regressions are visible independently.
 - Emits release-gate results from the optional `release` section, including per-category threshold checks, and can fail non-zero when thresholds are breached.
 - Saves results to `evals/results.json`.
 
@@ -253,6 +255,7 @@ Key sections:
 
 - `scripts/build_retrieval_corpus.py` builds a deduplicated local retrieval corpus plus a manifest with source distribution and dedupe counts.
 - `scripts/build_golden_benchmark.py` builds a reproducible benchmark JSONL from the checked-in spec and source corpus.
+- The golden benchmark spec can now mix source-matched text rows with direct deterministic-tool rows. Tool rows declare `route: deterministic_tool`, `tool_name`, `tool_request`, and `tool_expectation` in the spec.
 - These assets are intended for source-heavy domains where release quality depends on grounded retrieval, not just memorized phrasing.
 
 ### 6. Source Registry And Review Contracts
@@ -291,6 +294,7 @@ make ingest-reference-folder # ingest a mixed local docs/code folder into JSONL
 make merge-examples # merge reviewed example JSONLs into one corpus
 make revit-ingest # normalize Revit exports or family files into retrieval data
 make estimate-index # build RSMeans-based price/labor lookup data
+make estimate-lookup # query the deterministic estimate lookup runtime
 make clean        # remove all generated artifacts
 make help         # show all targets
 ```
@@ -308,6 +312,8 @@ make train-manifest CONFIG=config.electrician.yaml
 make export-verify CONFIG=config.electrician.yaml
 make evaluate-release CONFIG=config.electrician.yaml
 ```
+
+`make evaluate-release` now runs an explicit release profile. That profile fails closed when judge thresholds are configured but no judge scores are available, and it can enforce retrieval usage for grounded benchmark rows when `release.require_retrieval_for_grounded_benchmark: true` is set.
 
 ---
 
@@ -370,6 +376,29 @@ make estimate-index CONFIG=config.electrician.yaml \
    MAPPING=/path/to/stratus_rsmeans_map_FULL.csv \
    OUT=data/raw/estimate_index.jsonl
 ```
+
+### 2b. Query the estimate index deterministically
+
+Once the index exists, query it through the deterministic lookup runtime instead of treating it as a passive JSONL artifact:
+
+```bash
+python scripts/estimate_lookup.py \
+   --config config.electrician.yaml \
+   --query "3/4 EMT conduit" \
+   --quantity 120
+```
+
+Equivalent Make target:
+
+```bash
+make estimate-lookup \
+   CONFIG=config.electrician.yaml \
+   QUERY="3/4 EMT conduit" \
+   QUANTITY=120 \
+   TOP_K=3
+```
+
+The response is a deterministic JSON envelope with a stable request ID, matched estimate records, source provenance, and quantity rollups when the unit is safe to scale.
 
 ### 3. Keep training and retrieval separate
 

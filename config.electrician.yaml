@@ -92,6 +92,7 @@ evaluation:
 
 release:
   fail_on_threshold_breach: false
+  require_retrieval_for_grounded_benchmark: true
   require_merged_smoke_test: true
   require_gguf_smoke_test: true
   smoke_test_prompt: "In one sentence, what is torque in an electrical motor context?"
@@ -124,6 +125,8 @@ release:
       min_rouge1: 0.16
       min_rouge2: 0.08
       min_rougeL: 0.14
+    estimate_lookup:
+      min_tool_success_rate: 1.0
 
 retrieval:
   enabled: true
@@ -133,6 +136,15 @@ retrieval:
   max_context_chars: 1600
   min_score: 2
   use_in_full_evaluation: true
+
+deterministic_tools:
+  estimate_lookup:
+    enabled: true
+    index_path: "data/raw/estimate_index.jsonl"
+    default_top_k: 5
+    max_results: 10
+    min_score: 2
+    default_quantity: 1.0
 
 privacy:
   tracking: "tensorboard"

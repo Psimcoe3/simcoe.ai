@@ -11,26 +11,34 @@
     "bids-contractor-blueprint",
     "bids-labor-estimating-services",
     "ebook-productivity",
-    "ebook-corrections"
+    "ebook-corrections",
+    "estimate-emt-adapter-3-4",
+    "estimate-emt-adapter-1-inch",
+    "estimate-main-office-expense-over-10m"
   ],
   "categories": {
     "blueprint_reading": 2,
     "contractor_guidance": 2,
+    "estimate_lookup": 3,
     "estimating_methodology": 4,
     "nccer_reference_summary": 4
   },
-  "generated_at": "2026-03-30T20:38:39.070966+00:00",
+  "generated_at": "2026-03-31T01:31:56.040994+00:00",
   "output": {
-    "count": 12,
+    "count": 15,
     "path": "/home/paul/src/simcoe.ai/evals/golden_electrician.jsonl"
   },
-  "schema_version": 1,
+  "routes": {
+    "deterministic_tool": 3,
+    "text": 12
+  },
+  "schema_version": 2,
   "source": {
     "path": "/home/paul/src/simcoe.ai/data/raw/electrician_reference_examples.jsonl",
-    "sha256": "ad673cdc8270db120d57ee8e9c405a1a81c3e6ee07233a7f87f6c345bd109b73"
+    "sha256": "c1c23f4c8a2fd3e0a3378f9b4ee56f23a591ce843f932f82d8d4b44bdbf20cdc"
   },
   "spec": {
     "path": "/home/paul/src/simcoe.ai/evals/golden_electrician_spec.json",
-    "sha256": "8f42552ad2e353fda5267002f5a60fb4d1e6f112850b9064373293df4544ce37"
+    "sha256": "64c0ccdf4ec9ed2d3b5188bdadcfd47ffd53f68279cc4a252d0eb8675e5ba9e1"
   }
 }
