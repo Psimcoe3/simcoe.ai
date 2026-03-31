@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-16"?>
+<LocationConfigurationData xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <StatusColors>
+    <StatusColor>
+      <Name>Not Started</Name>
+      <ColorValue>#E0E0E0</ColorValue>
+    </StatusColor>
+    <StatusColor>
+      <Name>Complete</Name>
+      <ColorValue>#C0FFC0</ColorValue>
+    </StatusColor>
+    <StatusColor>
+      <Name>In-Progress</Name>
+      <ColorValue>#C0FFFF</ColorValue>
+    </StatusColor>
+    <StatusColor>
+      <Name>On Hold</Name>
+      <ColorValue>#FF8080</ColorValue>
+    </StatusColor>
+  </StatusColors>
+  <StatusToSetOnSheetCreationEnabled>false</StatusToSetOnSheetCreationEnabled>
+  <StatusToSetOnSheetCreation />
+  <AutoAssignScopeBox>true</AutoAssignScopeBox>
+  <ViewNameTemplate>&lt;eV_LBS_Id&gt;</ViewNameTemplate>
+  <ViewNameConflictStrategy>OverrideExisting</ViewNameConflictStrategy>
+  <ViewportCropRegionWidth>0</ViewportCropRegionWidth>
+  <ViewportCropRegionHeight>0</ViewportCropRegionHeight>
+  <ScaleToFitPlanViews>false</ScaleToFitPlanViews>
+  <ScaleToFit3DOrthoViews>true</ScaleToFit3DOrthoViews>
+  <ViewViewTemplateAssign>true</ViewViewTemplateAssign>
+  <ViewportTypeNameForPlanView>Detail View</ViewportTypeNameForPlanView>
+  <ViewportTypeNameForView3D>Detail View</ViewportTypeNameForView3D>
+  <ViewportTypeNameForSectionView>Detail View</ViewportTypeNameForSectionView>
+  <ViewportTypeNameForElevationView>Detail View</ViewportTypeNameForElevationView>
+  <ViewTypeOrientation>NortheastIso</ViewTypeOrientation>
+  <RotateViewBasedOnScopeBox>true</RotateViewBasedOnScopeBox>
+  <ScheduleNameTemplate>&lt;eV_LBS_Id&gt;</ScheduleNameTemplate>
+  <ScheduleNameConflictStrategy>OverrideExisting</ScheduleNameConflictStrategy>
+  <LocationIdTemplate>&lt;eV_LBS_Name&gt;</LocationIdTemplate>
+  <LocationInceptionFillRatio>1</LocationInceptionFillRatio>
+  <ScheduleFilterParameterName>eV_LBS_Id</ScheduleFilterParameterName>
+  <FilterTypeName>equals</FilterTypeName>
+  <LocationParameterValueToAppend>eV_LBS_Id</LocationParameterValueToAppend>
+  <SheetNameTemplate>&lt;eV_LBS_Id&gt;</SheetNameTemplate>
+  <SheetNumberingStartText />
+  <SheetNumberingParameterEnabled>true</SheetNumberingParameterEnabled>
+  <SheetNumberingParameterName>&lt;eV_LBS_Id&gt;</SheetNumberingParameterName>
+  <SheetNumberConflictStrategy>OverrideExisting</SheetNumberConflictStrategy>
+</LocationConfigurationData>

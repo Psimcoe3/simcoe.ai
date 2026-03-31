@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### FlangeToeOfFillet Property
+
+---
+
+
+
+|  |
+| --- |
+| [StructuralSectionIWideFlange Class](8a3783c4-23a2-e433-1186-506fa70508ab.htm)   [See Also](#seeAlsoToggle) |
+
+Detailing distance from center of web to flange toe of fillet, in. (mm)
+
+**Namespace:**   [Autodesk.Revit.DB.Structure.StructuralSections](09862f38-63f6-a5f8-e560-ae775901bc92.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 16.0.0.0 (16.0.0.0)   
+  **Since:**  2015
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public double FlangeToeOfFillet { get; set; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Property FlangeToeOfFillet As Double 	Get 	Set ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property double FlangeToeOfFillet { 	double get (); 	void set (double value); } ``` |
+
+# See Also
+
+[StructuralSectionIWideFlange Class](8a3783c4-23a2-e433-1186-506fa70508ab.htm)
+
+[Autodesk.Revit.DB.Structure.StructuralSections Namespace](09862f38-63f6-a5f8-e560-ae775901bc92.htm)

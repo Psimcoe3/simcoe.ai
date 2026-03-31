@@ -1,0 +1,76 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Create Method (Document, IList(XYZ), IList(PolymeshFacet))
+
+---
+
+
+
+|  |
+| --- |
+| [TopographySurface Class](64242f41-69e1-84be-f21b-84783e81364a.htm)   [See Also](#seeAlsoToggle) |
+
+Creates a new topography surface element from facets and adds it to the document.
+
+**Namespace:**   [Autodesk.Revit.DB.Architecture](720f0c58-cb2b-4f13-374a-7348ed0a1cd3.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2019.2
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static TopographySurface Create( 	Document document, 	IList<XYZ> points, 	IList<PolymeshFacet> facets ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function Create ( _ 	document As Document, _ 	points As IList(Of XYZ), _ 	facets As IList(Of PolymeshFacet) _ ) As TopographySurface ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static TopographySurface^ Create( 	Document^ document,  	IList<XYZ^>^ points,  	IList<PolymeshFacet^>^ facets ) ``` |
+
+#### Parameters
+
+document
+:   Type:  [Autodesk.Revit.DB Document](db03274b-a107-aa32-9034-f3e0df4bb1ec.htm)    
+     The document to be modified.
+
+points
+:   Type:  System.Collections.Generic IList   [XYZ](c2fd995c-95c0-58fb-f5de-f3246cbc5600.htm)    
+     A collection of points. The points represent an enclosed area in the XY plane.
+
+facets
+:   Type:  System.Collections.Generic IList   [PolymeshFacet](a7315aaf-631d-96af-368c-65f86b6c00ef.htm)    
+     Triangle facets composing a polygon mesh. Every facet contains 3 integers representing vertex indices.
+
+#### Return Value
+
+The new topography surface.
+
+# Remarks
+
+The document will be regenerated during the creation of this topography surface element. The topography surface created by facet cannot modify its triangle points and facets.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | document is not a project document. -or- There are invalid facets. Facets with more than two points with same x, y are not allowed. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions ModificationForbiddenException](53205486-5917-7c33-8e67-e362106ddc97.htm) | The document is in failure mode: an operation has failed, and Revit requires the user to either cancel the operation or fix the problem (usually by deleting certain elements). -or- The document is being loaded, or is in the midst of another sensitive process. |
+| [Autodesk.Revit.Exceptions ModificationOutsideTransactionException](8f025460-c283-ea99-aa8a-5a36e11528f4.htm) | The document has no open transaction. |
+
+# See Also
+
+[TopographySurface Class](64242f41-69e1-84be-f21b-84783e81364a.htm)
+
+[Create Overload](7951a6bc-55e8-14bf-c8dc-47ee4a463165.htm)
+
+[Autodesk.Revit.DB.Architecture Namespace](720f0c58-cb2b-4f13-374a-7348ed0a1cd3.htm)

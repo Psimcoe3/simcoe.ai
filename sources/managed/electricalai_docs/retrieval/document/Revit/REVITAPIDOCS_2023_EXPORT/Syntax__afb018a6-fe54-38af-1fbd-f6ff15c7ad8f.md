@@ -1,0 +1,50 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### NatureId Property
+
+---
+
+
+
+|  |
+| --- |
+| [LoadCase Class](2a215599-9c4c-d817-e170-605fd705699d.htm)   [See Also](#seeAlsoToggle) |
+
+The nature ID of the load case.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2016
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ElementId NatureId { get; set; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Property NatureId As ElementId 	Get 	Set ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property ElementId^ NatureId { 	ElementId^ get (); 	void set (ElementId^ value); } ``` |
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | When setting this property: the natureId does not refer to LoadNature element. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | When setting this property: A non-optional argument was null |
+
+# See Also
+
+[LoadCase Class](2a215599-9c4c-d817-e170-605fd705699d.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

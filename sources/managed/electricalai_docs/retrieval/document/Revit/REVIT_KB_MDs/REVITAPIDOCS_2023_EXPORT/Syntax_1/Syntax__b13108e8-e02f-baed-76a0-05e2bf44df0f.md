@@ -1,0 +1,53 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IsEqual Method
+
+---
+
+
+
+|  |
+| --- |
+| [AnalysisDisplayColoredSurfaceSettings Class](fce3c08c-0ec4-4a73-6bbd-975f8b754012.htm)   [See Also](#seeAlsoToggle) |
+
+Compares two colored surface settings objects.
+
+**Namespace:**   [Autodesk.Revit.DB.Analysis](958e2e12-587d-f188-5d7b-f13d7dbfdf48.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2011
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public bool IsEqual( 	AnalysisDisplayColoredSurfaceSettings other ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function IsEqual ( _ 	other As AnalysisDisplayColoredSurfaceSettings _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: bool IsEqual( 	AnalysisDisplayColoredSurfaceSettings^ other ) ``` |
+
+#### Parameters
+
+other
+:   Type:  [Autodesk.Revit.DB.Analysis AnalysisDisplayColoredSurfaceSettings](fce3c08c-0ec4-4a73-6bbd-975f8b754012.htm)    
+     Colored surface settings object to compare with.
+
+#### Return Value
+
+True if objects are equal, false otherwise.
+
+# See Also
+
+[AnalysisDisplayColoredSurfaceSettings Class](fce3c08c-0ec4-4a73-6bbd-975f8b754012.htm)
+
+[Autodesk.Revit.DB.Analysis Namespace](958e2e12-587d-f188-5d7b-f13d7dbfdf48.htm)

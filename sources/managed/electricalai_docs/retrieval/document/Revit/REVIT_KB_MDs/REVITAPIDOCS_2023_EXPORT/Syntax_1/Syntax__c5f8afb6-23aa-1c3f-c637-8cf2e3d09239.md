@@ -1,0 +1,65 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IsModeAvailable Method
+
+---
+
+
+
+|  |
+| --- |
+| [TemporaryViewModes Class](cf6ecc84-e459-55c5-a4d7-d88ae4033a23.htm)   [See Also](#seeAlsoToggle) |
+
+Tests whether a temporary view mode is currently available in the associated view.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 16.0.0.0 (16.0.0.0)   
+  **Since:**  2016 Subscription Update
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public bool IsModeAvailable( 	TemporaryViewMode mode ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function IsModeAvailable ( _ 	mode As TemporaryViewMode _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: bool IsModeAvailable( 	TemporaryViewMode mode ) ``` |
+
+#### Parameters
+
+mode
+:   Type:  [Autodesk.Revit.DB TemporaryViewMode](8c0c72db-2801-3642-72bb-108cfdff23e1.htm)    
+     The mode to evaluate
+
+#### Return Value
+
+True of the temporary mode is currently available in the associated view.
+
+# Remarks
+
+Not every mode is available in all views at all times. Some of the modes are only available in certain views, or only at certain time/context. Modes that are not available will not be visible on the view's tool bar in the UI.
+
+Even modes that are available do not have to be currently enabled in the current context. Before using a mode its applicability should be tested by calling  [IsModeEnabled(TemporaryViewMode)](e1b1ad8e-9cee-1969-441d-a8f567874cff.htm)  .
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentOutOfRangeException](60f148c9-ece0-a6bb-4e12-bb4a9c8c8a24.htm) | A value passed for an enumeration argument is not a member of that enumeration |
+
+# See Also
+
+[TemporaryViewModes Class](cf6ecc84-e459-55c5-a4d7-d88ae4033a23.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

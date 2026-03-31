@@ -1,0 +1,53 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### SetCutBackgroundPatternVisible Method
+
+---
+
+
+
+|  |
+| --- |
+| [OverrideGraphicSettings Class](eb2bd6b6-b7b2-5452-2070-2dbadb9e068a.htm)   [See Also](#seeAlsoToggle) |
+
+Sets the visibility of the cut face background fill pattern.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 19.0.0.0 (19.0.0.405)   
+  **Since:**  2019
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public OverrideGraphicSettings SetCutBackgroundPatternVisible( 	bool fillPatternVisible ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function SetCutBackgroundPatternVisible ( _ 	fillPatternVisible As Boolean _ ) As OverrideGraphicSettings ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: OverrideGraphicSettings^ SetCutBackgroundPatternVisible( 	bool fillPatternVisible ) ``` |
+
+#### Parameters
+
+fillPatternVisible
+:   Type:  [System Boolean](http://msdn2.microsoft.com/en-us/library/a28wyd50)    
+     Value of the visibility of the cut face background fill pattern.
+
+#### Return Value
+
+Reference to the changed object.
+
+# See Also
+
+[OverrideGraphicSettings Class](eb2bd6b6-b7b2-5452-2070-2dbadb9e068a.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

@@ -1,0 +1,45 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### FilterNumericGreaterOrEqual Members
+
+---
+
+
+
+|  |
+| --- |
+| [FilterNumericGreaterOrEqual Class](c77b5955-2ca2-16aa-4567-5a4470e24289.htm)   [Constructors](#constructorTableToggle)   [Methods](#methodTableToggle)   [Properties](#propertyTableToggle)   [See Also](#seeAlsoToggle) |
+
+The  [FilterNumericGreaterOrEqual](c77b5955-2ca2-16aa-4567-5a4470e24289.htm)  type exposes the following members.
+
+# Constructors
+
+|  | Name | Description |
+| --- | --- | --- |
+| Public method | [FilterNumericGreaterOrEqual](ecd9943b-55bd-0e48-6e37-cd6ff45c7b52.htm) | Constructs an instance of FilterNumericGreaterOrEqual. |
+
+# Methods
+
+|  | Name | Description |
+| --- | --- | --- |
+| Public method | [Dispose](6726f509-1d75-7abb-cde6-bfbeebff2287.htm) | (Inherited from  [FilterNumericRuleEvaluator](1f1a96bb-5f00-1a24-8c03-6984c88672b9.htm)  .) |
+| Public method | [Equals](http://msdn2.microsoft.com/en-us/library/bsc2ak47) | Determines whether the specified  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  is equal to the current  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  . (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+| Public method | [Evaluate(Int32, Int32)](65a997f9-7472-acf2-3983-f92e5e833a2b.htm) | Derived classes should override this method to implement the desired test. (Inherited from  [FilterNumericRuleEvaluator](1f1a96bb-5f00-1a24-8c03-6984c88672b9.htm)  .) |
+| Public method | [Evaluate(Double, Double, Double)](4779f820-cb81-33f2-5dbf-91f257e76b3a.htm) | Derived classes override this method to implement the test that determines whether the two given double-precision values satisfy the desired condition or not. (Inherited from  [FilterNumericRuleEvaluator](1f1a96bb-5f00-1a24-8c03-6984c88672b9.htm)  .) |
+| Public method | [GetHashCode](http://msdn2.microsoft.com/en-us/library/zdee4b3y) | Serves as a hash function for a particular type. (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+| Public method | [GetType](http://msdn2.microsoft.com/en-us/library/dfwy45w9) | Gets the  [Type](http://msdn2.microsoft.com/en-us/library/42892f65)  of the current instance. (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+| Public method | [ToString](http://msdn2.microsoft.com/en-us/library/7bxwbwt2) | Returns a string that represents the current object. (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+
+# Properties
+
+|  | Name | Description |
+| --- | --- | --- |
+| Public property | [IsValidObject](109e70c2-5454-e1d9-f694-62560047bff2.htm) | Specifies whether the .NET object represents a valid Revit entity. (Inherited from  [FilterNumericRuleEvaluator](1f1a96bb-5f00-1a24-8c03-6984c88672b9.htm)  .) |
+
+# See Also
+
+[FilterNumericGreaterOrEqual Class](c77b5955-2ca2-16aa-4567-5a4470e24289.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

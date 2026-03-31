@@ -1,0 +1,40 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CannotCreateCurtainPanelInOpeningWarning Property
+
+---
+
+
+
+|  |
+| --- |
+| [BuiltInFailures CurtainGridFamilyFailures Class](35e77e14-b020-50ef-133f-1c029c28429e.htm)   [See Also](#seeAlsoToggle) |
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static FailureDefinitionId CannotCreateCurtainPanelInOpeningWarning { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared ReadOnly Property CannotCreateCurtainPanelInOpeningWarning As FailureDefinitionId 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static property FailureDefinitionId^ CannotCreateCurtainPanelInOpeningWarning { 	FailureDefinitionId^ get (); } ``` |
+
+# See Also
+
+[BuiltInFailures CurtainGridFamilyFailures Class](35e77e14-b020-50ef-133f-1c029c28429e.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Fy Property
+
+---
+
+
+
+|  |
+| --- |
+| [ReleaseConditions Class](f742770e-6b65-f237-5851-ccdf16cfc1b5.htm)   [See Also](#seeAlsoToggle) |
+
+Gets or Sets the Fy of the release type.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 23.0.0.0 (23.1.0.0)   
+  **Since:**  2023
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public bool Fy { get; set; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Property Fy As Boolean 	Get 	Set ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property bool Fy { 	bool get (); 	void set (bool value); } ``` |
+
+# See Also
+
+[ReleaseConditions Class](f742770e-6b65-f237-5851-ccdf16cfc1b5.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

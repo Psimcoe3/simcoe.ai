@@ -1,0 +1,56 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Inequality Operator
+
+---
+
+
+
+|  |
+| --- |
+| [ElementId Class](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)   [See Also](#seeAlsoToggle) |
+
+Determines whether these two ElementIds are different.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool operator !=( 	ElementId first, 	ElementId second ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Operator <> ( _ 	first As ElementId, _ 	second As ElementId _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool operator !=( 	ElementId^ first,  	ElementId^ second ) ``` |
+
+#### Parameters
+
+first
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     The first ElementId.
+
+second
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     The second ElementId.
+
+#### Return Value
+
+True if the ElementIds are different; otherwise, false.
+
+# See Also
+
+[ElementId Class](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

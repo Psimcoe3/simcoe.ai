@@ -1,0 +1,61 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### LoadPackageContents Method
+
+---
+
+
+
+|  |
+| --- |
+| [UIApplication Class](51ca80e2-3e5f-7dd2-9d95-f210950c72ae.htm)   [See Also](#seeAlsoToggle) |
+
+Loads add-ins from the given packageContents.xml file.
+
+**Namespace:**   [Autodesk.Revit.UI](e86fd90a-8957-02a6-da7f-ced248966e3e.htm)    
+  **Assembly:**   RevitAPIUI  (in RevitAPIUI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public void LoadPackageContents( 	string packageContentsPath ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub LoadPackageContents ( _ 	packageContentsPath As String _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: void LoadPackageContents( 	String^ packageContentsPath ) ``` |
+
+#### Parameters
+
+packageContentsPath
+:   Type:  [System String](http://msdn2.microsoft.com/en-us/library/s1wwdcbf)    
+     The name of package contents file
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions FileArgumentNotFoundException](ca9ccaa9-ed08-d40d-31a7-1af3ad2dcb84.htm) | Thrown when manifest file which is specified by packageContentsPath doesn't exist. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | Thrown if the add-in file path specified by packageContentsPath is null, Or packageContentsPath is null. |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | Thrown if the add-in specified by packageContentsPath doesn't end with 'addin' or packageContentsPath is a zero-length string. |
+| [Autodesk.Revit.Exceptions FileNotFoundException](73250198-dbc6-e760-4297-ec062f00f574.htm) | Thrown if the packageContentsPath is not found. |
+| [Autodesk.Revit.Exceptions ApplicationException](05012a96-16ea-ace7-6115-b45406dacead.htm) | Thrown if the manifest file specified by packageContentsPath can't be parsed successfully. |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | Thrown when any of the newly added external applications fails to load and/or initialize properly, possibly because of one of the following reasons: AllowLoadingIntoExistingSession property is 'No'.Client id is duplicated.External application start up failed. |
+| [Autodesk.Revit.Exceptions InternalException](c52bc6d3-6cd9-26f5-4b27-1646c0711a34.htm) | Thrown if packageContentsPath file that was found could not be loaded. |
+
+# See Also
+
+[UIApplication Class](51ca80e2-3e5f-7dd2-9d95-f210950c72ae.htm)
+
+[Autodesk.Revit.UI Namespace](e86fd90a-8957-02a6-da7f-ced248966e3e.htm)

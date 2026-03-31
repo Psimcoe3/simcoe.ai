@@ -1,0 +1,59 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetPoint Method
+
+---
+
+
+
+|  |
+| --- |
+| [PolymeshTopology Class](fef5982c-3825-eed0-f792-1e0bff5509c2.htm)   [See Also](#seeAlsoToggle) |
+
+Returns one point at the given index.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public XYZ GetPoint( 	int idx ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetPoint ( _ 	idx As Integer _ ) As XYZ ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: XYZ^ GetPoint( 	int idx ) ``` |
+
+#### Parameters
+
+idx
+:   Type:  [System Int32](http://msdn2.microsoft.com/en-us/library/td2s409d)    
+     A zero-based index of a polymesh point
+
+#### Return Value
+
+XYZ coordinates of the point
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | The given value is not a valid index of a point of the polymesh. A valid valure is not negative and is smaller than the number of points in the polymesh. |
+
+# See Also
+
+[PolymeshTopology Class](fef5982c-3825-eed0-f792-1e0bff5509c2.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

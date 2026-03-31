@@ -1,0 +1,42 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### ElementArray Constructor
+
+---
+
+
+
+|  |
+| --- |
+| [ElementArray Class](6a3046e5-aad4-f1fa-b733-bfd57bc9cbc5.htm)   [See Also](#seeAlsoToggle) |
+
+Initializes a new instance of the  [ElementArray](6a3046e5-aad4-f1fa-b733-bfd57bc9cbc5.htm)  class
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ElementArray() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub New ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: ElementArray() ``` |
+
+# See Also
+
+[ElementArray Class](6a3046e5-aad4-f1fa-b733-bfd57bc9cbc5.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

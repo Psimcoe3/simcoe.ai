@@ -1,0 +1,62 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### NewRooms2 Method (Level)
+
+---
+
+
+
+|  |
+| --- |
+| [Document Class](ab1718f9-45fb-b3d3-827e-32ff81cf929c.htm)   [See Also](#seeAlsoToggle) |
+
+Creates new rooms in each plan circuit found in the given level in the last phase.
+
+**Namespace:**   [Autodesk.Revit.Creation](ded320da-058a-4edd-0418-0582389559a7.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 16.0.0.0 (16.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ICollection<ElementId> NewRooms2( 	Level level ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function NewRooms2 ( _ 	level As Level _ ) As ICollection(Of ElementId) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: ICollection<ElementId^>^ NewRooms2( 	Level^ level ) ``` |
+
+#### Parameters
+
+level
+:   Type:  [Autodesk.Revit.DB Level](577e5d4e-a558-118c-9dea-3b810b061775.htm)    
+     The level from which the circuits are found.
+
+#### Return Value
+
+If successful, a set of ElementIds which contains the rooms created should be returned, otherwise    a null reference (  Nothing  in Visual Basic)  .
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentOutOfRangeException](60f148c9-ece0-a6bb-4e12-bb4a9c8c8a24.htm) | If the view of the relevant level can not be retrieved. |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | If the phase is invalid, or regeneration fails at the end of the creation. |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | Thrown if the level does not exist in the given document. |
+
+# See Also
+
+[Document Class](ab1718f9-45fb-b3d3-827e-32ff81cf929c.htm)
+
+[NewRooms2 Overload](dde5849a-c78b-d2c4-20c3-cdd2e121ec54.htm)
+
+[Autodesk.Revit.Creation Namespace](ded320da-058a-4edd-0418-0582389559a7.htm)

@@ -1,0 +1,65 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### SetCalculatedDimensionValue Method
+
+---
+
+
+
+|  |
+| --- |
+| [FabricationPart Class](c9b86162-c105-696a-a919-49a7a7938cc4.htm)   [See Also](#seeAlsoToggle) |
+
+Sets the calculated dimension value.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2016
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public void SetCalculatedDimensionValue( 	FabricationDimensionDefinition dim, 	string value ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub SetCalculatedDimensionValue ( _ 	dim As FabricationDimensionDefinition, _ 	value As String _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: void SetCalculatedDimensionValue( 	FabricationDimensionDefinition^ dim,  	String^ value ) ``` |
+
+#### Parameters
+
+dim
+:   Type:  [Autodesk.Revit.DB FabricationDimensionDefinition](cfa213e3-6734-2321-4849-c6e159d77fd0.htm)    
+     The fabrication dimension.
+
+value
+:   Type:  System String    
+     The calculated dimension value.
+
+# Remarks
+
+Multiple dimensions may need to be set in order to reach the desired outcome. The document must be regenerated before the fabrication part can be used. Check  [ValidationStatus](9d208301-607f-45b0-d5af-e20b2e6a92ed.htm)  after regeneration to see if the part is valid for fabrication.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | value is not a valid calculated fabrication dimension value. -or- fabrication dimension is unable to be modified because it is locked or from a product list. -or- the fabrication dimension is unable to be modified because it will affect the geometry of a connected end. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | the fabrication dimension is unable to be modified because the fabrication part is connected to more than one object. -or- the fabrication dimension cannot be set to the option: value. |
+
+# See Also
+
+[FabricationPart Class](c9b86162-c105-696a-a919-49a7a7938cc4.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

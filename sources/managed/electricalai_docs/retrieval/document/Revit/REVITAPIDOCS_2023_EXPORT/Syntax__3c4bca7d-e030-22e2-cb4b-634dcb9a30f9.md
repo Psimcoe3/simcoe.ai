@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### DownloadFinished Property
+
+---
+
+
+
+|  |
+| --- |
+| [CreateRelatedFileProgressChangedEventArgs Class](94a4184c-e0d2-a846-ba1d-52cea6b0a29f.htm)   [See Also](#seeAlsoToggle) |
+
+Indicates if all data downloads are finished.
+
+**Namespace:**   [Autodesk.Revit.DB.Events](b86712d6-83b3-e044-8016-f9881ecd3800.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 18.0.0.0 (18.2.0.0)   
+  **Since:**  2018
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public bool DownloadFinished { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property DownloadFinished As Boolean 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property bool DownloadFinished { 	bool get (); } ``` |
+
+# See Also
+
+[CreateRelatedFileProgressChangedEventArgs Class](94a4184c-e0d2-a846-ba1d-52cea6b0a29f.htm)
+
+[Autodesk.Revit.DB.Events Namespace](b86712d6-83b3-e044-8016-f9881ecd3800.htm)

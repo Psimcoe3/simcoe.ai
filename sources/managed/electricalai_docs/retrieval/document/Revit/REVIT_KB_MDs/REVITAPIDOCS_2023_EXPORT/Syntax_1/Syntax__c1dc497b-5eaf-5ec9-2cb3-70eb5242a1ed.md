@@ -1,0 +1,191 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetCaseAndCombinationIds Method
+
+---
+
+
+
+|  |
+| --- |
+| [LoadCombination Class](82891124-6fb9-e612-ca8c-6f4e32e2c121.htm)   [Example](#exampleToggle)   [See Also](#seeAlsoToggle) |
+
+Returns collection of the load combination case and combination IDs.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 23.0.0.0 (23.1.0.0)   
+  **Since:**  2016
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public IList<ElementId> GetCaseAndCombinationIds() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetCaseAndCombinationIds As IList(Of ElementId) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: IList<ElementId^>^ GetCaseAndCombinationIds() ``` |
+
+#### Return Value
+
+A collection of the load combination case and combination IDs.
+
+# Remarks
+
+Load combination components could be load cases or other load combinations. To set them with factors use  [M:Autodesk.Revit.DB.Structure.LoadCombination.SetComponents(System.Collections.Generic.IList`1{Autodesk.Revit.DB.Structure.LoadComponent})]  method.
+
+# Examples
+
+![](https://d24b2zsrnzhmgb.cloudfront.net/static/img/chm/icons/CopyCode.gif) Copy  C#
+
+```
+#region Autodesk.Revit.DB.Structure.LoadCombination.GetComponents()
+#region Autodesk.Revit.DB.Structure.LoadCombination.GetUsageIds()
+void ModifyLoadCombinationLoadCaseLoadUsageLoadNatureAndLoadComponent(Document document, LoadCombination loadCombination)
+{
+    // Change name of LoadCombination
+    loadCombination.Name = "DL2 + RAIN1";
+
+    // Get any LoadCase from combination
+    // Combination can have assigned LoadCase or other (nested) LoadCombination so we need to filter out any LoadCombination
+    LoadCase case1 = null;
+    IList<ElementId> caseAndCombinationIds = loadCombination.GetCaseAndCombinationIds();
+    foreach (ElementId id in caseAndCombinationIds)
+    {
+        Element element = document.GetElement(id);
+        if (element is LoadCase)
+        {
+           case1 = (LoadCase)element;
+           break;
+        }
+        else if (element is LoadCombination)
+        {
+           continue;
+        }
+    }
+
+    if (case1 == null)
+       throw new Exception("Can't get LoadCase.");
+
+    // Change case name and number
+    case1.Name = "DL2";
+    if (LoadCase.IsNumberUnique(document, 3))
+    {
+        case1.Number = 3;
+    }
+
+    // Create load nature
+    LoadNature liveNature = LoadNature.Create(document, "Dead nature");
+    if (liveNature == null)
+       throw new Exception("Create new load nature failed.");
+
+    // Change nature category, ID and number for case
+    case1.SubcategoryId = new ElementId(BuiltInCategory.OST_LoadCasesDead);
+    case1.NatureId = liveNature.Id;
+
+    //Change factor for case1
+    IList<LoadComponent> components = loadCombination.GetComponents();
+    foreach (LoadComponent loadComponent in components)
+    {
+        if (loadComponent.LoadCaseOrCombinationId == case1.Id)
+        {
+            loadComponent.Factor = 3.0;
+        }
+    }
+
+    loadCombination.SetComponents(components);
+
+    // Remove one usage from combination
+    IList<ElementId> usages = loadCombination.GetUsageIds();
+    usages.RemoveAt(0);
+    loadCombination.SetUsageIds(usages);
+
+    // Give the user some information
+    TaskDialog.Show("Revit", string.Format("Load Combination ID='{0}' modified successfully.", loadCombination.Id.ToString()));
+}
+#endregion
+#endregion
+```
+
+ 
+
+![](https://d24b2zsrnzhmgb.cloudfront.net/static/img/chm/icons/CopyCode.gif) Copy  VB.NET
+
+```
+#Region "Autodesk.Revit.DB.Structure.LoadCombination.GetComponents()"
+#Region "Autodesk.Revit.DB.Structure.LoadCombination.GetUsageIds()"
+        Private Sub ModifyLoadCombinationLoadCaseLoadUsageLoadNatureAndLoadComponent(document As Document, loadCombination As LoadCombination)
+            ' Change name of LoadCombination
+            loadCombination.Name = "DL2 + RAIN1"
+
+            ' Get any LoadCase from combination
+            ' Combination can have assigned LoadCase or other (nested) LoadCombination so we need to filter out any LoadCombination
+            Dim case1 As LoadCase = Nothing
+            Dim caseAndCombinationIds As IList(Of ElementId) = loadCombination.GetCaseAndCombinationIds()
+            For Each id As ElementId In caseAndCombinationIds
+                Dim element As Element = document.GetElement(id)
+                If TypeOf element Is LoadCase Then
+                    case1 = DirectCast(element, LoadCase)
+                    Exit For
+                ElseIf TypeOf element Is LoadCombination Then
+                    Continue For
+                End If
+            Next
+
+            If case1 Is Nothing Then
+                Throw New Exception("Can't get LoadCase.")
+            End If
+
+            ' Change case name and number
+            case1.Name = "DL2"
+            If LoadCase.IsNumberUnique(document, 3) Then
+                case1.Number = 3
+            End If
+
+            ' Create load nature
+            Dim liveNature As LoadNature = LoadNature.Create(document, "Dead nature")
+            If liveNature Is Nothing Then
+                Throw New Exception("Create new load nature failed.")
+            End If
+
+            ' Change nature category, ID and number for case
+            case1.SubcategoryId = New ElementId(BuiltInCategory.OST_LoadCasesDead)
+            case1.NatureId = liveNature.Id
+
+            'Change factor for case1
+            Dim components As IList(Of LoadComponent) = loadCombination.GetComponents()
+            For Each loadComponent As LoadComponent In components
+                If loadComponent.LoadCaseOrCombinationId = case1.Id Then
+                    loadComponent.Factor = 3.0
+                End If
+            Next
+
+            loadCombination.SetComponents(components)
+
+            ' Remove one usage from combination
+            Dim usages As IList(Of ElementId) = loadCombination.GetUsageIds()
+            usages.RemoveAt(0)
+            loadCombination.SetUsageIds(usages)
+
+            ' Give the user some information
+            TaskDialog.Show("Revit", String.Format("Load Combination ID='{0}' modified successfully.", loadCombination.Id.ToString()))
+        End Sub
+#End Region
+#End Region
+```
+
+# See Also
+
+[LoadCombination Class](82891124-6fb9-e612-ca8c-6f4e32e2c121.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

@@ -1,0 +1,61 @@
+# Per-Material Labor Quantifier Field Expressions
+
+---
+
+## Stratus.Field.Labor Quantifier — EMT
+Type: Decimal
+Is Expression: Checked
+
+        if(
+          ({templateName} = "*Electrical Equipment eE_ASM_Panelboard_Terminal_Box_EMT_Custom_v3*") OR ({templateName} = "*Electrical Equipment eE_ASM_Panelboard_Terminal_Box_EMT_Framed_v3*") OR ({templateName} = "*Electrical Equipment eE_ASM_Panelboard_Wireway_EMT_Framed_v3*") OR ({templateName} = "*Electrical Equipment eE_ASM_Panelboard_Wireway_EMT_v2*") OR ({templateName} = "*Electrical Equipment eE_ASM_Panelboard_Wireway_EMT_v3*"),
+          {Length},
+          if(
+  ({templateName} = "*Conduit Fittings Conduit Elbow - without Fittings - EMT*") OR ({templateName} = "*Conduit Fittings Greenlee Conduit Coupling - EMT*") OR ({templateName} = "*Conduit Fittings GreenleeConduit Elbow - without Fittings - EMT*") OR ({templateName} = "*Conduit Fittings Nested_ASM_EMT_Nipple*") OR ({templateName} = "*Conduit Fittings Nested_ASM_EMT_Nipple1*") OR ({templateName} = "*Conduit Fittings Nested_CF_EMT_Connector_Compression*") OR ({templateName} = "*Conduit Fittings Nested_CF_EMT_Connector_Set_Screw*") OR ({templateName} = "*Conduit Fittings Nested_CF_EMT_Connector_Set_Screw1*") OR ({templateName} = "*Conduit Fittings Nested_CF_EMT_Connector_v1*") OR ({templateName} = "*Conduit Fittings Nested_CF_EMT_Connector_v2*") OR ({templateName} = "*Conduit Fittings eE_ASM_Changeover_EMT_Sealtite*") OR ({templateName} = "*Conduit Fittings eE_ASM_Changeover_RMC_to_EMT*") OR ({templateName} = "*Conduit Fittings eE_ASM_EMT_Nipple*") OR ({templateName} = "*Conduit Fittings eE_CF_EMT_Connector*") OR ({templateName} = "*Conduit Fittings eE_CF_Garvin_EMT_Compression_Connector*") OR ({templateName} = "*Electrical Fixtures ALT-Conduit Parts - EMT Box Connectors V6*"),
+  {Count},
+  0
+)
+        )
+
+
+---
+
+## Stratus.Field.Labor Quantifier — Rigid_GRC_RGS_IMC
+Type: Decimal
+Is Expression: Checked
+
+        if(
+          ({templateName} = "*Electrical Equipment eE_ASM_Panelboard_Terminal_Box_RMC_Framed_v3*"),
+          {Length},
+          if(
+  ({templateName} = "*Conduit Fittings Conduit Elbow - without Fittings - RMC*") OR ({templateName} = "*Conduit Fittings eE_ASM_Changeover_RMC_to_EMT*") OR ({templateName} = "*Conduit Fittings eE_ASM_RMC_Nipple*"),
+  {Count},
+  0
+)
+        )
+
+
+---
+
+## Stratus.Field.Labor Quantifier — PVC
+Type: Decimal
+Is Expression: Checked
+
+if(
+  ({templateName} = "*Conduit Fittings Conduit Coupling - PVC*") OR ({templateName} = "*Conduit Fittings Conduit Elbow - Plain End - PVC*") OR ({templateName} = "*Conduit Fittings Conduit Junction Box - Tee - PVC*") OR ({templateName} = "*Conduit Fittings Conduit Junction Box - Transition - PVC*"),
+  {Count},
+  0
+)
+
+
+---
+
+## Stratus.Field.Labor Quantifier — CableTray
+Type: Decimal
+Is Expression: Checked
+
+if(
+  ({templateName} = "*Cable Tray Fittings Busway SE Elbow Horizontal*") OR ({templateName} = "*Cable Tray Fittings Busway SE Elbow Offset Horizontal*") OR ({templateName} = "*Cable Tray Fittings Channel Horizontal Bend*") OR ({templateName} = "*Cable Tray Fittings Ladder Horizontal Bend*") OR ({templateName} = "*Cable Tray Fittings Ladder Horizontal Cross*") OR ({templateName} = "*Cable Tray Fittings Ladder Horizontal Tee*") OR ({templateName} = "*Cable Tray Fittings Ladder Reducer*") OR ({templateName} = "*Cable Tray Fittings Ladder Union*") OR ({templateName} = "*Cable Tray Fittings Ladder Vertical Inside Bend*") OR ({templateName} = "*Cable Tray Fittings Ladder Vertical Outside Bend*") OR ({templateName} = "*Cable Tray Fittings Nested_CT_Redi_Rail_Splice*") OR ({templateName} = "*Cable Tray Fittings Walker Duct*") OR ({templateName} = "*Cable Tray Fittings busway offset_custom*") OR ({templateName} = "*Cable Tray Fittings busway offset_custom 90*") OR ({templateName} = "*Cable Tray Fittings busway offset_custom 90_I*") OR ({templateName} = "*Cable Tray Fittings eE_BW_Eaton_FDR_3W_Conf_A*") OR ({templateName} = "*Cable Tray Fittings eE_BW_Eaton_FDR_3W_Conf_A(VIS)*") OR ({templateName} = "*Cable Tray Fittings eE_BW_Eaton_PI_3W_Conf_A*") OR ({templateName} = "*Cable Tray Fittings eE_CT_Redi_Rail_Horizontal_Bend*") OR ({templateName} = "*Cable Tray Fittings eE_CT_Redi_Rail_Horizontal_Tee*") OR ({templateName} = "*Cable Tray Fittings eE_CT_Redi_Rail_Straight_Ladder_v2*") OR ({templateName} = "*Cable Tray Fittings eE_CT_Redi_Rail_Vertical_Bend*") OR ({templateName} = "*Cable Tray Fittings eVolve Clearance*") OR ({templateName} = "*Cable Trays Cable Tray with Fittings*") OR ({templateName} = "*Cable Trays Cable Tray without Fittings*") OR ({templateName} = "*Data Devices Cable Tray Fittings 3*"),
+  {Count},
+  0
+)
+

@@ -1,0 +1,45 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### NumberingSchemaTypes Class
+
+---
+
+
+
+|  |
+| --- |
+| [See Also](#seeAlsoToggle) |
+
+Provides a container of all Revit built-in NumberingSchemaType instances.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static class NumberingSchemaTypes ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public NotInheritable Class NumberingSchemaTypes ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public ref class NumberingSchemaTypes abstract sealed ``` |
+
+# Inheritance Hierarchy
+
+[System Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)    
+  Autodesk.Revit.DB NumberingSchemaTypes
+
+# See Also
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

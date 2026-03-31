@@ -1,0 +1,51 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetAllSupports Method
+
+---
+
+
+
+|  |
+| --- |
+| [StairsLanding Class](cae109cd-bc50-6c36-300e-35d3457c0982.htm)   [See Also](#seeAlsoToggle) |
+
+Returns all the supports hosting the stairs landing.
+
+**Namespace:**   [Autodesk.Revit.DB.Architecture](720f0c58-cb2b-4f13-374a-7348ed0a1cd3.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public IList<ElementId> GetAllSupports() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetAllSupports As IList(Of ElementId) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: IList<ElementId^>^ GetAllSupports() ``` |
+
+#### Return Value
+
+All the supports hosting the stairs landings.
+
+# Remarks
+
+The supports consist of left, right and middle supports of the stairs landing.
+
+# See Also
+
+[StairsLanding Class](cae109cd-bc50-6c36-300e-35d3457c0982.htm)
+
+[Autodesk.Revit.DB.Architecture Namespace](720f0c58-cb2b-4f13-374a-7348ed0a1cd3.htm)

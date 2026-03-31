@@ -1,0 +1,48 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### ViewScheduleExportOptions Class
+
+---
+
+
+
+|  |
+| --- |
+| [Members](ab15f2b5-d828-a07e-1bbc-a3029cc40d28.htm)   [See Also](#seeAlsoToggle) |
+
+The export options used to export schedule views.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public class ViewScheduleExportOptions : IDisposable ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Class ViewScheduleExportOptions _ 	Implements IDisposable ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public ref class ViewScheduleExportOptions : IDisposable ``` |
+
+# Inheritance Hierarchy
+
+[System Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)    
+  Autodesk.Revit.DB ViewScheduleExportOptions
+
+# See Also
+
+[ViewScheduleExportOptions Members](ab15f2b5-d828-a07e-1bbc-a3029cc40d28.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

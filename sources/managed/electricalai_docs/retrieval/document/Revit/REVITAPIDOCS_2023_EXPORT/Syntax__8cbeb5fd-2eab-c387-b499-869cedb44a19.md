@@ -1,0 +1,48 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### RailConnectionOption Enumeration
+
+---
+
+
+
+|  |
+| --- |
+| [See Also](#seeAlsoToggle) |
+
+The connections between rails.
+
+**Namespace:**   [Autodesk.Revit.DB.Architecture](720f0c58-cb2b-4f13-374a-7348ed0a1cd3.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public enum RailConnectionOption ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Enumeration RailConnectionOption ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public enum class RailConnectionOption ``` |
+
+# Members
+
+| Member name | Description |
+| --- | --- |
+| Trim | Rails will be trimmed and cut with a vertical plane. |
+| Weld | Rails will be joined in a manner as close to a miter as possible. |
+
+# See Also
+
+[Autodesk.Revit.DB.Architecture Namespace](720f0c58-cb2b-4f13-374a-7348ed0a1cd3.htm)

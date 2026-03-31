@@ -1,0 +1,68 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IsEndReferenceValid Method
+
+---
+
+
+
+|  |
+| --- |
+| [StructuralFramingUtils Class](93d93c87-dfa2-12d5-dcb0-13d5cb0c0696.htm)   [See Also](#seeAlsoToggle) |
+
+Determines if the given reference can be set for the given end of the framing element.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2015
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool IsEndReferenceValid( 	FamilyInstance familyInstance, 	int end, 	Reference pick ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function IsEndReferenceValid ( _ 	familyInstance As FamilyInstance, _ 	end As Integer, _ 	pick As Reference _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool IsEndReferenceValid( 	FamilyInstance^ familyInstance,  	int end,  	Reference^ pick ) ``` |
+
+#### Parameters
+
+familyInstance
+:   Type:  [Autodesk.Revit.DB FamilyInstance](0d2231f8-91e6-794f-92ae-16aad8014b27.htm)    
+     The FamilyInstance, which must be of a structural framing category, non-concrete and joined at the given end.
+
+end
+:   Type:  System Int32    
+     The index of the end (0 for the start, 1 for the end).
+
+pick
+:   Type:  [Autodesk.Revit.DB Reference](d28155ae-817b-1f31-9c3f-c9c6a28acc0d.htm)    
+     The reference to be checked against the given end of the framing element.
+
+#### Return Value
+
+True if the given reference can be set for the given end of the framing element.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions ArgumentOutOfRangeException](60f148c9-ece0-a6bb-4e12-bb4a9c8c8a24.htm) | end must be 0 or 1. |
+
+# See Also
+
+[StructuralFramingUtils Class](93d93c87-dfa2-12d5-dcb0-13d5cb0c0696.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

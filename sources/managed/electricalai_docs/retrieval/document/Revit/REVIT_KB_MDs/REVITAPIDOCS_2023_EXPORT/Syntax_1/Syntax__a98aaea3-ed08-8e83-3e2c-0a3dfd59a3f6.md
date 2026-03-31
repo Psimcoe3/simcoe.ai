@@ -1,0 +1,54 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### WoodGrade Property
+
+---
+
+
+
+|  |
+| --- |
+| [StructuralAsset Class](39c2e2ad-474e-2514-bc15-07c24a989a61.htm)   [See Also](#seeAlsoToggle) |
+
+The grade of wood used in a wood-based asset.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public string WoodGrade { get; set; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Property WoodGrade As String 	Get 	Set ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property String^ WoodGrade { 	String^ get (); 	void set (String^ value); } ``` |
+
+# Remarks
+
+Applies to wood-based structural assets.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | When setting this property: A non-optional argument was null |
+| [Autodesk.Revit.Exceptions InapplicableDataException](dc1a6d15-8923-a1fe-722a-4e976634a519.htm) | When setting this property: the material type must be wood to set this property. |
+
+# See Also
+
+[StructuralAsset Class](39c2e2ad-474e-2514-bc15-07c24a989a61.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

@@ -1,0 +1,51 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetDesignElementAndFabricationPartsWithOpenConnectors Method
+
+---
+
+
+
+|  |
+| --- |
+| [DesignToFabricationConverter Class](b2165e08-c8a4-5674-12ff-d359eba911d4.htm)   [See Also](#seeAlsoToggle) |
+
+Gets the collection of design elements that failed to convert and the associated set of fabrication parts with open connectors.
+
+**Namespace:**   [Autodesk.Revit.DB.Fabrication](49e74a25-7ea1-efa6-548a-a3c3d0655e43.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 17.0.0.0 (17.0.1090.0)   
+  **Since:**  2017
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public IDictionary<ElementId, ISet<ElementId>> GetDesignElementAndFabricationPartsWithOpenConnectors() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetDesignElementAndFabricationPartsWithOpenConnectors As IDictionary(Of ElementId, ISet(Of ElementId)) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: IDictionary<ElementId^, ISet<ElementId^>^>^ GetDesignElementAndFabricationPartsWithOpenConnectors() ``` |
+
+#### Return Value
+
+A map of design element identifiers that were not converted and the associated set fabrication parts left with open connectors.
+
+# Remarks
+
+This set of element identifiers is only available after the  **Convert**  method has been invoked, and returns DesignToFabricationConverterResult::Enum::PartialFailure.
+
+# See Also
+
+[DesignToFabricationConverter Class](b2165e08-c8a4-5674-12ff-d359eba911d4.htm)
+
+[Autodesk.Revit.DB.Fabrication Namespace](49e74a25-7ea1-efa6-548a-a3c3d0655e43.htm)

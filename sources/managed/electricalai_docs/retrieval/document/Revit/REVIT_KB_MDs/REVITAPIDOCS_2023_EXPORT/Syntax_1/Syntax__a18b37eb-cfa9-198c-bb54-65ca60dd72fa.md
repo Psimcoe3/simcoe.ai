@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### MainWindowHandle Property
+
+---
+
+
+
+|  |
+| --- |
+| [UIControlledApplication Class](4638c568-a118-1d57-ceed-a57595202644.htm)   [See Also](#seeAlsoToggle) |
+
+Get the handle of the Revit main window.
+
+**Namespace:**   [Autodesk.Revit.UI](e86fd90a-8957-02a6-da7f-ced248966e3e.htm)    
+  **Assembly:**   RevitAPIUI  (in RevitAPIUI.dll) Version: 19.0.0.0 (19.0.0.405)   
+  **Since:**  2019
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public virtual IntPtr MainWindowHandle { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Overridable ReadOnly Property MainWindowHandle As IntPtr 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: virtual property IntPtr MainWindowHandle { 	IntPtr get (); } ``` |
+
+# Remarks
+
+Returns the main window handle of the Revit application. This handle should be used when displaying modal dialogs and message windows to insure that they are properly parented. This property replaces System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle property, which is no longer a reliable method of retrieving the main window handle starting with Revit 2019.
+
+# See Also
+
+[UIControlledApplication Class](4638c568-a118-1d57-ceed-a57595202644.htm)
+
+[Autodesk.Revit.UI Namespace](e86fd90a-8957-02a6-da7f-ced248966e3e.htm)

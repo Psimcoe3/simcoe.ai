@@ -1,0 +1,62 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CanSuppressLeadingZeros Method (ForgeTypeId)
+
+---
+
+
+
+|  |
+| --- |
+| [FormatOptions Class](70f78207-1109-3906-8e67-cd27df1f0ae8.htm)   [See Also](#seeAlsoToggle) |
+
+Checks whether leading zeros can be suppressed for a given unit.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool CanSuppressLeadingZeros( 	ForgeTypeId unitTypeId ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function CanSuppressLeadingZeros ( _ 	unitTypeId As ForgeTypeId _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool CanSuppressLeadingZeros( 	ForgeTypeId^ unitTypeId ) ``` |
+
+#### Parameters
+
+unitTypeId
+:   Type:  [Autodesk.Revit.DB ForgeTypeId](d9fcf276-9566-de83-2b0b-d89b65ccc8af.htm)    
+     Identifier of the unit.
+
+#### Return Value
+
+True if leading zeros can be suppressed, false otherwise.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | unitTypeId is not a unit identifier. See UnitUtils.IsUnit(ForgeTypeId) and UnitUtils.GetUnitTypeId(DisplayUnitType). |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[FormatOptions Class](70f78207-1109-3906-8e67-cd27df1f0ae8.htm)
+
+[CanSuppressLeadingZeros Overload](7f9baf15-49d2-c03f-c7c5-b3fe98d5d85d.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

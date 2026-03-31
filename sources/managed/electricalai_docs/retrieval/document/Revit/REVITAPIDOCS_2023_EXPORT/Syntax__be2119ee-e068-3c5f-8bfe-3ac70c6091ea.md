@@ -1,0 +1,56 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### LessThan Operator
+
+---
+
+
+
+|  |
+| --- |
+| [ElementId Class](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)   [See Also](#seeAlsoToggle) |
+
+Determines whether this element id is less than another element id.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool operator <( 	ElementId elementId1, 	ElementId elementId2 ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Operator < ( _ 	elementId1 As ElementId, _ 	elementId2 As ElementId _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool operator <( 	ElementId^ elementId1,  	ElementId^ elementId2 ) ``` |
+
+#### Parameters
+
+elementId1
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     The first ElementId.
+
+elementId2
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     The second ElementId.
+
+#### Return Value
+
+True if the first element id is less than the second element id, otherwise, false.
+
+# See Also
+
+[ElementId Class](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

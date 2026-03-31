@@ -1,0 +1,55 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CreateHasValueParameterRule Method
+
+---
+
+
+
+|  |
+| --- |
+| [ParameterFilterRuleFactory Class](317755a4-24ba-9f36-7639-f6fb2aa5a1a7.htm)   [See Also](#seeAlsoToggle) |
+
+Creates a filter rule that determines whether an element's parameter has a value.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2020
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static FilterRule CreateHasValueParameterRule( 	ElementId parameter ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function CreateHasValueParameterRule ( _ 	parameter As ElementId _ ) As FilterRule ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static FilterRule^ CreateHasValueParameterRule( 	ElementId^ parameter ) ``` |
+
+#### Parameters
+
+parameter
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     The parameter to be evaluated by the filter.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[ParameterFilterRuleFactory Class](317755a4-24ba-9f36-7639-f6fb2aa5a1a7.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

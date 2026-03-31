@@ -1,0 +1,59 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### ServerSupportsIFCLinks Method
+
+---
+
+
+
+|  |
+| --- |
+| [ExternalResourceServerUtils Class](a3147faa-ddc7-6cc1-8906-260582b6bc4a.htm)   [See Also](#seeAlsoToggle) |
+
+Checks that the server referenced by the given ExternalResourceReference supports IFC links.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2018
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool ServerSupportsIFCLinks( 	ExternalResourceReference extRef ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function ServerSupportsIFCLinks ( _ 	extRef As ExternalResourceReference _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool ServerSupportsIFCLinks( 	ExternalResourceReference^ extRef ) ``` |
+
+#### Parameters
+
+extRef
+:   Type:  [Autodesk.Revit.DB ExternalResourceReference](ffad9c15-8fc9-fbfd-f328-101533f4cf74.htm)    
+     The ExternalResourceReference to check.
+
+#### Return Value
+
+True if the ExternalResourceReference refers to a server that supports IFC links. False otherwise.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[ExternalResourceServerUtils Class](a3147faa-ddc7-6cc1-8906-260582b6bc4a.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

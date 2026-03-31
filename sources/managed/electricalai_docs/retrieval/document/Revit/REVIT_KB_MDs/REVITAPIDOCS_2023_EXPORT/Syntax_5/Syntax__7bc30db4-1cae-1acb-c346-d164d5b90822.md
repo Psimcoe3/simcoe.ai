@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetElementsThatFailed Method
+
+---
+
+
+
+|  |
+| --- |
+| [FabricationNetworkChangeService Class](ddd58cb0-54bc-a864-9688-b890a7140112.htm)   [See Also](#seeAlsoToggle) |
+
+Gets the set of fabrication parts that had failures due to either there was no corresponding part in the service, the size was out of range, or a connection could not be made.
+
+**Namespace:**   [Autodesk.Revit.DB.Fabrication](49e74a25-7ea1-efa6-548a-a3c3d0655e43.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 18.0.0.0 (18.2.0.0)   
+  **Since:**  2018.2
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ISet<ElementId> GetElementsThatFailed() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetElementsThatFailed As ISet(Of ElementId) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: ISet<ElementId^>^ GetElementsThatFailed() ``` |
+
+# Remarks
+
+This set of element identifiers is only available after the  **ChangeService**  or  **ChangeSize**  method has been invoked, and returns FabricationNetworkChangeServiceResult::Enum::PartialFailure.
+
+# See Also
+
+[FabricationNetworkChangeService Class](ddd58cb0-54bc-a864-9688-b890a7140112.htm)
+
+[Autodesk.Revit.DB.Fabrication Namespace](49e74a25-7ea1-efa6-548a-a3c3d0655e43.htm)

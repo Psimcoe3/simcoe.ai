@@ -1,0 +1,53 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetAllCapsStatus Method
+
+---
+
+
+
+|  |
+| --- |
+| [FormattedText Class](79a92343-2342-8325-1b51-f12c4fb05481.htm)   [See Also](#seeAlsoToggle) |
+
+Returns whether  [All](81333f80-2181-8faa-9c1e-cadcda7f3b5e.htm)  ,  [None](81333f80-2181-8faa-9c1e-cadcda7f3b5e.htm)  or a  [Mixed](81333f80-2181-8faa-9c1e-cadcda7f3b5e.htm)  of characters in the entire text are in all caps.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 17.0.0.0 (17.0.1090.0)   
+  **Since:**  2017
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public FormatStatus GetAllCapsStatus() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetAllCapsStatus As FormatStatus ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: FormatStatus GetAllCapsStatus() ``` |
+
+#### Return Value
+
+The format status of all caps on characters  [FormatStatus](81333f80-2181-8faa-9c1e-cadcda7f3b5e.htm)  .
+
+# Remarks
+
+This function only returns  [All](81333f80-2181-8faa-9c1e-cadcda7f3b5e.htm)  or  [None](81333f80-2181-8faa-9c1e-cadcda7f3b5e.htm)  if the entire text contains one character.
+
+# See Also
+
+[FormattedText Class](79a92343-2342-8325-1b51-f12c4fb05481.htm)
+
+[GetAllCapsStatus Overload](f17210ad-f450-5212-2103-f92ac85711a0.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

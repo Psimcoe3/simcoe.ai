@@ -1,0 +1,59 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### RemoveSpace Method
+
+---
+
+
+
+|  |
+| --- |
+| [PanelScheduleView Class](ef4390e8-5a93-fe7f-580b-c8ec297f6b52.htm)   [See Also](#seeAlsoToggle) |
+
+Remove a space at specific cell.
+
+**Namespace:**   [Autodesk.Revit.DB.Electrical](212a1314-7843-2c6c-3322-363127e4059f.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 18.0.0.0 (18.2.0.0)   
+  **Since:**  2018
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public void RemoveSpace( 	int nRow, 	int nCol ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub RemoveSpace ( _ 	nRow As Integer, _ 	nCol As Integer _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: void RemoveSpace( 	int nRow,  	int nCol ) ``` |
+
+#### Parameters
+
+nRow
+:   Type:  [System Int32](http://msdn2.microsoft.com/en-us/library/td2s409d)    
+     Row Number
+
+nCol
+:   Type:  [System Int32](http://msdn2.microsoft.com/en-us/library/td2s409d)    
+     Column Number
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentsInconsistentException](05972c68-fa6d-3a83-d720-ad84fbc4780f.htm) | The row column combination does not represent a valid space. |
+
+# See Also
+
+[PanelScheduleView Class](ef4390e8-5a93-fe7f-580b-c8ec297f6b52.htm)
+
+[Autodesk.Revit.DB.Electrical Namespace](212a1314-7843-2c6c-3322-363127e4059f.htm)

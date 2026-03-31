@@ -1,0 +1,62 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### NewFamilyInstanceCreationData Method (Curve, FamilySymbol, Level, StructuralType)
+
+---
+
+
+
+|  |
+| --- |
+| [Application Class](5e11e5bf-82da-ae9b-1c52-95d0e9f28c96.htm)   [See Also](#seeAlsoToggle) |
+
+Creates an object which wraps the arguments of NewFamilyInstance() for batch creation.
+
+**Namespace:**   [Autodesk.Revit.Creation](ded320da-058a-4edd-0418-0582389559a7.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public FamilyInstanceCreationData NewFamilyInstanceCreationData( 	Curve curve, 	FamilySymbol symbol, 	Level level, 	StructuralType structuralType ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function NewFamilyInstanceCreationData ( _ 	curve As Curve, _ 	symbol As FamilySymbol, _ 	level As Level, _ 	structuralType As StructuralType _ ) As FamilyInstanceCreationData ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: FamilyInstanceCreationData^ NewFamilyInstanceCreationData( 	Curve^ curve,  	FamilySymbol^ symbol,  	Level^ level,  	StructuralType structuralType ) ``` |
+
+#### Parameters
+
+curve
+:   Type:  [Autodesk.Revit.DB Curve](400cc9b6-9ff7-de85-6fd8-c20002209d25.htm)    
+     The curve where the instance is based.
+
+symbol
+:   Type:  [Autodesk.Revit.DB FamilySymbol](a1acaed0-6a62-4c1d-94f5-4e27ce0923d3.htm)    
+     A FamilySymbol object that represents the type of the instance that is to be inserted.
+
+level
+:   Type:  [Autodesk.Revit.DB Level](577e5d4e-a558-118c-9dea-3b810b061775.htm)    
+     A Level object that is used as the base level for the object.
+
+structuralType
+:   Type:  [Autodesk.Revit.DB.Structure StructuralType](0a0a3793-5fce-283d-4953-a137f5593db9.htm)    
+     If structural then specify the type of the component.
+
+# See Also
+
+[Application Class](5e11e5bf-82da-ae9b-1c52-95d0e9f28c96.htm)
+
+[NewFamilyInstanceCreationData Overload](8f899df7-9949-9839-35f7-4092a6e70e20.htm)
+
+[Autodesk.Revit.Creation Namespace](ded320da-058a-4edd-0418-0582389559a7.htm)

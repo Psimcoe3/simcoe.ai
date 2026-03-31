@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### AssociatedBuildingPadId Property
+
+---
+
+
+
+|  |
+| --- |
+| [TopographySurface Class](64242f41-69e1-84be-f21b-84783e81364a.htm)   [See Also](#seeAlsoToggle) |
+
+The element id of the building pad which causes this topography surface to be formed.
+
+**Namespace:**   [Autodesk.Revit.DB.Architecture](720f0c58-cb2b-4f13-374a-7348ed0a1cd3.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2015
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ElementId AssociatedBuildingPadId { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property AssociatedBuildingPadId As ElementId 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property ElementId^ AssociatedBuildingPadId { 	ElementId^ get (); } ``` |
+
+# Remarks
+
+InvalidElementId returned signals that there is no associated building pad.
+
+# See Also
+
+[TopographySurface Class](64242f41-69e1-84be-f21b-84783e81364a.htm)
+
+[Autodesk.Revit.DB.Architecture Namespace](720f0c58-cb2b-4f13-374a-7348ed0a1cd3.htm)

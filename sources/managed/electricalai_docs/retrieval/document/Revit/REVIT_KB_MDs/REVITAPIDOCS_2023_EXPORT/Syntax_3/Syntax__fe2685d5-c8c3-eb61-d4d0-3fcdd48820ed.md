@@ -1,0 +1,59 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetSplitRegionMaximum Method
+
+---
+
+
+
+|  |
+| --- |
+| [ViewCropRegionShapeManager Class](2610cb66-5dae-9fc8-4e83-7dfe88085abb.htm)   [See Also](#seeAlsoToggle) |
+
+Returns the proportional location of the maximum boundary of the specified split crop region.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 21.0.0.0 (21.1.1.109)   
+  **Since:**  2016
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public double GetSplitRegionMaximum( 	int regionIndex ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetSplitRegionMaximum ( _ 	regionIndex As Integer _ ) As Double ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: double GetSplitRegionMaximum( 	int regionIndex ) ``` |
+
+#### Parameters
+
+regionIndex
+:   Type:  System Int32    
+     Index of split crop region (numbering starts with 0).
+
+#### Return Value
+
+A value from 0 to 1 representing the maximum location for the region's split boundary. This number represents the location as a ratio along the non-split rectangular crop.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | The provided region index is invalid. |
+
+# See Also
+
+[ViewCropRegionShapeManager Class](2610cb66-5dae-9fc8-4e83-7dfe88085abb.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

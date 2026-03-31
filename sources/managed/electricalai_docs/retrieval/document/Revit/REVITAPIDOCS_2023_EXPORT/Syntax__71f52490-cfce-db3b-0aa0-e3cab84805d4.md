@@ -1,0 +1,42 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### LightSourceInsideGeometry Property
+
+---
+
+
+
+|  |
+| --- |
+| [BuiltInFailures RenderFailures Class](bc5428d4-330d-3bcc-7cf4-5778210cfa7b.htm)   [See Also](#seeAlsoToggle) |
+
+Light source is inside solid geometry. No light will be emitted during rendering.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static FailureDefinitionId LightSourceInsideGeometry { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared ReadOnly Property LightSourceInsideGeometry As FailureDefinitionId 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static property FailureDefinitionId^ LightSourceInsideGeometry { 	FailureDefinitionId^ get (); } ``` |
+
+# See Also
+
+[BuiltInFailures RenderFailures Class](bc5428d4-330d-3bcc-7cf4-5778210cfa7b.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

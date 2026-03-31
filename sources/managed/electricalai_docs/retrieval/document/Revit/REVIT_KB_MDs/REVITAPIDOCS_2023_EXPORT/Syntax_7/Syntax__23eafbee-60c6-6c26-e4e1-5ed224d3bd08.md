@@ -1,0 +1,57 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### ExternalResourceReference Constructor (ExternalResourceReference)
+
+---
+
+
+
+|  |
+| --- |
+| [ExternalResourceReference Class](ffad9c15-8fc9-fbfd-f328-101533f4cf74.htm)   [See Also](#seeAlsoToggle) |
+
+Creates a new ExternalResourceReference from the given ExternalResourceReference.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2015
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ExternalResourceReference( 	ExternalResourceReference other ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub New ( _ 	other As ExternalResourceReference _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: ExternalResourceReference( 	ExternalResourceReference^ other ) ``` |
+
+#### Parameters
+
+other
+:   Type:  [Autodesk.Revit.DB ExternalResourceReference](ffad9c15-8fc9-fbfd-f328-101533f4cf74.htm)    
+     The ExternalResourceReference to copy.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[ExternalResourceReference Class](ffad9c15-8fc9-fbfd-f328-101533f4cf74.htm)
+
+[ExternalResourceReference Overload](fcf2e0f4-a46f-d468-d1d0-7f2b9ee28aae.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

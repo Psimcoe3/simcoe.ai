@@ -1,0 +1,53 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Evaluate Method
+
+---
+
+
+
+|  |
+| --- |
+| [EdgeEndPoint Class](3388e8f3-22d4-a411-a3da-450c16a31bc5.htm)   [See Also](#seeAlsoToggle) |
+
+Evaluate the end point of the edge in 3d coordinates.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 21.0.0.0 (21.1.1.109)   
+  **Since:**  2021
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public XYZ Evaluate() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function Evaluate As XYZ ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: XYZ^ Evaluate() ``` |
+
+#### Return Value
+
+The end point of the edge in 3d coordinates.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | Failed to evaluate the end point of the edge. |
+
+# See Also
+
+[EdgeEndPoint Class](3388e8f3-22d4-a411-a3da-450c16a31bc5.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

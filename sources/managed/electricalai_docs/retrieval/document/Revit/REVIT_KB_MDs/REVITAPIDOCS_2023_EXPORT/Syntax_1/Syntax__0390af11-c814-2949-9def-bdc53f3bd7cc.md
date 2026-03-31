@@ -1,0 +1,53 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IsSolid Method
+
+---
+
+
+
+|  |
+| --- |
+| [ExternallyTaggedGeometryValidation Class](3d89cbdb-0653-7820-5b94-e1fd8b6bf144.htm)   [See Also](#seeAlsoToggle) |
+
+Makes sure that the input geometry object is a Solid.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2022
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool IsSolid( 	GeometryObject geometry ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function IsSolid ( _ 	geometry As GeometryObject _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool IsSolid( 	GeometryObject^ geometry ) ``` |
+
+#### Parameters
+
+geometry
+:   Type:  [Autodesk.Revit.DB GeometryObject](e0f15010-0e19-6216-e2f0-ab7978145daa.htm)    
+     Geometry object to be validated.
+
+#### Return Value
+
+True if the supplied geometry object is a Solid.
+
+# See Also
+
+[ExternallyTaggedGeometryValidation Class](3d89cbdb-0653-7820-5b94-e1fd8b6bf144.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

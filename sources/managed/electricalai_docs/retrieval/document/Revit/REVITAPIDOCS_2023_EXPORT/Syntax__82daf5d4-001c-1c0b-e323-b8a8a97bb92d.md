@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetRelinquishedWorksets Method
+
+---
+
+
+
+|  |
+| --- |
+| [RelinquishedItems Class](50c43bae-6776-ed11-6489-ab4bea85d04f.htm)   [See Also](#seeAlsoToggle) |
+
+The elements that were relinquished by the current user.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ICollection<WorksetId> GetRelinquishedWorksets() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetRelinquishedWorksets As ICollection(Of WorksetId) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: ICollection<WorksetId^>^ GetRelinquishedWorksets() ``` |
+
+# See Also
+
+[RelinquishedItems Class](50c43bae-6776-ed11-6489-ab4bea85d04f.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

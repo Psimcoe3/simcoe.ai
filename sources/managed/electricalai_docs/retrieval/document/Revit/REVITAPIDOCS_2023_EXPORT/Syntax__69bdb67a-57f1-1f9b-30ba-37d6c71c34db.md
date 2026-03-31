@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### StructuralElementDefinitionData Constructor
+
+---
+
+
+
+|  |
+| --- |
+| [StructuralElementDefinitionData Class](f7a0e8ec-6fd5-43e5-1a54-5cb6ebe009c7.htm)   [See Also](#seeAlsoToggle) |
+
+Creates empty StructuralElementDefinitionData object.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure.StructuralSections](09862f38-63f6-a5f8-e560-ae775901bc92.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 18.0.0.0 (18.2.0.0)   
+  **Since:**  2018
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public StructuralElementDefinitionData() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub New ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: StructuralElementDefinitionData() ``` |
+
+# See Also
+
+[StructuralElementDefinitionData Class](f7a0e8ec-6fd5-43e5-1a54-5cb6ebe009c7.htm)
+
+[Autodesk.Revit.DB.Structure.StructuralSections Namespace](09862f38-63f6-a5f8-e560-ae775901bc92.htm)

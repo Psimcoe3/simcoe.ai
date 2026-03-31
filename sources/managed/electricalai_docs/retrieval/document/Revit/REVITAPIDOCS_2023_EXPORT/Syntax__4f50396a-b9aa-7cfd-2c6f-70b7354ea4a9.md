@@ -1,0 +1,78 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### NewAngularDimension Method (View, Arc, Reference, Reference)
+
+---
+
+
+
+|  |
+| --- |
+| [FamilyItemFactory Class](a7622967-1381-c17f-ed04-1ebe40da0440.htm)   [See Also](#seeAlsoToggle) |
+
+Creates a new angular dimension object using the default dimension type.
+
+**Namespace:**   [Autodesk.Revit.Creation](ded320da-058a-4edd-0418-0582389559a7.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public Dimension NewAngularDimension( 	View view, 	Arc arc, 	Reference firstRef, 	Reference secondRef ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function NewAngularDimension ( _ 	view As View, _ 	arc As Arc, _ 	firstRef As Reference, _ 	secondRef As Reference _ ) As Dimension ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: Dimension^ NewAngularDimension( 	View^ view,  	Arc^ arc,  	Reference^ firstRef,  	Reference^ secondRef ) ``` |
+
+#### Parameters
+
+view
+:   Type:  [Autodesk.Revit.DB View](fb92a4e7-f3a7-ef14-e631-342179b18de9.htm)    
+     The view in which the dimension is to be visible.
+
+arc
+:   Type:  [Autodesk.Revit.DB Arc](1f5f541e-9335-aef3-0e75-59eed9ae2221.htm)    
+     The extension arc of the dimension.
+
+firstRef
+:   Type:  [Autodesk.Revit.DB Reference](d28155ae-817b-1f31-9c3f-c9c6a28acc0d.htm)    
+     The first geometric reference to which the dimension is to be bound. The reference must be perpendicular to the extension arc.
+
+secondRef
+:   Type:  [Autodesk.Revit.DB Reference](d28155ae-817b-1f31-9c3f-c9c6a28acc0d.htm)    
+     The second geometric reference to which the dimension is to be bound. The reference must be perpendicular to the extension arc.
+
+#### Return Value
+
+If creation was successful the new angular dimension is returned, otherwise an exception with failure information will be thrown.
+
+# Remarks
+
+The currently user set default style is used for the created dimension.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | Thrown when any input argument is    a null reference (  Nothing  in Visual Basic)  . |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | Thrown when the argument is invalid. |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | Thrown when the creation failed. |
+
+# See Also
+
+[FamilyItemFactory Class](a7622967-1381-c17f-ed04-1ebe40da0440.htm)
+
+[NewAngularDimension Overload](5c2584a9-34e2-3b37-0ceb-64efc71c5dd0.htm)
+
+[Autodesk.Revit.Creation Namespace](ded320da-058a-4edd-0418-0582389559a7.htm)

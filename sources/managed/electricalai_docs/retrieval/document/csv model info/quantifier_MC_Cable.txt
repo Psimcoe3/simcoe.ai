@@ -1,0 +1,9 @@
+## Stratus.Field.Quantifier — MC_Cable
+Type: Decimal
+Is Expression: Checked
+
+if(
+  ({templateName} = "*Fire Alarm Devices SMC-SMOKE DETECTOR_P*"),
+  {Length},
+  0
+)

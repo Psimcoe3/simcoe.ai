@@ -1,0 +1,71 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### AddCutBetweenSolids Method (Document, Element, Element, Boolean)
+
+---
+
+
+
+|  |
+| --- |
+| [SolidSolidCutUtils Class](f1a2d176-2ab6-fa4c-293e-970c5866e87c.htm)   [See Also](#seeAlsoToggle) |
+
+Adds a solid-solid cut for the two elements with the option to control splitting of faces of the cutting solid.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2011
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static void AddCutBetweenSolids( 	Document document, 	Element solidToBeCut, 	Element cuttingSolid, 	bool splitFacesOfCuttingSolid ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Sub AddCutBetweenSolids ( _ 	document As Document, _ 	solidToBeCut As Element, _ 	cuttingSolid As Element, _ 	splitFacesOfCuttingSolid As Boolean _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static void AddCutBetweenSolids( 	Document^ document,  	Element^ solidToBeCut,  	Element^ cuttingSolid,  	bool splitFacesOfCuttingSolid ) ``` |
+
+#### Parameters
+
+document
+:   Type:  [Autodesk.Revit.DB Document](db03274b-a107-aa32-9034-f3e0df4bb1ec.htm)    
+     The document containing the two elements.
+
+solidToBeCut
+:   Type:  [Autodesk.Revit.DB Element](eb16114f-69ea-f4de-0d0d-f7388b105a16.htm)    
+     The solid to be cut.
+
+cuttingSolid
+:   Type:  [Autodesk.Revit.DB Element](eb16114f-69ea-f4de-0d0d-f7388b105a16.htm)    
+     The cutting solid.
+
+splitFacesOfCuttingSolid
+:   Type:  System Boolean    
+     True to split faces of cutting solid where it intersects the solid to be cut, false otherwise.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | The element must be in a project document or in a conceptual model, pattern based curtain panel, or adaptive component family. -or- The element does not meet the condition that it must be solid and must be a GenericForm, GeomCombination, or a FamilyInstance. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | Failed to add solid-solid cut for the two elements. |
+
+# See Also
+
+[SolidSolidCutUtils Class](f1a2d176-2ab6-fa4c-293e-970c5866e87c.htm)
+
+[AddCutBetweenSolids Overload](91f9389e-9a5d-beca-b735-1863ceddeac7.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

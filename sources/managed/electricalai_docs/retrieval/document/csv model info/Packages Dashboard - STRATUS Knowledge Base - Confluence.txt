@@ -1,0 +1,1249 @@
+Jump to
+
+ 1. Confluence navigation <#AkTopNav>
+ 2. Side navigation <#AkSideNavigation>
+ 3. Page <#AkMainContent>
+
+Atlassian uses cookies to improve your browsing experience, perform
+analytics and research, and conduct advertising. Accept all cookies to
+indicate that you agree to our use of cookies on your device. Atlassian
+cookies and tracking notice, (opens new window) <https://
+www.atlassian.com/legal/cookies>
+Preferences
+
+Only necessary
+
+Accept all
+
+<https://gtpservices.atlassian.net/wiki>
+Spaces
+
+Apps
+
+Templates <https://gtpservices.atlassian.net/wiki/templates>
+Create
+
+Search
+
+<https://gtpservices.atlassian.net/wiki/login.action?os_destination=/
+spaces/SK/overview>
+
+
+    STRATUS Knowledge Base
+
+<https://gtpservices.atlassian.net/wiki/spaces/SK/overview?homepageId=33347>
+
+  *
+    All content
+     <https://gtpservices.atlassian.net/wiki/spaces/SK/pages>
+  *
+    Space settings
+     <https://gtpservices.atlassian.net/wiki/spaces/SK/settings/home>
+
+Shortcuts
+
+  * How-to articles <https://gtpservices.atlassian.net/wiki/spaces/SK/
+    pages/1854832642/How-to+articles> This trigger is hidden
+  * Troubleshooting articles <https://gtpservices.atlassian.net/wiki/
+    spaces/SK/pages/2018836482/Troubleshooting+articles> This trigger is
+    hidden
+  * https://gtpservices.atlassian.net/wiki/spaces/SK/pages/2121400321
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/
+    pages/2121400321> This trigger is hidden
+  * Stratus Change Log <https://gtpservices.atlassian.net/wiki/spaces/
+    SK/pages/2470248450/Stratus+Change+Log> This trigger is hidden
+
+Content
+
+Results will update as you type.
+
+  *
+
+    Admin
+    More actions, Admin
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/3146038/Admin>
+  *
+
+    Stratus Publish / Import Addin
+    More actions, Stratus Publish / Import Addin
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/10551828/
+    Stratus+Publish+Import+Addin>
+  *
+
+    Stratus In The Browser
+    More actions, Stratus In The Browser
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/295506/
+    Stratus+In+The+Browser>
+      o
+
+        Projects
+        More actions, Projects
+        <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/720915/
+        Projects>
+      o
+
+        Models
+        More actions, Models
+        <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/3408022/
+        Models>
+      o
+
+        Packages
+        More actions, Packages
+        <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/3309693/
+        Packages>
+          +
+            Create Package
+            More actions, Create Package
+            <https://gtpservices.atlassian.net/wiki/spaces/SK/
+            pages/67502081/Create+Package>
+          +
+            Packages Dashboard
+            More actions, Packages Dashboard
+            <https://gtpservices.atlassian.net/wiki/spaces/SK/
+            pages/8749118/Packages+Dashboard>
+          +
+            Packages Schedule
+            More actions, Packages Schedule
+            <https://gtpservices.atlassian.net/wiki/spaces/SK/
+            pages/9044061/Packages+Schedule>
+          +
+            Packages Status Board
+            More actions, Packages Status Board
+            <https://gtpservices.atlassian.net/wiki/spaces/SK/
+            pages/8781921/Packages+Status+Board>
+          +
+
+            Packages Viewer
+            More actions, Packages Viewer
+            <https://gtpservices.atlassian.net/wiki/spaces/SK/
+            pages/199983153/Packages+Viewer>
+          +
+            Non-modeled Field Requests
+            More actions, Non-modeled Field Requests
+            <https://gtpservices.atlassian.net/wiki/spaces/SK/
+            pages/242974730/Non-modeled+Field+Requests>
+      o
+
+        Assemblies
+        More actions, Assemblies
+        <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/3276951/
+        Assemblies>
+      o
+
+        Containers
+        More actions, Containers
+        <https://gtpservices.atlassian.net/wiki/spaces/SK/
+        pages/188514329/Containers>
+      o
+
+        Shops
+        More actions, Shops
+        <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/3211591/
+        Shops>
+      o
+        Jobsites
+        More actions, Jobsites
+        <https://gtpservices.atlassian.net/wiki/spaces/SK/
+        pages/170819638/Jobsites>
+      o
+        Scan
+        More actions, Scan
+        <https://gtpservices.atlassian.net/wiki/spaces/SK/
+        pages/158040194/Scan>
+      o
+        Help
+        More actions, Help
+        <https://gtpservices.atlassian.net/wiki/spaces/SK/
+        pages/1999798273/Help>
+      o
+
+        Account Settings
+        More actions, Account Settings
+        <https://gtpservices.atlassian.net/wiki/spaces/SK/
+        pages/438010083/Account+Settings>
+  *
+
+    Stratus FAQ
+    More actions, Stratus FAQ
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/884737/
+    Stratus+FAQ>
+  *
+
+    Shop Tool Integrations
+    More actions, Shop Tool Integrations
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/347373592/
+    Shop+Tool+Integrations>
+  *
+    Stratus API
+    More actions, Stratus API
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/1829077164/
+    Stratus+API>
+  *
+
+    SSO for Stratus
+    More actions, SSO for Stratus
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/1859485697/
+    SSO+for+Stratus>
+  *
+
+    Release Notes
+    More actions, Release Notes
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/749633545/
+    Release+Notes>
+  *
+
+    Webinars
+    More actions, Webinars
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/1925185537/
+    Webinars>
+  *
+
+    Stratus FLEX
+    More actions, Stratus FLEX
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/2175893510/
+    Stratus+FLEX>
+  *
+
+    Stratus Academy
+    More actions, Stratus Academy
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/2547580929/
+    Stratus+Academy>
+  *
+    How-to articles
+    More actions, How-to articles
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/1854832642/
+    How-to+articles>
+  *
+    Troubleshooting articles
+    More actions, Troubleshooting articles
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/2018836482/
+    Troubleshooting+articles>
+  *
+
+    Beta Releases
+    More actions, Beta Releases
+    <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/2848948225/
+    Beta+Releases>
+
+You‘re viewing this with anonymous access, so some content might be blocked.
+Close
+
+STRATUS Knowledge Base
+
+/
+Packages Dashboard
+restrictions.empty
+Jira links
+
+Loading app...
+
+  *
+    Anonymous Person
+  *
+    Anonymous Person
+
+More actions
+
+
+  Packages Dashboard
+
+  *
+    Matthew Tate
+  *
+    Conk Buckley
+
+Owned by Matthew Tate <https://gtpservices.atlassian.net/wiki/
+people/557058:27d8073b-45c4-4913-8f3a-9e61327efdd9?
+ref=confluence&src=profilecard>
+Last updated: Apr 24, 2025 <https://gtpservices.atlassian.net/wiki/
+pages/diffpagesbyversion.action?
+pageId=8749118&selectedPageVersions=99&selectedPageVersions=100> by Conk
+Buckley <https://gtpservices.atlassian.net/wiki/
+people/557058:d079e99e-9089-46f9-9f04-9ff60dae6dff?
+ref=confluence&src=profilecard>
+19 min read
+
+The Packages Dashboard is a filtered list of project packages that can be sorted, filtered, edited, and some columns can be totaled.  A "Default" report includes summary details described below, but you can create your own report(s) to display the data, calculated fields, editable fields needed for your company. The Default report provides the ability to open and delete packages, set the Required date for each package, change the package Status, open package attachments, and create .MAJ or .PCF file attachments. Note: For correct dates, verify that your computer's time zone is correct.
+
+ 
+
+  * 1 Default Report <#Default-Report>
+      o 1.1 Columns <#Columns>
+      o 1.2 Filter and Sort the Dashboard <#Filter-and-Sort-the-Dashboard>
+          + 1.2.1 Filters <#Filters>
+          + 1.2.2 Date Window Filter <#Date-Window-Filter>
+          + 1.2.3 Sort <#Sort>
+      o 1.3 Display Active or Archived Packages <#Display-Active-or-Archived-Packages>
+  * 2 Cached Calculated Values <#Cached-Calculated-Values>
+  * 3 Paging <#Paging>
+  * 4 New Package <#New-Package>
+      o 4.1 New Package Prerequisites <#New-Package-Prerequisites>
+      o 4.2 Create New Package <#Create-New-Package>
+  * 5 Download CSV or Excel <#Download-CSV-or-Excel>
+  * 6 Import CSV <#Import-CSV>
+      o 6.1 File Configuration <#File-Configuration>
+      o 6.2 Import Process <#Import-Process>
+  * 7 Videos <#Videos>
+      o 7.1 STRATUS 07-25-19 Implementation Webinar - (Package Dashboard Configuration 26:01) <#STRATUS-07-25-19-Implementation-Webinar---(Package-Dashboard-Configuration-26%3A01)>
+
+
+  Default Report
+
+The Default report is available out-of-the-box. Custom reports can be created and will display in the Report drop-down. See the Package Dashboard Reports example in the *Reports (Admin)* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/10617393> article for more information.
+
+Open image-20250424-133142.png
+image-20250424-133142.png
+
+
+    Columns
+
+ 1.
+
+    *Package Number *and *Package Name *- Open a package by clicking the Package Number or Package Name link. Opening the package will display the package tabs that enable you to work with the package (Ex. Viewer, Cut Lists, Tasks, etc.). The Package Number and Package Name were assigned to the package when it was created and can be edited by opening the package, clicking the Properties tab, and then editing the Name or Number fields. The Package Description, Category, Estimated Hours, Start Date, and Required Date can also be edited in the Properties tab for the package. A Package is created in the:
+
+     1.
+
+        Models > Viewer page
+
+     2.
+
+        Projects > Deliverables page
+
+     3.
+
+        Packages Dashboard page when the *New Package* is used
+
+ 2.
+
+    *Model *- The name and link to the model from which the package was created.
+
+ 3.
+
+    *Description *- The Description of the package if entered.
+
+ 4.
+
+    *Required *- The Required date on the Default report, if known, is the date that the package materials are required to be on-site for the Field Phase Start Date. The Required date can be edited in-grid, or on the *Package Properties* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/260603982> tab, or on the *Packages Schedule* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/9044061>. 
+
+ 5.
+
+    *# Assemblies* - The number of assemblies in the package.
+
+ 6.
+
+    *# Parts *- The number of loose parts (not found in assemblies) in the package.
+
+ 7.
+
+    *# Total Parts* - The total number of parts including loose parts and those in assemblies.
+
+ 8.
+
+    *# Tasks* - If a Task Workflow has been applied to a package, the # Tasks indicates the number of tasks that have been created for the package. See the  *Task Definitions (Admin)* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/240713729> article for more information.
+
+ 9.
+
+    *% Complete* - % Complete is calculated differently depending on whether the package includes tasks or not.
+
+     1.
+
+        *Package includes tasks* - When a package has tasks associated with its child assemblies or parts, the completeness of the tasks is used to calculate the % complete for the package.
+
+     2.
+
+        *Package does not include tasks* - When the package does not have tasks, the % Complete calculation is based on the packages' tracking status percentages. See the *Tracking Statuses (Admin)* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/10485761> article for information about how to setup % complete values.
+
+10.
+
+    *Hours* *Estimated *- Estimate Hours are manually entered when the package is created, except when the package is created from the Projects > Deliverables page. Estimated Hours can be edited in-grid. The editable Estimated Hours field uses the *STRATUS.Package.HoursEstimatedShop* property in both default and custom reports. 
+
+11.
+
+    *Actual Hours* - Actual Hours are manually entered when the package Tracking Status changes and the Update Tracking Status dialog displays. Actual Hours can be applied to a Part, Assembly, or Package and the tracking log hours now bubble up to the package level. For example:
+
+    *If a part and assembly belong to a package and actual hours are entered:*
+
+    Part = 1; Part = 1.5; Part = 3; Part = -2
+    Assembly = 5; Assembly = 7
+    Package = 10 
+    Packages Dashboard = 35.5
+
+    *If part and assembly are in two different Package Categories and actual hours are entered:*
+
+    Part = 1; Part = 1.5; Part = 3; Part = -2
+    Assembly = 5; Assembly = 7
+    Package = 10 
+    Packages Dashboard for both packages = 35.5
+
+12.
+
+    *Division* - The Division can be entered when the package Tracking Status changes and the Update Tracking Status dialog displays. The Division can be edited in-grid.
+
+     1.
+
+        The default settings for Division when creating a New Package, under Packages Dashboard and clicking the New Package button, will be the user’s last setting for Division.
+
+        Open image-20250424-132725.png
+
+         
+
+         
+
+13.
+
+    *Status* - The Tracking Status can be changed (in-grid) by clicking the Status link which will display the Update Tracking Status dialog.
+
+    Open image-20250424-132834.png
+
+     
+
+     1.
+
+        The default settings when creating a New Package, under Packages Dashboard and clicking the *New Package* button, will be the user’s last setting for Status.
+
+        Open image-20250424-132725.png
+
+14.
+
+    *Job*
+
+     1.
+
+        If a MAJ or PCF file has been generated, the Job column will display.
+
+     2.
+
+        A download button and create date will display if a .MAJ has been generated. 
+
+        Open image-20230623-154925.png
+
+         
+
+     3.
+
+        Click the download icon and your web browser will prompt you to save the file. A .MAJ file contains both fabricated and non-fabricated items that are part of the package.
+
+        Open image2019-10-1_10-12-25.png
+
+         
+
+15.
+
+    *Attachments *
+
+     1.
+
+        The *Upload Attachment* button can be used to locate and upload attachments to any package on the Packages Dashboard. See the *Add Attachment* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/2081619969/Attachments#Add-Attachment> section in Attachments article for more information.
+
+     2.
+
+        Clicking the *Open Attachment* button will display the attachment fly-out.
+
+        Open image-20250424-133355.png
+
+     3.
+
+        See the *Dashboard Attachments* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/2081619969/Attachments#Dashboard-Attachments> section in Attachments article for more information on previewing the attachment, downloading a single attachment, downloading All attachments or downloading a ZIP of all attachments.
+
+16.
+
+    *Actions*
+
+     1.
+
+        *MAJ / PCF *
+
+         1.
+
+            For published Fabrication drawings, click either the *MAJ *button to generate a MAJ file, or the *PCF *button to generate a PCF file. 
+
+         2.
+
+            Once the file has generated, it will display in the *Job *column and under the *Open Attachment* button fly-out where the file can be dowloaded.
+
+         3.
+
+            *Note*: If you receive an error attempting to generate an output file, see the *Fabrication Job issue creating MAJ or PCF files from the Packages Dashboard* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/246153241> article.
+
+         4.
+
+            For information on automatically generating a .MAJ see the *Generate  Automated .MAJ CamDuct Cut List File* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/166723746#PackageCutLists-Automated.1> article.
+
+         5.
+
+            For information on automatically generating a .PCF file, see the *Generate Automated .PCF PypeServer Cut List File* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/166723746#PackageCutLists-Automated> article.
+
+         6.
+
+            Custom Data Fields - STRATUS custom data fields can be included in a .MAJ file.
+
+             1.
+
+                A custom data field is published and edited.
+
+                Open image-20221104-183536.png
+
+             2.
+
+                A MAJ file can be generated and opened with edited custom field on parts:
+
+                Open image-20221104-183605.png
+
+                 
+
+     2.
+
+        *Reset Planning Dates* - Click the *Reset Planning Dates* button to reset all planning dates to their default values.
+
+     3.
+
+        *Toggle Archive Status *- Use the Toggle Archive Status to archive selected packages. By default, the Toggle Archive Status button will only be permissioned (visible) to users who have the Project Admin role. When clicked, the *Toggle Package Archive Status* prompt will display.
+
+        Open image2019-10-7_8-24-26.png
+
+         
+
+     4.
+
+        *Delete* - Click the *Delete* button to delete the package. All parts and assemblies will be disassociated from the package.
+
+17.
+
+    *Totals* - By default, numeric columns (Integer and Decimal which includes # Assemblies, # Parts, # Total Parts, Tasks, Estimated Hours, and Actual Hours) are totaled. In addition, Feet Inch totals can be added to a custom report by configuring the report’s Total Values setting to Yes for the target columns. See the Package Dashboard Reports example in the *Reports (Admin)* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/10617393> article for more information. 
+
+     1.
+
+        All Dashboard pages that have more than one page of data will include 2 totals. In this case a subtotal (150.29’) for the packages on the page, followed by the total for all packages (24226.2’) defined by the Project and Model selected.
+
+        Open image2020-3-9_11-11-39.png
+
+
+    Filter and Sort the Dashboard
+
+
+      Filters
+
+*Filter the dashboard by one or more of the following:*
+
+  *
+
+    Filter by one Project or All Projects.
+
+  *
+
+    Filter by one Model or All Models.
+
+  *
+
+    Filter by one or more Divisions (defaults to ALL Divisions).
+
+  *
+
+    Filter by one or more Statuses (defaults to ALL Statuses).
+
+  *
+
+    Filter by one or more company package Categories (defaults to ALL Categories).
+
+  *
+
+    Filter by using the *Search* option which searches the package by name, number, model, required, Division, or tracking status. In addition, if search criteria is entered while the Packages Dashboard is loading, any packages matching the criteria will immediately display at the top of the table.
+
+  *
+
+    Filter the dashboard content by clicking a *Filters *button in the column header, then click the filters arrow that displays, and then select use the selection interface to filter the list. See the *How does the column filter work?* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/452919459/Sort+and+Filter+Data+Tables#How-does-the-column-filter-work%3F> article for more information.
+
+    Open image-20250424-150457.png
+
+     
+
+When a filter criteria finds no results the following message will display:
+
+ 1.
+
+    Assemblies > Dashboard
+
+    Open image-20220318-170641.png
+
+     
+
+ 2.
+
+    Packages > Dashboard
+
+    Open image-20220318-170907.png
+
+     
+
+To filter to packages that do not have a Required Date:
+
+ 1.
+
+    Click the *Filter *button. A filter will display.
+
+    Open image-20210823-145714.png
+
+     
+
+ 2.
+
+    Click the red x for both fields. Empty Required Dates will display.
+
+    Open image-20210823-145745.png
+
+     
+
+
+      Date Window Filter
+
+When enabled the date window filter will filter the dashboard data table to items whose date is a specified number of days before and after the current date. This tool is targeted at those who prefer to view packages within a consistent date range window every time the page is loaded. These settings will persist on the Packages Dashboard, Schedule, and Status Board until they are changed on any page or turned off.
+
+Open image-20220621-190818.png
+
+*To use the Date Window filter:*
+
+ 1.
+
+    The Date Window filter is off by default.
+
+    Open image-20220621-192612.png
+
+     
+
+ 2.
+
+    Click the Date Window filter button to display the dialog.
+
+    Open image-20220621-190709.png
+
+     
+
+ 3.
+
+    Click the gear icon to display configuration options.
+
+    Open image-20220621-190818.png
+
+     1.
+
+        *Include empty dates*
+
+         1.
+
+            *Checked* - When checked if an item’s date field is Empty, it will display in the data table.
+
+         2.
+
+            *Unchecked* - When unchecked if an item’s date field is Empty, it will not display in the data table.
+
+     2.
+
+        *Count Days as*
+
+         1.
+
+            *Business* - For the business day calculation, weekends are excluded while public holidays are included as a business day.
+
+         2.
+
+            *Calendar* - For the calendar day calculation, all days are included.
+
+ 4.
+
+    To configure the date window:
+
+     1.
+
+        *Date drop-down* - The Date drop-down displays all planning date fields located under Packages > Properties > Planning. *Note*: The Default is the Required date which also displays on the Packages > Dashboard default report. Select one date field.
+
+        Open image-20220621-191908.png
+
+     2.
+
+        To select the number of days prior to today, click the number and either enter a number or use the up/down arrow to change the value. The exact date the number references will display (hover text) as the number value changes. In this example, 10 days (business days) prior to today is 6/7/2022.
+
+        Open image-20220621-192213.png
+
+         
+
+     3.
+
+        To select the number of days after today, click the number and either enter a number or use the up/down arrow to change the value. The exact date the number references will display (hover text) as the number value changes. In this example, 15 days (business days) after today is 7/12/2022.
+
+        Open image-20220621-192304.png
+
+         
+
+ 5.
+
+    When done, the data table will filter to display only items that meet the criteria. Once set, these settings will continue to be used until they are changed.
+
+    Open image-20220621-193837.png
+
+     
+
+
+      Sort
+
+Users can manually sort a column heading by clicking the *Sort *button which will override the existing primary sort. See the *Sort and Filter Data Tables* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/452919459> FAQ for more information.
+
+  *
+
+    *Click Sort button* - Any sort button has 3 states:
+
+      o
+
+        *Click 1* - sorts the column in ascending order.
+
+      o
+
+        *Click 2* - sorts the column in descending order.
+
+      o
+
+        *Click 3* - sets the table back to the default sort order according to either the pre-defined table sort order (if one exists) or the sort order specified by the report’s sort index settings.
+
+  *
+
+    *Default Reports* - Default reports for the following dashboards include a default sort order.  After a user manually changes the sort order for a dashboard, that sort order will override the default sort order and will continue to be the primary sort on that table for that user until the user changes it. 
+
+      o
+
+        *Packages Dashboard *- Required date
+
+      o
+
+        *Assemblies Dashboard* - Assembly Name
+
+      o
+
+        *Container Dashboard*
+
+          +
+
+            *Report *- Container Type
+
+          +
+
+            *Details Report* - Item Type
+
+  *
+
+    *Custom Reports (Sort Index)* - Report designers can specify a Sort Index for custom reports under Admin > Company > Reports > Report Fields. When a custom report is first loaded by a user, the Sort Index with the lowest number will be the primary sort. The next lowest index number will be a secondary sort when the primary sort includes identical values. Ex. If the table displays states, cities, and zip codes where state is sort index 1, city is sort index 2, and zip code is sort index 3, then, the primary sort will be state, the secondary sort will be cities which will be sorted alphabetically, and zip codes will be the third sort when there is more than one city.
+
+      o
+
+        *Note*: After a user manually changes the sort order for a dashboard, that sort order will override the default sort order and will continue to be the primary sort on that table for that user until the user changes it. The lowest sort index will become the secondary sort, and so on. 
+
+  *
+
+    *Reset Sorting* - Another way to sets the table back to the default sort order is to click the *Reset sorting* button.
+
+    Open image2022-8-3_14-29-38.png?
+    version=1&modificationDate=1659554979446&cacheVersion=1&api=v2
+
+
+    Display Active or Archived Packages
+
+Once archived:
+
+ 1.
+
+    The package will not display on the Packages Dashboard unless the Archived tab is selected. Use the Status "Active" or "Archived" filter in the Package dashboard.
+
+    Open image-20200914-152507.png
+
+     
+
+ 2.
+
+    If an archived package is opened, only the Properties tab will display and all Properties will be disabled, except the ability to uncheck the Archived option.
+
+    Open image-20200914-160558.png
+
+     
+
+ 3.
+
+    An archived package will display in the Models > Viewer under *Display Modes* and *Filters *where the Archived lable displays along with a hyperlink to the Package’s Properties page.
+
+    Open image-20200914-160454.png
+
+     
+
+ 4.
+
+    Also on the Models > Viewer, with the *Actions > Packages* panel open, when an archived package is clicked it will display the *Archived* label and include a link to the package.
+
+    Open image-20200914-160851.png
+
+
+  Cached Calculated Values
+
+Calculated field values are automatically cached and purged for each package. Package Dashboard cached values are automatically purged when:
+
+  *
+
+    any type of update changes values, such as editing parts in a package or assembly
+
+  *
+
+    using a field that is a total value from all parts in the package
+
+  *
+
+    a Field references a Part property, or another Field value and they are modified
+
+*Clear Cached Calculated Field Values and Reload Data Table*
+
+The *Clear Cached Calculated Field Values and Reload Data Table* button forces calculated values to be refreshed.  This button should only be needed as a backup as the Packages Dashboard will detect when calculated fields need to be refreshed.
+
+Open image-20211013-143512.png
+
+
+  Paging
+
+The Packages Dashboard uses Paging to load the data table. When the Packages Dashboard initially loads, all Package Names and non-calculated fields will load first. Calculated data will continue to load and replace skeleton placeholders on the dashboard until all data is populated. The benefit is that while data is populating, functions like sorting, filtering, package links, generate MAJ, update Status, and edit fields are available. When a non-calculated column is used as a filter, packages at the top of the newly filtered dashboard will begin to load. Totals will continue to update as row values are calculated. The data table loading indicator (red bar) will display until all data displays in the data table.
+
+Open image-20210610-135531.png
+
+
+  New Package
+
+The New Package button is primarily used for non-modeled Field Requests. By creating a package and then attaching a sketch or document to the package, the normal package workflow can be used to track the package and assembly through the project. See the *Field Requests* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/242974730> article for more information.
+
+
+    New Package Prerequisites
+
+Before creating a New Package when the "Add Assemblies and Parts" checkbox is checked, verify the following in the Models > Viewer. If unchecked, the prerequisites can be ignored.
+
+ 1.
+
+    *Company Filter* – Verify that the Company filter that will be selected works.
+
+ 2.
+
+    *Package Category* – Verify that the parts being added to the package are not already included in the same package category. *Note:* If any part/assembly is already included in the selected Package Category, the part/assembly will not be added to the package and you will not receive a confirmation notification.  See the* **Package Categories (Admin)* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/166199351>* *article for more information.
+
+ 3.
+
+    *Tracking Status* – Verify that the filtered parts are in a "Can Package" tracking status. See the* **Tracking Statuses (Admin)* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/10485761> article for more information.
+
+ 4.
+
+    *Area* – Verify that the target Area is included under Admin > Projects > Areas.  See the* **Areas (Admin)* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/103284742>* *article for more information.
+
+    Open image2020-3-26_11-35-40.png
+
+
+    Create New Package
+
+To create a new package from the Packages Dashboard:
+
+ 1.
+
+    Click the *New Package* button. The New Package dialog will display.
+
+    Open image-20241011-180505.png
+
+     
+
+     
+
+     1.
+
+        *Category* - Select the *Package Category*. In this example, the resulting package will be hangers for a specific area and the selected Package Category does not include assemblies. As a result, if these hangers are part of an assembly, the assemblies will not be included in the package.  See the *Package Categories (Admin)* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/166199351> article for more information.  *Note:* If any part/assembly is already included in the selected Package Category, the part/assembly will not be added to the package and you will not receive a confirmation notification.
+
+     2.
+
+        *Number *- When creating a Package in the Packages Dashboard, the default *Number *is derived from the Naming Convention configured by the Admin. 
+
+         1.
+
+            If the Package Name Naming Convention refers to information that does not require a part be selected (Ex. Date, Project Number) then those will automatically populate the *Number*. See the *Naming and Numbering (Admin)* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/164134913> article for more information. 
+
+         2.
+
+            If the Package Name Naming Convention refers to information where a part must be selected (Ex. BIM Area Abbreviation or System/Service), then you will need to manually enter the data now or at a later time. 
+
+         3.
+
+            *Incrementor Checkbox *- The Incrementor checkbox can be used to ensure the number is unique. It is not required that Package Number be unique.
+
+     3.
+
+        *Name* - When creating a Package in the Packages Dashboard, the default *Name* is derived from the Naming Convention configured by the Admin. 
+
+         1.
+
+            If the Package Name Naming Convention refers to information that does not require a part be selected (Ex. Date, Project Number) then those will automatically populate the *Name*. See the *Naming and Numbering (Admin)* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/164134913> article for more information. 
+
+         2.
+
+            If the Package Name Naming Convention refers to information where a part must be selected (Ex. BIM Area Abbreviation or System/Service), then you will need to manually enter the data now or at a later time.  
+
+         3.
+
+            *Incrementor Checkbox *- The Incrementor checkbox can be used to ensure the number is unique. It is required that Package Name be unique.
+
+     4.
+
+        *Status* – Set the *Tracking Status* the package will be in once created.
+
+     5.
+
+        *Division* - Set the package *Division* (if any) once it is created.
+
+     6.
+
+        *Description* – Include a *Description* to clarify the package if needed.
+
+     7.
+
+        *Phase* – Phase defaults to *Required Date*. Enter a *Required Date* to communicate with the project manager and shop.
+
+     8.
+
+        *Add Assemblies and Parts* checkbox - Check the *Add Assemblies and Parts* checkbox to automatically add parts/assemblies that meet the Filter and Area selections below.
+
+         1.
+
+            *Filter *– Select the single *Filter* to be used to isolate the parts/assemblies. See the *Filters (Admin)* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/10617224> article for more information. *Note*: Validate that the filter works in the model.
+
+         2.
+
+            *Area* – Select the single *Area* the package will include. See the *Areas (Admin)* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/103284742> article for more information. Below is an example of the Areas drop-down list. *Note*: Validate that the area works in the model.
+
+            Open image2020-3-26_11-44-40.png
+
+             
+
+     9.
+
+        *Estimating Information* - The *Estimating Information* data cannot be edited until parts are added to the package.
+
+    10.
+
+        *Additional Fields* - The *Additional Fields* data cannot be edited until parts are added to the package.
+
+ 2.
+
+    Click the *Create Package* button and the package will display on the Packages Dashboard and will include any entered Data and the number of Parts and Total Parts that were added to the package. No assemblies were added since the selected Package Category ignored assemblies.
+
+    Open image2020-3-26_11-47-7.png
+
+
+  Download CSV or Excel
+
+The Packages Dashboard for a project and model can be downloaded to a CSV file or an Excel file. 
+
+Open image-20210409-163615.png
+
+
+  Import CSV
+
+A CSV file can be imported to either create new packages or update existing packages. This feature could be used in various scheduling scenarios where packages with start dates and other fields could be imported into STRATUS from a Project Scheduling tool that can output to CSV format. 
+
+*Note*: When importing a file back into STRATUS: 1) only a CSV file can be imported back into STRATUS, and 2) the Package Dashboard must be filtered to one project and one model for the *Import CSV* button to be enabled.
+
+
+      File Configuration
+
+A CSV file that will be imported using the Import CSV button can be created in several different ways. In the examples below, the 2 packages already exist.
+
+Open image-20210409-153614.png
+
+*To Configure the file Format and Field Values*
+
+ 1.
+
+    Create a file in one of two ways:
+
+     1.
+
+        *Create a new file *- Create a new file with the required field headers and then add any optional fields below.
+
+         1.
+
+            *Package Number (Required)* 
+
+         2.
+
+            *Package Name (Required) *
+
+         3.
+
+            *Id (Required)* - This field is required to be in the file, but should be left blank for new rows.
+
+         4.
+
+            With only the required fields a comma-delimited CSV file might look like this where row 2 is a package that will be imported.
+
+            Open image-20210224-140801.png
+     2.
+
+        *Download an Existing CSV File or Excel File *- Click the *CSV *or *Excel *button. The file will download the field headers and data associated with the selected Packages Dashboard Report. In the example below, the *Default *report was selected and includes 4 rows of data.  
+
+         1.
+
+            Open the File in Excel. The following fields display.
+
+            Open image-20231005-211808.png
+            Open image-20210224-140157.png
+         2.
+
+            Open the File in Notepad or Notepad++. The following fields display.
+
+            Open image-20210224-140304.png
+
+             
+
+ 2.
+
+    *Optional Fields *
+    The following optional fields can be added to the file. Optional fields that include data will update the package during the Import CSV process. Fields that do not include data will be ignored. The Field header name used in the CSV file will depend on the report format specified in the package dashboard, otherwise the STRATUS.Package.* name will always work. See the Header section of the *Report Fields* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/10617393#Reports(Admin)-ReportFields> topic for more information.
+
+     1.
+
+        *Description *- The Description field is optional. 
+
+     2.
+
+        *STRATUS.Package.StartDT *- The STRATUS.Package.StartDT will only be updated if it is a valid date-time value (Ex. 03/24/21).
+
+     3.
+
+        *STRATUS.Package.Required or the Header name specified in the report format *- The RequiredDT will only be updated if it is a valid date-time value (Ex. 03/24/21).
+
+     4.
+
+        *STRATUS.Package.HoursEstimatedShop or the Header name specified in the report format *- The HoursEstimated value must be a valid number or will be set to zero.
+
+     5.
+
+        *STRATUS.Field.** *or the Header name specified in the report format *- Any STRATUS.Field.* value that is editable can be updated. Note: If the editable field is defined as a date-time format, a valid date-time value must be entered (Ex. 03/24/21).
+
+     6.
+
+        *STRATUS.Package.CategoryName *- If the STRATUS.Package.CategoryName field is not included, the Package Category named Default will be applied to new imported packages. *Note*: In this scenario, a Package Category named Default must exist. Out-of-the-box the Default Package Category does exist but it can be deleted or renamed.
+
+     7.
+
+        *STRATUS.Package.Notes*
+
+         1.
+
+            *Existing Notes* - Existing Notes will not be removed.
+
+         2.
+
+            *Duplicate Note* - If a duplicate Note is found, the newest Note will not be added to the Packages Dashboard during the Import process.
+
+         3.
+
+            *Multiple Notes* - Multiple Notes should be entered using a semicolon as a separator between notes.
+
+ 3.
+
+    *Ignored Fields*
+    The following fields will always be ignored by the Import CSV process and will never be used to update a package.
+
+     1.
+
+        *Model*
+
+     2.
+
+        *#Assemblies*
+
+     3.
+
+        *#Parts*
+
+     4.
+
+        *#Total Parts*
+
+     5.
+
+        *#Tasks*
+
+     6.
+
+        *%Complete*
+
+     7.
+
+        *Actual Hours*
+
+     8.
+
+        *Division*
+
+     9.
+
+        *Status (Active or Archived)*
+
+    10.
+
+        *Tracking Status *- Like other new packages, any new package included in the import file will be assigned the first available “Applies to Package” tracking status.
+
+    11.
+
+        *Category *- Category data is only used when constructing NEW packages, cannot modify this property.
+
+    12.
+
+        *Category Abbreviation* - Category Abbreviation data is only used when constructing NEW packages, cannot modify this property.
+
+
+      Import Process
+
+For this example, to import a CSV file with one new package the following CSV file will be used. For additional packages, add rows to the file. The CSV file can be imported many times and only the new or updated information will be imported. 
+
+Open image-20210224-142155.png
+
+ 1.
+
+    If an Excel file was used to edit field values in the previous section, save the file as a CSV file format.
+
+ 2.
+
+    *Enable / Disable Import CSV button* - On the Packages Dashboard, the *Import CSV* button will remain disabled until one project and one model have been selected. Neither ALL PROJECTS nor ALL MODELS can be selected. 
+
+ 3.
+
+    Click the *Import CSV* button.
+
+    Open image-20210222-192518.png
+
+     
+
+ 4.
+
+    The Import Packages dialog will display. Click the *Browse *button and locate the CSV file.
+
+    Open image-20210223-203039.png
+
+     
+
+ 5.
+
+    The Upload Packages CSV File dialog will display. Click the *Upload *button.
+
+    Open image-20210223-203124.png
+
+     
+
+ 6.
+
+    Once the file has uploaded the Close button will be active. Click the *Close *button. 
+
+    Open image-20210223-203215.png
+
+     
+
+ 7.
+
+    The Import packages dialog will display again, this time with the CSV file ready to be imported. Click the *Import *button. 
+
+    Open image-20210223-203308.png
+
+     
+
+ 8.
+
+    Once the file has imported, the following message will display. Click the *OK *button. 
+
+    Open image-20210223-203349.png
+
+     
+
+ 9.
+
+    After the Packages Dashboard refreshes:
+
+     1.
+
+        *Packages Dashboard - *The new package will display on the Packages Dashboard.  Some of the data entered in the CSV file are highlighted on this page.
+
+        Open image-20210223-203914.png
+
+         
+
+     2.
+
+        *Package’s Properties* - The STRATUS.Package.StartDT and STRATUS.Package.CategoryName fields display on the Package’s Properties tab along with the other CSV field data.
+
+        Open image-20210224-141946.png
+
+         
+
+     3.
+
+        *Package’s Notes *- The STRATUS.Package.Notes field displays on the Package’s Notes tab.
+
+        Open image-20210224-142039.png
+
+         
+
+10.
+
+    *Note:* Like all packages, when a package is created via the Import CSV process, it will:
+
+     1.
+
+        Display as an Activity under Admin > Company > Activities.
+
+     2.
+
+        Display as a Notification.
+
+
+  Videos
+
+See the Packages Module Overview webinar *CSG Webinar: STRATUS In-Depth Series, The Packages Module* <https://gtpservices.atlassian.net/wiki/spaces/SK/pages/3309693#Packages-01/28/2021CSGWebinar:STRATUSIn-DepthSeries,ThePackagesModule(1:01:57)> for more information.
+
+
+    STRATUS 07-25-19 Implementation Webinar - (Package Dashboard Configuration 26:01)
+
+
+
+
+
+
+
+ 
+
+ 
+
+
+
+------------------------------------------------------------------------
+
+
+
+
+
+, multiple selections available,
+browser
+ <https://gtpservices.atlassian.net/wiki/label/SK/browser>
+orders
+ <https://gtpservices.atlassian.net/wiki/label/SK/orders>
+dashboard
+ <https://gtpservices.atlassian.net/wiki/label/SK/dashboard>
+Atlassian Intelligence
+
+thumbs up
+
+clapping hands
+
+party popper
+
+© Copyright 2025 GTP Software, Inc <http://www.stratus.build/> All
+rights reserved. | About <https://www.gtpstratus.com/home/about> |
+Contact <https://gtpservices.atlassian.net/servicedesk/customer/portal/3>
+
+{"serverDuration": 79, "requestCorrelationId":
+"e56a08649b914208801951b165752426"}

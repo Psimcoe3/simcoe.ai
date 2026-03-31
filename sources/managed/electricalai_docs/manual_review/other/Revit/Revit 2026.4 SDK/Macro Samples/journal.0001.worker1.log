@@ -1,0 +1,273 @@
+' 0:< Initial VM: Avail 134213374 MB, Used 17 MB, Peak 17; RAM: Avail 34656 MB, Used 34 MB, Peak 17 
+' 0:< GUI Resource Usage GDI: Avail 10000, Used 0, User: Used 1 
+'C 10-Mar-2025 15:42:24.394;  ->UI-less InitNativeInstance 
+' 0:< ::0:: Delta VM: Avail -2 -> 134213373 MB, Used +0 -> 18 MB, Peak +0 -> 18 MB; RAM: Avail -12 -> 34645 MB, Used +1 -> 35 MB, Peak +1 -> 35 MB 
+' 0:< GUI Resource Usage GDI: Avail 10000, Used 0, User: Used 1 
+' 0:< Options::loadOptions: m_strDataLibraryLocations=Imperial Library=..\Data\Libraries\English-Imperial\US\, Metric Library=..\Data\Libraries\English\US\ (defaultLib==\Library) 
+' 0:< Actual language code=ENU 
+' 0:< ::0:: Delta VM: Avail -24 -> 134213350 MB, Used +5 -> 24 MB, Peak +5 -> 24 MB; RAM: Avail -14 -> 34631 MB, Used +13 -> 49 MB, Peak +15 -> 51 MB 
+' 0:< GUI Resource Usage GDI: Avail 10000, Used 0, User: Used 1 
+' 0:< Shared components located at "D:\GitDirectory\Revit\Dev\revit\Releasex64\SharedComponents\1.0.0". 
+' 0:< ::0:: Delta VM: Avail -11 -> 134213339 MB, Used +8 -> 33 MB, Peak +8 -> 33 MB; RAM: Avail -34 -> 34597 MB, Used +10 -> 60 MB, Peak +8 -> 60 MB 
+' 0:< GUI Resource Usage GDI: Avail 10000, Used 0, User: Used 1 
+'  0.259866   1:<<<wait for ForgeUnitsAdapter::configureFolders 
+' 0:< ::0:: Delta VM: Avail -89 -> 134213250 MB, Used +7 -> 40 MB, Peak +7 -> 40 MB; RAM: Avail -73 -> 34525 MB, Used +6 -> 66 MB, Peak +6 -> 66 MB 
+' 0:< GUI Resource Usage GDI: Avail 10000, Used 0, User: Used 2 
+'C 10-Mar-2025 15:42:25.387;  ->loadAllDB (this=000002309635BC40) 
+' 0:< ::0:: Delta VM: Avail -167 -> 134213084 MB, Used +14 -> 55 MB, Peak +14 -> 55 MB; RAM: Avail +1 -> 34526 MB, Used +53 -> 120 MB, Peak +53 -> 120 MB 
+' 0:< GUI Resource Usage GDI: Avail 10000, Used 0, User: Used 2 
+'C 10-Mar-2025 15:42:25.518;  <-loadAllDB (this=000002309635BC40) 
+' 0:< SystemSettings: 
+' 0:<                   16=multiCoreCharacteristic 
+' 0:<                 true=isDotNetInstalled 
+' 0:<                 true=isAspNetInstalled 
+' 0:<               8.0.13=dotNetInstalledVersionString 
+' 0:< ::0:: Delta VM: Avail -123 -> 134212962 MB, Used +11 -> 66 MB, Peak +11 -> 66 MB; RAM: Avail -68 -> 34458 MB, Used +30 -> 150 MB, Peak +30 -> 151 MB 
+' 0:< GUI Resource Usage GDI: Avail 9989, Used 11, User: Used 10 
+' 0:< Autodesk Revit 2027 
+' 0:< 64-bit load point = D:\GitDirectory\Revit\Dev\revit\Releasex64 
+' 0:< this journal = D:\GitDirectory\Revit\Dev_2026\revit\RevitAdditions\RevitSDK\Software Development Kit\Macro Samples\journal.0001.worker1.log 
+'C 10-Mar-2025 15:42:25.971;  Journal Init 
+'C 10-Mar-2025 15:42:25.971;   0:< Log Summary 
+' 0:< .Marshalling 
+' 0:< ...CompactCaching = 1 (Enabled) 
+' 0:< .ThreadPool 
+' 0:< ...ActivePoolSize = 51 
+' 0:< ...ConfiguredPoolSize = automatic 
+' 0:< ...ParallelCores = 16 
+' 0:< ...RequestedPoolSize = automatic 
+' 0:< .Tuning 
+' 0:< ...ElemTable = 1 (Serial except when multithreaded) 
+'C 10-Mar-2025 15:42:25.971;  BC: 0,0,0 
+' 0:< API_SUCCESS { Registered an external service: Name(DirectContext3D Service); VendorId(ADSK); ServiceId(e454a471-b9f3-4cb7-96b1-bab4cf7742a6) } 
+' 0:< API_SUCCESS { Registered an external service: Name(External Data Type Service); VendorId(ADSK); ServiceId(e05a890c-311f-47e5-9652-ebfb7da7663c) } 
+' 0:< API_SUCCESS { Registered an external service: Name(External Resource Service); VendorId(ADSK); ServiceId(b3892e5f-9161-4bbc-958a-c8ef75e94e96) } 
+' 0:< API_SUCCESS { Registered an external service: Name(External Data Type Service); VendorId(ADSK); ServiceId(8b40f7b3-625b-4e63-8f95-0252f3c488ff) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Generic Repository Helper Service); VendorId(ADSK); ServiceId(cf24951a-62aa-4c7c-a26a-cdb1379b3649) } 
+' 0:< API_SUCCESS { Registered an external service: Name(GeometryAugmentationService); VendorId(ADSK); ServiceId(d62a169f-132f-4283-bd7f-1b81c13c9cee) } 
+' 0:< API_SUCCESS { Registered an external service: Name(AXM Importer Service); VendorId(ADSK); ServiceId(af2183c2-e854-41cf-85bb-fe0675f12181) } 
+' 0:< API_SUCCESS { Registered an external service: Name(NavisworksExportService); VendorId(ADSK); ServiceId(a9bdf0fd-2632-429e-bc35-50ebc2b824d2) } 
+' 0:< API_SUCCESS { Registered an external service: Name(External Parameter Service); VendorId(ADSK); ServiceId(0d4ef84e-987b-4106-9a53-2b460ec38abc) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Forge Schema Service); VendorId(ADSK); ServiceId(5ec7ab6b-5971-48f2-8f76-d49930e766d7) } 
+' 0:< API_SUCCESS { Registered an external service: Name(EntitlementExternalService); VendorId(ADSK); ServiceId(9111ab07-9bd9-4b68-a01f-c0a0dcae1564) } 
+' 0:< API_SUCCESS { Registered an external service: Name(ModelAccessValidationService); VendorId(ADSK); ServiceId(584ac31c-5e21-4892-95b5-382680d021bf) } 
+' 0:< API_SUCCESS { Registered an external service: Name(CloudExternalService); VendorId(ADSK); ServiceId(279080e0-8c45-44eb-9027-d4eb37ece90d) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Infrastructure Alignment Information Service.); VendorId(ADSK); ServiceId(7ca4bc09-66de-4fed-93db-5c8e02874e9d) } 
+' 0:< API_SUCCESS { Registered an external service: Name(CustomFieldService); VendorId(ADSK); ServiceId(eb3a8cce-ba50-4b3a-ba8f-b28c8b96fd7d) } 
+' 0:< API_SUCCESS { Registered an external service: Name(ExternalDataManagerService); VendorId(ADSK); ServiceId(f036684f-7c8a-4f51-88aa-12dee1414d7b) } 
+' 0:< API_SUCCESS { Registered an external service: Name(WallPlacementPostProcessingService); VendorId(ADSK); ServiceId(b0568f8a-a32c-4fc8-8c6f-1c2b7be7cefd) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Code Checking Parameter Service); VendorId(ADSK); ServiceId(de6db8de-dea6-40bd-9503-4ffe62ff6143) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Hole Definition Service); VendorId(ADSK); ServiceId(9d39d4fe-6e5f-4088-8655-b349d00e864a) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Modify Connection Ranges of applicability Service); VendorId(ADSK); ServiceId(f04d2d31-5d7d-4ec0-8a2b-c52fbd6d83c5) } 
+' 0:< API_SUCCESS { Registered an external service: Name(FramingProfileService); VendorId(ADSK); ServiceId(b2f816c0-6493-4537-8067-78a4e67f559e) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Modify Connection Parameters Service); VendorId(ADSK); ServiceId(e9c0f948-320e-4e7f-a573-10755555305d) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Connection Type Changed Service); VendorId(ADSK); ServiceId(e31c3100-9cab-4303-b85b-4171703ce1c4) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Section Type Parameter Service); VendorId(ADSK); ServiceId(c42c9b55-c491-4611-97e9-9e617958e13e) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Site Insert Service); VendorId(ADSK); ServiceId(c9979a42-11ab-4c25-93e1-abfb50b7be60) } 
+' 0:< API_SUCCESS { Registered an external service: Name(RebarSpliceService); VendorId(ADSK); ServiceId(79db7e62-4fde-4629-a89e-f0417ea50db3) } 
+' 0:< API_SUCCESS { Registered an external service: Name(RebarUpdateService); VendorId(ADSK); ServiceId(a2c22b44-c231-4d3f-b653-b81b6f8be150) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Path of travel calculator); VendorId(ADSK); ServiceId(ee502325-58ce-4d6e-9a2c-643608b1fbd9) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Internal Forces Service); VendorId(ADSK); ServiceId(a97444aa-af8d-4a1e-af1f-fa7b77b368ee) } 
+' 0:< API_SUCCESS { Registered an external service: Name(ATF Service); VendorId(ADSK); ServiceId(bb3a96c9-e04a-40e4-8ecf-1464dd6aa7eb) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Duct Fitting/Accessory Pressure Drop Calculator); VendorId(ADSK); ServiceId(785d0bd7-3088-489a-af7a-593fc32e2540) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Pipe Fitting/Accessory Pressure Drop Calculator); VendorId(ADSK); ServiceId(b8656566-e4ef-4e6a-bedb-9ecc6b5a2780) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Duct Pressure Drop Calculator); VendorId(ADSK); ServiceId(8c707bd6-ecd6-4150-a0df-bd6c85dd9bb0) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Pipe Pressure Drop Calculator); VendorId(ADSK); ServiceId(62d13e0c-9fe1-4d8e-a0c7-1f93d24cf3f3) } 
+' 0:< API_SUCCESS { Registered an external service: Name(Plumbing Flow Calculator); VendorId(ADSK); ServiceId(bf0da776-5307-4747-8285-f358e92a90d0) } 
+' 0:< API_SUCCESS { Registered an external service: Name(IFC Export Service); VendorId(ADSK); ServiceId(d8b95737-f943-414c-9ad7-86785bf1acbc) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Revit IFC Exporter); VendorId(ADSK); ServerId(ef8d0493-7f36-42b5-b9aa-8aaac716482b); ServiceId(d8b95737-f943-414c-9ad7-86785bf1acbc) } 
+' 0:< API_SUCCESS { Registered an external service: Name(IFC Import Service); VendorId(ADSK); ServiceId(98d317e2-e943-4cc0-a3da-2edf32a5d942) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Revit IFC Importer); VendorId(ADSK); ServerId(660a7370-f6d6-43c8-8456-6b2eea785110); ServiceId(98d317e2-e943-4cc0-a3da-2edf32a5d942) } 
+'C 10-Mar-2025 15:42:25.976;   0:< manage debug modes 
+'C 10-Mar-2025 15:42:25.976;   0:< MFCApp::testGraphicsHardware 
+' 0:< Revit Graphics Information 
+' 0:< 	Current Mode : DirectX Hardware 
+' 0:< 	Use Hardware: ON 
+' 0:< 	Use Overlays : ON 
+' 0:< ::0:: Delta VM: Avail -2 -> 134212961 MB, Used +2 -> 69 MB, Peak +10 -> 76 MB; RAM: Avail -21 -> 34438 MB, Used +3 -> 154 MB, Peak +6 -> 157 MB 
+' 0:< GUI Resource Usage GDI: Avail 9989, Used 11, User: Used 10 
+' 0:< 
+'OGS Device Memory Size: 36628 MB 
+' 0:< ::0:: Delta VM: Avail -380 -> 134212581 MB, Used +172 -> 241 MB, Peak +164 -> 241 MB; RAM: Avail -112 -> 34326 MB, Used +36 -> 190 MB, Peak +33 -> 190 MB 
+' 0:< GUI Resource Usage GDI: Avail 9989, Used 11, User: Used 12 
+' 0:< DX Device: DirectX 11, Hardware 
+' 0:< DX Device: DirectX 11, WARP 
+' 0:< ::0:: Delta VM: Avail -7 -> 134212574 MB, Used +1 -> 243 MB, Peak +3 -> 244 MB; RAM: Avail -11 -> 34315 MB, Used +2 -> 192 MB, Peak +3 -> 194 MB 
+' 0:< GUI Resource Usage GDI: Avail 9989, Used 11, User: Used 12 
+' 0:< VIDEO CARD ENVIRONMENT: CARD="NVIDIA T1000" ManufacturerID="10DE" DeviceID="8112" DRIVER="32.0.15.5618" DEVICE="DX11" FL_Caps="50" (Shader Model) 
+'C 10-Mar-2025 15:42:26.832;   0:< MFCApp::testMSAA 
+' 0:< Revit Graphics Information 
+' 0:< 	Current Mode : DirectX Hardware 
+' 0:< 	Use Hardware: ON 
+' 0:< 	Use Overlays : ON 
+'C 10-Mar-2025 15:42:26.834;  <-UI-less InitNativeInstance 
+'C 10-Mar-2025 15:42:26.834;  ->UI-less InitManagedInstance 
+' 0:< ::0:: Delta VM: Avail -264683 -> 133947891 MB, Used +18 -> 261 MB, Peak +21 -> 266 MB; RAM: Avail -90 -> 34226 MB, Used +53 -> 246 MB, Peak +55 -> 249 MB 
+' 0:< GUI Resource Usage GDI: Avail 9989, Used 11, User: Used 13 
+' 0:< To make IFC server work. 
+' 0:< ::0:: Delta VM: Avail -124 -> 133947768 MB, Used +12 -> 274 MB, Peak +7 -> 274 MB; RAM: Avail -88 -> 34138 MB, Used +74 -> 321 MB, Peak +71 -> 321 MB 
+' 0:< GUI Resource Usage GDI: Avail 9989, Used 11, User: Used 13 
+' 0:< The requested assembly 'Autodesk.ATFTranslationServer.DBApplication, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ATFTranslationServer' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ATFTranslationServer\Autodesk.ATFTranslationServer.DBApplication.dll'. 
+' 0:< The requested assembly 'Autodesk.BendingDetails.DB, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Rebar' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Rebar\Autodesk.BendingDetails.DB.dll'. 
+' 0:< The requested assembly 'Autodesk.CoordinationModelDB, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\CoordinationModel' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\CoordinationModel\Autodesk.CoordinationModelDB.dll'. 
+' 0:< The requested assembly 'Autodesk.Entitlement.Utilities, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'MODELBROWSER' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ModelBrowser\Autodesk.Entitlement.Utilities.dll'. 
+' 0:< The requested assembly 'Autodesk.FreeFormRebar.DB, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Rebar' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Rebar\Autodesk.FreeFormRebar.DB.dll'. 
+' 0:< The requested assembly 'Autodesk.LightboxDB, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'LIGHTBOX' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Lightbox\Autodesk.LightboxDB.dll'. 
+' 0:< The requested assembly 'Autodesk.LinkTopography.Parser, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SiteLinker' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SiteLinker\Autodesk.LinkTopography.Parser.dll'. 
+' 0:< The requested assembly 'Autodesk.ParametersService.DB, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ParametersServiceDB' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ParametersServiceDB\Autodesk.ParametersService.DB.dll'. 
+' 0:< The requested assembly 'Autodesk.RebarSplice.DB, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Rebar' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Rebar\Autodesk.RebarSplice.DB.dll'. 
+' 0:< The requested assembly 'Autodesk.Reinforcement.Utilities, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Rebar' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Rebar\Autodesk.Reinforcement.Utilities.dll'. 
+' 0:< The requested assembly 'Autodesk.Revit.CloudWorksharing.ModelOperations, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\CloudWorksharing' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\CloudWorksharing\Autodesk.Revit.CloudWorksharing.ModelOperations.dll'. 
+' 0:< The requested assembly 'Autodesk.Revit.CloudWorksharing.DocumentManagement, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\CloudWorksharing' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\CloudWorksharing\Autodesk.Revit.CloudWorksharing.DocumentManagement.dll'. 
+' 0:< The requested assembly 'Autodesk.RouteAnalysis.DBApplication, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'ROUTEANALYSIS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\RouteAnalysis\Autodesk.RouteAnalysis.DBApplication.dll'. 
+' 0:< The requested assembly 'Autodesk.SteelConnectionsDB, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\Autodesk.SteelConnectionsDB.dll'. 
+' 0:< The requested assembly 'ConnectedDesktopDB, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'CONNECTEDDESKTOP' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ConnectedDesktop\ConnectedDesktopDB.dll'. 
+' 0:< The requested assembly 'ElectricalAnalyticalCurrentCalculation.DBApplication, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'ELECTRICALANALYSIS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ElectricalAnalyticalCurrentCalculation\ElectricalAnalyticalCurrentCalculation.DBApplication.dll'. 
+' 0:< The requested assembly 'AXMImporter, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\FormItConverter' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\FormItConverter\AXMImporter.dll'. 
+' 0:< The requested assembly 'KeynoteDBServer, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'KEYNOTE' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Keynote\KeynoteDBServer.dll'. 
+' 0:< The requested assembly 'Autodesk.MEP.SegmentCalculation.DBApplication, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'MEPCALCULATION' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\MEPCalculation\Autodesk.MEP.SegmentCalculation.DBApplication.dll'. 
+' 0:< ::0:: Delta VM: Avail -4 -> 133947764 MB, Used +3 -> 278 MB, Peak +3 -> 278 MB; RAM: Avail -11 -> 34127 MB, Used +5 -> 326 MB, Peak +5 -> 326 MB 
+' 0:< GUI Resource Usage GDI: Avail 9989, Used 11, User: Used 13 
+' 0:< The requested assembly 'Autodesk.MEP.FittingCalculation.DBApplication, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'MEPCALCULATION' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\MEPCalculation\Autodesk.MEP.FittingCalculation.DBApplication.dll'. 
+' 0:< API_SUCCESS { Registering ApplicationInitialized event by application ATF Translation Server (fa3d130b-2b6b-45be-8734-67536086143f). } 
+' 0:< API_SUCCESS { Starting External DB Application: ATF Translation Server, Class: ATFTranslationServer.ATFTranslationServerRegister, Vendor : ADSK(Autodesk, www.autodesk.com), Assembly: D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ATFTranslationServer\Autodesk.ATFTranslationServer.DBApplication.dll, Assembly Version: 27.0.0.0 } 
+' 0:< API_SUCCESS { Registering DocumentCreated event by application Bending Details DB (51e28eba-853f-46e6-b233-2fd7547383cb). } 
+' 0:< API_SUCCESS { Registering DocumentOpened event by application Bending Details DB (51e28eba-853f-46e6-b233-2fd7547383cb). } 
+' 0:< API_SUCCESS { Registering DocumentClosing event by application Bending Details DB (51e28eba-853f-46e6-b233-2fd7547383cb). } 
+' 0:< API_SUCCESS { Registering DocumentChanged event by application Bending Details DB (51e28eba-853f-46e6-b233-2fd7547383cb). } 
+' 0:< API_SUCCESS { Registered an external server: Name(Bending Detail Schedule Field); VendorId(ADSK); ServerId(2e2052d7-fd50-410f-b931-dc249f698bcf); ServiceId(eb3a8cce-ba50-4b3a-ba8f-b28c8b96fd7d) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Bending Detail); VendorId(ADSK); ServerId(52391e2b-b85f-4d2f-94e0-7caca94cb6ad); ServiceId(d62a169f-132f-4283-bd7f-1b81c13c9cee) } 
+' 0:< Third Party Updater 'Bending Details DB: Bending Details' registered for all documents. 
+' 0:< Third Party Updater 'Bending Details DB: Bending Detail geometry updater' registered for all documents. 
+' 0:< Third Party Updater 'Bending Details DB: Reset Bending Details Geometry Transformations Updater' registered for all documents. 
+' 0:< API_SUCCESS { Starting External DB Application: Bending Details DB, Class: BendingDetails.BendingDetails, Vendor : ADSK(), Assembly: D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Rebar\Autodesk.BendingDetails.DB.dll, Assembly Version: 27.0.0.0 } 
+' 0:< Third Party Updater 'AlignmentsDB: Update or delete alignment station labels.' registered for all documents. 
+' 0:< Third Party Updater 'AlignmentsDB: Update alignment depending on units.' registered for all documents. 
+' 0:< API_SUCCESS { Registered an external server: Name(AecAlignment Server); VendorId(ADSK); ServerId(0558397d-5761-4a0d-8883-42a166446d81); ServiceId(7ca4bc09-66de-4fed-93db-5c8e02874e9d) } 
+' 0:< API_SUCCESS { Starting External DB Application: AlignmentsDB, Class: Autodesk.Revit.DB.Infrastructure.AlignmentsDBApplication, Vendor : ADSK(Autodesk, www.autodesk.com), Assembly: D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\CivilAlignments\Autodesk.CivilAlignments.DBApplication.dll, Assembly Version: 27.0.0.0 } 
+' 0:< ExternalDBApplication Autodesk.CoordinationModelDB.CoordinationModelDBApplication (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\CoordinationModel\Autodesk.CoordinationModelDB.dll) was not loaded in RevitWorker 
+' 0:< ExternalDBApplication EntitlementDB.EntitlementDBApplication (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ModelBrowser\Autodesk.Entitlement.Utilities.dll) was not loaded in RevitWorker 
+' 0:< ::0:: Delta VM: Avail 133947764 MB, Used 278 MB; RAM: Avail -11 -> 34117 MB, Used +5 -> 332 MB, Peak +5 -> 332 MB 
+' 0:< GUI Resource Usage GDI: Avail 9989, Used 11, User: Used 13 
+' 0:< API_SUCCESS { Registered an external server: Name(Surface Distribution Server); VendorId(ADSK); ServerId(88e37c6b-3ad6-4de3-a610-fcadcbb3021c); ServiceId(a2c22b44-c231-4d3f-b653-b81b6f8be150) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Transversal Reinforcement Server ); VendorId(ADSK); ServerId(78ce2a95-71e7-4fe2-96ee-a38554320ea6); ServiceId(a2c22b44-c231-4d3f-b653-b81b6f8be150) } 
+' 0:< API_SUCCESS { Starting External DB Application: Free Form Rebar, Class: FreeFormRebar.FreeFormRebar, Vendor : ADSK(https://knowledge.autodesk.com/search?search=Free%20Form%20Rebar&p=REVITPRODUCTS&sort=score), Assembly: D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Rebar\Autodesk.FreeFormRebar.DB.dll, Assembly Version: 27.0.0.0 } 
+' 0:< ExternalDBApplication Autodesk.LightboxDB.Main (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Lightbox\Autodesk.LightboxDB.dll) was not loaded in RevitWorker 
+' 0:< ExternalDBApplication SiteLinker.SiteServerApp (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SiteLinker\Autodesk.LinkTopography.Parser.dll) was not loaded in RevitWorker 
+' 0:< ExternalDBApplication ParametersServiceDB.Application (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ParametersServiceDB\Autodesk.ParametersService.DB.dll) was not loaded in RevitWorker 
+' 0:< API_SUCCESS { Registered an external server: Name(RebarSplitService); VendorId(ADSK); ServerId(58d030c8-9a9c-4b9c-bf24-bcfc31383ed7); ServiceId(79db7e62-4fde-4629-a89e-f0417ea50db3) } 
+' 0:< Third Party Updater 'Rebar Splice: Rebar Layout Updater' registered for all documents. 
+' 0:< Third Party Updater 'Rebar Splice: Shift Bars Updater' registered for all documents. 
+' 0:< API_SUCCESS { Starting External DB Application: Rebar Splice, Class: RebarSplice.RebarSplice, Vendor : ADSK(), Assembly: D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Rebar\Autodesk.RebarSplice.DB.dll, Assembly Version: 27.0.0.0 } 
+' 0:< API_SUCCESS { Starting External DB Application: Reinforcement Common Utilities, Class: ReinforcementUtilities.ReinforcementUtilitiesApp, Vendor : ADSK(), Assembly: D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Rebar\Autodesk.Reinforcement.Utilities.dll, Assembly Version: 27.0.0.0 } 
+' 0:< ExternalDBApplication Autodesk.Revit.CloudWorksharing.ModelOperations.ModelOperationsApplication (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\CloudWorksharing\Autodesk.Revit.CloudWorksharing.ModelOperations.dll) was not loaded in RevitWorker 
+' 0:< ExternalDBApplication Autodesk.Revit.CloudWorksharing.DocumentManagement.DocumentManagementApplication (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\CloudWorksharing\Autodesk.Revit.CloudWorksharing.DocumentManagement.dll) was not loaded in RevitWorker 
+' 0:< ExternalDBApplication Autodesk.Revit.ApplicationExtensions.ApplicationExtensionsApplication (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ExtendedAPIs\Autodesk.Revit.ApplicationExtensions.dll) was not loaded in RevitWorker 
+' 0:< ExternalDBApplication Autodesk.Revit.DocumentExtensions.DocumentExtensionsApplication (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ExtendedAPIs\Autodesk.Revit.DocumentExtensions.dll) was not loaded in RevitWorker 
+' 0:< ExternalDBApplication Autodesk.Revit.CloudConfiguration.CloudConfigurationApplication (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ExtendedAPIs\Autodesk.Revit.CloudConfiguration.dll) was not loaded in RevitWorker 
+' 0:< ExternalDBApplication Autodesk.Revit.CloudWorksharing.Clients.CloudWorksharingClientsApplication (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ExtendedAPIs\Autodesk.Revit.CloudWorksharing.Clients.dll) was not loaded in RevitWorker 
+' 0:< ExternalDBApplication Autodesk.Revit.CloudWorksharing.DocumentExtensions.CloudWorksharingDocumentExtensionsApplication (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ExtendedAPIs\Autodesk.Revit.CloudWorksharing.DocumentExtensions.dll) was not loaded in RevitWorker 
+' 0:< ExternalDBApplication Autodesk.Revit.CloudWorksharing.ModelData.CloudWorksharingModelDataApplication (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ExtendedAPIs\Autodesk.Revit.CloudWorksharing.ModelData.dll) was not loaded in RevitWorker 
+' 0:< ExternalDBApplication Autodesk.Revit.CloudWorksharing.ModelEditingPermissions.CloudWorksharingModelEditingPermissionsApplication (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ExtendedAPIs\Autodesk.Revit.CloudWorksharing.ModelEditingPermissions.dll) was not loaded in RevitWorker 
+' 0:< The requested assembly 'Simulex.Net, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'ROUTEANALYSIS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\RouteAnalysis\Simulex.Net.dll'. 
+' 0:< API_SUCCESS { Registering DocumentClosing event by application Route Analysis (40e082fd-2661-4bbb-83f0-e960745a72a2). } 
+' 0:< API_SUCCESS { Registering DocumentChanged event by application Route Analysis (40e082fd-2661-4bbb-83f0-e960745a72a2). } 
+' 0:< API_SUCCESS { Registered an external server: Name(Simulex (tm) Calculation); VendorId(ADSK); ServerId(3ac50ffe-852f-4a77-941f-851ddfbcbd57); ServiceId(ee502325-58ce-4d6e-9a2c-643608b1fbd9) } 
+' 0:< API_SUCCESS { Starting External DB Application: Route Analysis, Class: RouteAnalysisDB.RouteAnalysisDBApplication, Vendor : ADSK(https://knowledge.autodesk.com/search?p=REVITPRODUCTS&search=Path%20of%20Travel&sort=score&page=1&knowledgeSource=Product%20Documentation), Assembly: D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\RouteAnalysis\Autodesk.RouteAnalysis.DBApplication.dll, Assembly Version: 27.0.0.0 } 
+' 0:< The requested assembly 'ASSettings, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\ASSettings.dll'. 
+' 0:< ::0:: Delta VM: Avail -6 -> 133947759 MB, Used +2 -> 281 MB, Peak +2 -> 281 MB; RAM: Avail -13 -> 34104 MB, Used +7 -> 339 MB, Peak +7 -> 339 MB 
+' 0:< GUI Resource Usage GDI: Avail 9989, Used 11, User: Used 13 
+' 0:< API_SUCCESS { Registering DocumentCreating event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< API_SUCCESS { Registering DocumentCreated event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< API_SUCCESS { Registering DocumentOpening event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< API_SUCCESS { Registering DocumentOpened event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< API_SUCCESS { Registering DocumentClosing event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< API_SUCCESS { Registering DocumentSaving event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< API_SUCCESS { Registering DocumentSavingAs event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< API_SUCCESS { Registering DocumentSaved event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< API_SUCCESS { Registering DocumentSavedAs event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< API_SUCCESS { Registering DocumentChanged event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< API_SUCCESS { Registering DocumentClosed event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< API_SUCCESS { Registering LinkedResourceOpened event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< API_SUCCESS { Registering LinkedResourceOpening event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< API_SUCCESS { Registering DocumentSynchronizingWithCentral event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< API_SUCCESS { Registering DocumentSynchronizedWithCentral event by application Steel Connections DB extension (9f2e732a-289e-4185-b701-15d33c31653f). } 
+' 0:< Third Party Updater 'Steel Connections DB extension: Steel Fabrication Updater' registered for all documents. 
+' 0:< ::0:: Delta VM: Avail -37 -> 133947722 MB, Used +5 -> 286 MB, Peak +5 -> 286 MB; RAM: Avail +14 -> 34119 MB, Used +16 -> 355 MB, Peak +16 -> 356 MB 
+' 0:< GUI Resource Usage GDI: Avail 9989, Used 11, User: Used 13 
+' 0:< The requested assembly 'ASObjectsMgd, Version=1.0.9197.9558, Culture=neutral, PublicKeyToken=null' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\ASObjectsMgd.dll'. 
+' 0:< The requested assembly 'ASSettingsMgd, Version=1.0.9197.9209, Culture=neutral, PublicKeyToken=null' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\ASSettingsMgd.dll'. 
+' 0:< The requested assembly 'ASCADLinkMgd, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\ASCADLinkMgd.dll'. 
+' 0:< The requested assembly 'AsRealDWGLoaderMgd, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\AsRealDWGLoaderMgd.dll'. 
+' 0:< ::0:: Delta VM: Avail -15 -> 133947707 MB, Used +3 -> 289 MB, Peak +3 -> 289 MB; RAM: Avail +1 -> 34121 MB, Used +4 -> 360 MB, Peak +3 -> 360 MB 
+' 0:< GUI Resource Usage GDI: Avail 9989, Used 11, User: Used 13 
+' 0:< Loading DWG Library 
+' 0:< ::0:: Delta VM: Avail -150 -> 133947558 MB, Used +13 -> 303 MB, Peak +13 -> 303 MB; RAM: Avail -171 -> 33950 MB, Used +31 -> 391 MB, Peak +31 -> 391 MB 
+' 0:< GUI Resource Usage GDI: Avail 9988, Used 12, User: Used 13 
+' 0:< Loaded DWG Library 
+' 0:< The requested assembly 'ASRepository, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\ASRepository.dll'. 
+' 0:< ::0:: Delta VM: Avail -17 -> 133947541 MB, Used 303 MB; RAM: Avail +2 -> 33953 MB, Used +1 -> 392 MB, Peak +1 -> 392 MB 
+' 0:< GUI Resource Usage GDI: Avail 9988, Used 12, User: Used 13 
+' 0:< The requested assembly 'SqlLocalDbManMgd, Version=1.0.9197.9208, Culture=neutral, PublicKeyToken=null' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\SqlLocalDbManMgd.dll'. 
+'C 10-Mar-2025 15:42:30.273;   0:< Checking SQL instance SteelConnections2026 health... 
+' 0:< ::0:: Delta VM: Avail +7 -> 133947549 MB, Used +2 -> 306 MB, Peak +2 -> 306 MB; RAM: Avail +665 -> 34619 MB, Used +3 -> 395 MB, Peak +3 -> 395 MB 
+' 0:< GUI Resource Usage GDI: Avail 9988, Used 12, User: Used 13 
+'C 10-Mar-2025 15:42:31.291;   0:< Updating Steel Connections content from  to 40 
+'C 10-Mar-2025 15:42:31.331;   0:< Unpack Steel Connections databases to D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\en-US. 
+' 0:< ::0:: Delta VM: Avail -10 -> 133947539 MB, Used +0 -> 307 MB, Peak +0 -> 307 MB; RAM: Avail -671 -> 33949 MB, Used +1 -> 397 MB, Peak +1 -> 397 MB 
+' 0:< GUI Resource Usage GDI: Avail 9988, Used 12, User: Used 13 
+'C 10-Mar-2025 15:42:32.479;   0:< Testing connection to Steel Connections databases... 
+' 0:< The requested assembly 'System.Data.SqlClient, Version=4.6.1.6, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\System.Data.SqlClient.dll'. 
+' 0:< ::0:: Delta VM: Avail -21 -> 133947519 MB, Used +3 -> 310 MB, Peak +3 -> 310 MB; RAM: Avail +525 -> 34474 MB, Used +13 -> 411 MB, Peak +13 -> 411 MB 
+' 0:< GUI Resource Usage GDI: Avail 9988, Used 12, User: Used 13 
+'C 10-Mar-2025 15:42:38.857;   0:< Init AS: Databases prepared 
+'C 10-Mar-2025 15:42:38.857;   0:< Init AS: Managed components initialized 
+' 0:< ::0:: Delta VM: Avail -11 -> 133947508 MB, Used +5 -> 316 MB, Peak +5 -> 316 MB; RAM: Avail -39 -> 34436 MB, Used +11 -> 422 MB, Peak +11 -> 422 MB 
+' 0:< GUI Resource Usage GDI: Avail 9988, Used 12, User: Used 13 
+' 0:< The requested assembly 'ASNetRuntime, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\ASNetRuntime.dll'. 
+' 0:< ::0:: Delta VM: Avail -28 -> 133947481 MB, Used +6 -> 322 MB, Peak +6 -> 322 MB; RAM: Avail -15 -> 34421 MB, Used +16 -> 438 MB, Peak +16 -> 438 MB 
+' 0:< GUI Resource Usage GDI: Avail 9988, Used 12, User: Used 13 
+' 0:< The requested assembly 'EntityFramework, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\EntityFramework.dll'. 
+' 0:< The requested assembly 'EntityFramework.SqlServer, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\EntityFramework.SqlServer.dll'. 
+' 0:< ::0:: Delta VM: Avail -42 -> 133947439 MB, Used +16 -> 338 MB, Peak +16 -> 338 MB; RAM: Avail -217 -> 34204 MB, Used +58 -> 497 MB, Peak +58 -> 497 MB 
+' 0:< GUI Resource Usage GDI: Avail 9988, Used 12, User: Used 13 
+' 0:< The requested assembly 'Autodesk.SteelConnections.ASRvtModeler, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\Autodesk.SteelConnections.ASRvtModeler.dll'. 
+' 0:< ::0:: Delta VM: Avail 133947439 MB, Used +0 -> 339 MB, Peak +0 -> 339 MB; RAM: Avail -13 -> 34192 MB, Used 497 MB 
+' 0:< GUI Resource Usage GDI: Avail 9988, Used 12, User: Used 13 
+' 0:< The requested assembly 'ASModelerMgd, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\ASModelerMgd.dll'. 
+' 0:< The requested assembly 'ASGeometryMgd, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\ASGeometryMgd.dll'. 
+' 0:< The requested assembly 'RevitAssemblyResolver, Version=27.0.0.0, Culture=neutral, PublicKeyToken=null' was loaded to the context 'STEELCONNECTIONS' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\RevitAssemblyResolver.dll'. 
+' 0:< API_SUCCESS { Starting External DB Application: Steel Connections DB extension, Class: Autodesk.SteelConnectionsDB.Main, Vendor : ADSK(https://knowledge.autodesk.com/search?search=detailed%20steel%20modeling&p=REVITPRODUCTS&sort=score), Assembly: D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\SteelConnections\Autodesk.SteelConnectionsDB.dll, Assembly Version: 27.0.0.0 } 
+' 0:< ExternalDBApplication ConnectedDesktopDB.ServerApp (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ConnectedDesktop\ConnectedDesktopDB.dll) was not loaded in RevitWorker 
+' 0:< ExternalDBApplication ElectricalAnalyticalCurrentCalculation.AnalyticalCurrentCalculationServerRegister (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\ElectricalAnalyticalCurrentCalculation\ElectricalAnalyticalCurrentCalculation.DBApplication.dll) was not loaded in RevitWorker 
+' 0:< ExternalDBApplication AXMImporterWrapper.AXMImporterApp (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\FormItConverter\AXMImporter.dll) was not loaded in RevitWorker 
+' 0:< ExternalDBApplication KeynoteDBServer.ServerApp (D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\Keynote\KeynoteDBServer.dll) was not loaded in RevitWorker 
+' 0:< API_SUCCESS { Registered an external server: Name(Plumbing Fixture Flow); VendorId(ADSK); ServerId(56121d7d-e1d7-42a3-bed8-f4d1d32058c8); ServiceId(bf0da776-5307-4747-8285-f358e92a90d0) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Altshul-Tsal Equation); VendorId(ADSK); ServerId(042a10e0-8d24-46a4-9596-d192b3125d0c); ServiceId(8c707bd6-ecd6-4150-a0df-bd6c85dd9bb0) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Haaland Equation); VendorId(USERADDIN); ServerId(2e9a77c0-62a0-4693-9442-33312be60ad7); ServiceId(8c707bd6-ecd6-4150-a0df-bd6c85dd9bb0) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Haaland Equation); VendorId(USERADDIN); ServerId(58ea1b7c-2fca-453f-9ab9-7a3b9927ecc1); ServiceId(62d13e0c-9fe1-4d8e-a0c7-1f93d24cf3f3) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Colebrook Equation); VendorId(USERADDIN); ServerId(e395a0ec-48a4-4255-b957-afbb3d73cb67); ServiceId(8c707bd6-ecd6-4150-a0df-bd6c85dd9bb0) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Colebrook Equation); VendorId(USERADDIN); ServerId(0875f550-6141-4e34-a6b7-547cf9cfda01); ServiceId(62d13e0c-9fe1-4d8e-a0c7-1f93d24cf3f3) } 
+' 0:< API_SUCCESS { Starting External DB Application: Straight Segment Pressure Drop Servers, Class: StraightSegmentCalculationServers.ServerApp, Vendor : ADSK(https://knowledge.autodesk.com/search?p=REVITPRODUCTS&search=Pipe%20Pressure%20Drop&sort=score&page=1&knowledgeSource=Product%20Documentation), Assembly: D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\MEPCalculation\Autodesk.MEP.SegmentCalculation.DBApplication.dll, Assembly Version: 27.0.0.0 } 
+' 0:< ::0:: Delta VM: Avail -5 -> 133947434 MB, Used 339 MB; RAM: Avail -14 -> 34178 MB, Used +3 -> 501 MB, Peak +3 -> 501 MB 
+' 0:< GUI Resource Usage GDI: Avail 9988, Used 12, User: Used 13 
+' 0:< The requested assembly 'Autodesk.MEP.FittingCalculationCLI.Application, Version=1.0.9200.26010, Culture=neutral, PublicKeyToken=null' was loaded to the context 'MEPCALCULATION' from 'D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\MEPCalculation\Autodesk.MEP.FittingCalculationCLI.Application.dll'. 
+' 0:< API_SUCCESS { Registered an external server: Name(Not Defined); VendorId(ADSK); ServerId(76eff5da-2e71-45f7-b940-cc5716328ba0); ServiceId(785d0bd7-3088-489a-af7a-593fc32e2540) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Coefficient from ASHRAE Table); VendorId(ADSK); ServerId(8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19); ServiceId(785d0bd7-3088-489a-af7a-593fc32e2540) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Specific Coefficient); VendorId(ADSK); ServerId(5a598293-1504-46cc-a9c0-de55c82848b9); ServiceId(785d0bd7-3088-489a-af7a-593fc32e2540) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Specific Loss); VendorId(ADSK); ServerId(46245996-eebb-4536-ac17-9c1cd917d8cf); ServiceId(785d0bd7-3088-489a-af7a-593fc32e2540) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Not Defined); VendorId(ADSK); ServerId(61e7b8e1-16d1-4fe4-82f0-327af736323f); ServiceId(b8656566-e4ef-4e6a-bedb-9ecc6b5a2780) } 
+' 0:< API_SUCCESS { Registered an external server: Name(K Coefficient from Table); VendorId(ADSK); ServerId(51dd5e98-a9dd-464b-b286-4a37953610bf); ServiceId(b8656566-e4ef-4e6a-bedb-9ecc6b5a2780) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Specific Coefficient); VendorId(ADSK); ServerId(32d58662-b467-4f7b-b728-f6ad7b7ba5e3); ServiceId(b8656566-e4ef-4e6a-bedb-9ecc6b5a2780) } 
+' 0:< API_SUCCESS { Registered an external server: Name(Specific Loss); VendorId(ADSK); ServerId(16f4f7be-0ac0-461d-a9a4-1d3511cd280e); ServiceId(b8656566-e4ef-4e6a-bedb-9ecc6b5a2780) } 
+' 0:< API_SUCCESS { Starting External DB Application: Fitting And Accessory Pressure Drop Servers, Class: FittingAndAccessoryCalculationServers.ServerApp, Vendor : ADSK(https://knowledge.autodesk.com/search?p=REVITPRODUCTS&search=Fitting%20Pressure%20Loss&sort=score&page=1&knowledgeSource=Product%20Documentation), Assembly: D:\GitDirectory\Revit\Dev\revit\Releasex64\AddIns\MEPCalculation\Autodesk.MEP.FittingCalculation.DBApplication.dll, Assembly Version: 27.0.0.0 } 
+' 1:< API_SUCCESS { Registered an external server: Name(ATFTranslationServer); VendorId(ADSK); ServerId(252f643e-9927-4c06-a704-4a8b3587b979); ServiceId(bb3a96c9-e04a-40e4-8ecf-1464dd6aa7eb) } 
+'C 10-Mar-2025 15:42:40.441;  <-UI-less InitManagedInstance 
+'C 10-Mar-2025 15:42:40.441;   0:< RevitWorker.exe 1 
+'C 10-Mar-2025 15:42:40.441;   0:< Start RevitProcessMonitor 
+'C 10-Mar-2025 15:42:40.441;  BC: 0,0,0 
+'C 10-Mar-2025 15:42:40.442;   0:< logging worker opened main queue Session43044_P0MainQueue 
+'C 10-Mar-2025 15:42:40.442;   0:< logging worker opened worker queue Session43044_P1WorkerQueue 
+'C 10-Mar-2025 15:42:40.443;   0:< logging started queue minder  
+'C 10-Mar-2025 15:42:40.443;   0:< logging started worker services  
+'C 10-Mar-2025 15:42:40.443;  ->Worker accepting requests 

@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### SubVersionNumber Property
+
+---
+
+
+
+|  |
+| --- |
+| [ControlledApplication Class](35859972-2407-3910-cb07-bbb337e307e6.htm)   [See Also](#seeAlsoToggle) |
+
+The minor version number of Revit
+
+**Namespace:**   [Autodesk.Revit.ApplicationServices](91957e18-2935-006c-83ab-3b5b9dbb5928.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 18.0.0.0 (18.2.0.0)   
+  **Since:**  2018
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public string SubVersionNumber { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property SubVersionNumber As String 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property String^ SubVersionNumber { 	String^ get (); } ``` |
+
+# Remarks
+
+SubVersionNumber of Revit may have additional APIs and functionality not available in the standard customer releases. Add-ins written to support standard Revit releases should be compatible with SubVersionNumber releases, but add-ins written specifically targeting new features in SubVersionNumber releases would not be compatible with the standard releases.
+
+# See Also
+
+[ControlledApplication Class](35859972-2407-3910-cb07-bbb337e307e6.htm)
+
+[Autodesk.Revit.ApplicationServices Namespace](91957e18-2935-006c-83ab-3b5b9dbb5928.htm)

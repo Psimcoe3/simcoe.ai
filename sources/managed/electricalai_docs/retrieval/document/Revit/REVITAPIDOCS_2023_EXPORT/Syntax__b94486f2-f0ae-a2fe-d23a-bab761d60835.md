@@ -1,0 +1,51 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetRoomIds Method
+
+---
+
+
+
+|  |
+| --- |
+| [PlanTopology Class](32cd44a8-9c84-47c4-5c8e-853559f05d41.htm)   [See Also](#seeAlsoToggle) |
+
+Retrieves room ElementIds of the PlanTopology in the last phase.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ICollection<ElementId> GetRoomIds() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetRoomIds As ICollection(Of ElementId) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: ICollection<ElementId^>^ GetRoomIds() ``` |
+
+#### Return Value
+
+The PlanTopology Room ElementIds of the last phase.
+
+# Remarks
+
+The Rooms Ids returned are in the phase of PlanTopology and the current design option.
+
+# See Also
+
+[PlanTopology Class](32cd44a8-9c84-47c4-5c8e-853559f05d41.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

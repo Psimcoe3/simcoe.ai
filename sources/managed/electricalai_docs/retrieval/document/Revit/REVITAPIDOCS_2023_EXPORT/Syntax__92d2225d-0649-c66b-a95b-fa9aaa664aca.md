@@ -1,0 +1,42 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CopingWarningOffset Property
+
+---
+
+
+
+|  |
+| --- |
+| [BuiltInFailures ColumnInsideWallFailures Class](e0abe33f-94f2-752e-c8b0-a2f990b4f9be.htm)   [See Also](#seeAlsoToggle) |
+
+Coping applied, but no cut was made. Adjust Coping Distance or Offset parameters.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static FailureDefinitionId CopingWarningOffset { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared ReadOnly Property CopingWarningOffset As FailureDefinitionId 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static property FailureDefinitionId^ CopingWarningOffset { 	FailureDefinitionId^ get (); } ``` |
+
+# See Also
+
+[BuiltInFailures ColumnInsideWallFailures Class](e0abe33f-94f2-752e-c8b0-a2f990b4f9be.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

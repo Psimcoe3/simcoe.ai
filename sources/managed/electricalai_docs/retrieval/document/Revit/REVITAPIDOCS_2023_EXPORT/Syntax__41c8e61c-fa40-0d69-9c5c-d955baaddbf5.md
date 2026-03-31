@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### StorageType Property
+
+---
+
+
+
+|  |
+| --- |
+| [ColorFillScheme Class](c405eb5b-14fa-0fea-a750-dcd9925a90b0.htm)   [See Also](#seeAlsoToggle) |
+
+Represents the type of parameter values stored in entries.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2022
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public StorageType StorageType { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property StorageType As StorageType 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property StorageType StorageType { 	StorageType get (); } ``` |
+
+# See Also
+
+[ColorFillScheme Class](c405eb5b-14fa-0fea-a750-dcd9925a90b0.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

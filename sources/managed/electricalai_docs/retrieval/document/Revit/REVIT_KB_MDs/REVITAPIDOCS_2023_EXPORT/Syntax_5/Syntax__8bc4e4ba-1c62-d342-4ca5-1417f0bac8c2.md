@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetNormals Method
+
+---
+
+
+
+|  |
+| --- |
+| [PolymeshTopology Class](fef5982c-3825-eed0-f792-1e0bff5509c2.htm)   [See Also](#seeAlsoToggle) |
+
+Returns all normals assigned to the polymesh
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public IList<XYZ> GetNormals() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetNormals As IList(Of XYZ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: IList<XYZ^>^ GetNormals() ``` |
+
+#### Return Value
+
+An array of XYZ values, each representing a normal vector
+
+# See Also
+
+[PolymeshTopology Class](fef5982c-3825-eed0-f792-1e0bff5509c2.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

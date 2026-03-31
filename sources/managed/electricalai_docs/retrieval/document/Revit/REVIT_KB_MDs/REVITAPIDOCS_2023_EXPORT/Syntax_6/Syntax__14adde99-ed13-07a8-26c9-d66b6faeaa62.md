@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### ActualTreadsNumber Property
+
+---
+
+
+
+|  |
+| --- |
+| [StairsRun Class](ea0e49a0-a007-79d0-c902-a24b1359ae28.htm)   [See Also](#seeAlsoToggle) |
+
+The actual number of stairs treads in the stairs run.
+
+**Namespace:**   [Autodesk.Revit.DB.Architecture](720f0c58-cb2b-4f13-374a-7348ed0a1cd3.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public int ActualTreadsNumber { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property ActualTreadsNumber As Integer 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property int ActualTreadsNumber { 	int get (); } ``` |
+
+# Remarks
+
+This is a read-only value.
+
+# See Also
+
+[StairsRun Class](ea0e49a0-a007-79d0-c902-a24b1359ae28.htm)
+
+[Autodesk.Revit.DB.Architecture Namespace](720f0c58-cb2b-4f13-374a-7348ed0a1cd3.htm)

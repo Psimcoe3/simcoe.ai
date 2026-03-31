@@ -1,0 +1,65 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IsValidType Method (PanelScheduleType)
+
+---
+
+
+
+|  |
+| --- |
+| [PanelScheduleTemplate Class](cf7e5cbb-7df4-ae55-8178-f449827b5752.htm)   [See Also](#seeAlsoToggle) |
+
+Checks if given type is valid for this panel schedule template element.
+
+**Namespace:**   [Autodesk.Revit.DB.Electrical](212a1314-7843-2c6c-3322-363127e4059f.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2011
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool IsValidType( 	PanelScheduleType panelScheduleType ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function IsValidType ( _ 	panelScheduleType As PanelScheduleType _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool IsValidType( 	PanelScheduleType panelScheduleType ) ``` |
+
+#### Parameters
+
+panelScheduleType
+:   Type:  [Autodesk.Revit.DB.Electrical PanelScheduleType](68aea073-b430-27da-74e9-29786610476b.htm)    
+     The given type to check.
+
+#### Return Value
+
+True if panel schedule template can have a type assigned and this type is valid for this element, false otherwise.
+
+# Remarks
+
+A type is valid for a panel schedule template element if it is defined by the PanelScheduleType class. Note: PanelScheduleType::Enum::Unknown is not a valid type, it is used for initializing the variable of the PanelScheduleType::Enum.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentOutOfRangeException](60f148c9-ece0-a6bb-4e12-bb4a9c8c8a24.htm) | A value passed for an enumeration argument is not a member of that enumeration |
+
+# See Also
+
+[PanelScheduleTemplate Class](cf7e5cbb-7df4-ae55-8178-f449827b5752.htm)
+
+[IsValidType Overload](721ce7f3-5d27-7849-5f4f-f2c7294d5383.htm)
+
+[Autodesk.Revit.DB.Electrical Namespace](212a1314-7843-2c6c-3322-363127e4059f.htm)

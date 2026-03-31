@@ -1,0 +1,42 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### DPartReinforcementDeleted Property
+
+---
+
+
+
+|  |
+| --- |
+| [BuiltInFailures RebarSystemFailures Class](ef87224e-09b6-8d07-3b24-3a3b322a9ae5.htm)   [See Also](#seeAlsoToggle) |
+
+Reinforcement hosted on highlighted Parts will be deleted.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static FailureDefinitionId DPartReinforcementDeleted { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared ReadOnly Property DPartReinforcementDeleted As FailureDefinitionId 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static property FailureDefinitionId^ DPartReinforcementDeleted { 	FailureDefinitionId^ get (); } ``` |
+
+# See Also
+
+[BuiltInFailures RebarSystemFailures Class](ef87224e-09b6-8d07-3b24-3a3b322a9ae5.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

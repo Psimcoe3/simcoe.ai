@@ -1,0 +1,60 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### SetRodLockedWithHost Method
+
+---
+
+
+
+|  |
+| --- |
+| [FabricationRodInfo Class](b52fe314-2639-a697-cf97-b3e4824818f8.htm)   [See Also](#seeAlsoToggle) |
+
+Locks the rod with the host. The method is applicable only for bearer hanger.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 17.0.0.0 (17.0.1090.0)   
+  **Since:**  2017
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public void SetRodLockedWithHost( 	int rodIndex, 	bool locked ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub SetRodLockedWithHost ( _ 	rodIndex As Integer, _ 	locked As Boolean _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: void SetRodLockedWithHost( 	int rodIndex,  	bool locked ) ``` |
+
+#### Parameters
+
+rodIndex
+:   Type:  [System Int32](http://msdn2.microsoft.com/en-us/library/td2s409d)    
+     The index of the rod.
+
+locked
+:   Type:  [System Boolean](http://msdn2.microsoft.com/en-us/library/a28wyd50)    
+     Locks the rod with the host.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentOutOfRangeException](60f148c9-ece0-a6bb-4e12-bb4a9c8c8a24.htm) | the index rodIndex is should be in range of rod count. |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | The hanger is not a bearer hanger. |
+
+# See Also
+
+[FabricationRodInfo Class](b52fe314-2639-a697-cf97-b3e4824818f8.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

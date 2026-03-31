@@ -1,0 +1,62 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IsAcceptableToPosition Method
+
+---
+
+
+
+|  |
+| --- |
+| [SpatialElementFromToCalculationPoints Class](a6fe424e-af41-c1de-7bc2-e6facd9f2386.htm)   [See Also](#seeAlsoToggle) |
+
+Checks whether a given "to" position is valid.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public bool IsAcceptableToPosition( 	XYZ toPosition ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function IsAcceptableToPosition ( _ 	toPosition As XYZ _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: bool IsAcceptableToPosition( 	XYZ^ toPosition ) ``` |
+
+#### Parameters
+
+toPosition
+:   Type:  [Autodesk.Revit.DB XYZ](c2fd995c-95c0-58fb-f5de-f3246cbc5600.htm)
+
+#### Return Value
+
+True if the input is an acceptable "to" position and False otherwise.
+
+# Remarks
+
+The "from" position and the "to" position must be on opposite sides of the family's host. Flipping the calculation point will reverse the direction.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[SpatialElementFromToCalculationPoints Class](a6fe424e-af41-c1de-7bc2-e6facd9f2386.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

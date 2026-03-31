@@ -1,0 +1,54 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### InstanceNode Class
+
+---
+
+
+
+|  |
+| --- |
+| [Members](49bb5082-a027-2e38-9b1d-e1a5dfd8700e.htm)   [See Also](#seeAlsoToggle) |
+
+An output node that represents an instance of a geometry. It can be an instance of FamilyInstance, or it can be and instance of a part of symbol's geometry.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 23.0.0.0 (23.1.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public class InstanceNode : GroupNode ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Class InstanceNode _ 	Inherits GroupNode ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public ref class InstanceNode : public GroupNode ``` |
+
+# Remarks
+
+See also:  [OnInstanceBegin(InstanceNode)](2db35bdb-8d14-a015-9bfb-9283f503edab.htm)  . The  [SymbolGeometryId](386b1518-9376-b3bc-8751-29189af6d154.htm)  . contains the data for comparing if two InstanceNode points to the same geometry.
+
+# Inheritance Hierarchy
+
+System Object    
+  [Autodesk.Revit.DB RenderNode](9900b69b-7cb7-8555-75ac-4b5f22b5fa7f.htm)    
+  [Autodesk.Revit.DB GroupNode](8b1cabde-3c37-1735-a186-2ce026555ce0.htm)    
+  Autodesk.Revit.DB InstanceNode
+
+# See Also
+
+[InstanceNode Members](49bb5082-a027-2e38-9b1d-e1a5dfd8700e.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

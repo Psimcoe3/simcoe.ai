@@ -1,0 +1,73 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### AddParameter Method (ExternalDefinition, BuiltInParameterGroup, Boolean)
+
+---
+
+
+
+|  |
+| --- |
+| [FamilyManager Class](1cc4fe6c-0e9f-7439-0021-32d2e06f4c33.htm)   [See Also](#seeAlsoToggle) |
+
+Add a new shared parameter to the family.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public FamilyParameter AddParameter( 	ExternalDefinition familyDefinition, 	BuiltInParameterGroup parameterGroup, 	bool isInstance ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function AddParameter ( _ 	familyDefinition As ExternalDefinition, _ 	parameterGroup As BuiltInParameterGroup, _ 	isInstance As Boolean _ ) As FamilyParameter ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: FamilyParameter^ AddParameter( 	ExternalDefinition^ familyDefinition,  	BuiltInParameterGroup parameterGroup,  	bool isInstance ) ``` |
+
+#### Parameters
+
+familyDefinition
+:   Type:  [Autodesk.Revit.DB ExternalDefinition](a3e84415-b88e-a8e0-4e11-64795d92da0e.htm)    
+     The definition of the loaded shared parameter.
+
+parameterGroup
+:   Type:  [Autodesk.Revit.DB BuiltInParameterGroup](9942b791-2892-0658-303e-abf99675c5a6.htm)    
+     The group to which the family parameter belongs.
+
+isInstance
+:   Type:  [System Boolean](http://msdn2.microsoft.com/en-us/library/a28wyd50)    
+     Indicates if the new parameter is instance or type.
+
+#### Return Value
+
+If creation was successful the new shared parameter is returned, otherwise an exception with failure information will be thrown.
+
+# Remarks
+
+This method can work even without any family type, but it cannot be assigned the value via FamilyManager.Set methods when there is no current type.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | Thrown when the input parameter group cannot be assigned to the new parameter. |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | Thrown when the shared family parameter creation is not supported. Or trying to add an instance parameter of image type. |
+
+# See Also
+
+[FamilyManager Class](1cc4fe6c-0e9f-7439-0021-32d2e06f4c33.htm)
+
+[AddParameter Overload](fb4f8475-440f-6454-768f-777388a7fdd4.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

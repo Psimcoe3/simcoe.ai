@@ -1,0 +1,42 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### InvalidPlanRegion Property
+
+---
+
+
+
+|  |
+| --- |
+| [BuiltInFailures PlanRegionFailures Class](eaa8963c-1976-45bc-0d87-581593dbdeb7.htm)   [See Also](#seeAlsoToggle) |
+
+Plan region is invalid. The sketch of a plan region may not contain intersecting, overlapping or nested loops.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static FailureDefinitionId InvalidPlanRegion { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared ReadOnly Property InvalidPlanRegion As FailureDefinitionId 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static property FailureDefinitionId^ InvalidPlanRegion { 	FailureDefinitionId^ get (); } ``` |
+
+# See Also
+
+[BuiltInFailures PlanRegionFailures Class](eaa8963c-1976-45bc-0d87-581593dbdeb7.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

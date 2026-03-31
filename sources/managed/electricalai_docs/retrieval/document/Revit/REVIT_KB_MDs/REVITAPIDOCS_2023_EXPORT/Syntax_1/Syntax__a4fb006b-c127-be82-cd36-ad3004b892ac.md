@@ -1,0 +1,61 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### DirectContext3DHandleSettings Constructor (Boolean, Int32)
+
+---
+
+
+
+|  |
+| --- |
+| [DirectContext3DHandleSettings Class](cc9d7b07-a4d9-8570-9ed8-c953e241c0d6.htm)   [See Also](#seeAlsoToggle) |
+
+Constructs an instance of settings with provided values.
+
+**Namespace:**   [Autodesk.Revit.DB.DirectContext3D](f4ba10f0-55ea-5344-173b-688405391794.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 18.0.0.0 (18.2.0.0)   
+  **Since:**  2018
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public DirectContext3DHandleSettings( 	bool visibility, 	int transparency ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub New ( _ 	visibility As Boolean, _ 	transparency As Integer _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: DirectContext3DHandleSettings( 	bool visibility,  	int transparency ) ``` |
+
+#### Parameters
+
+visibility
+:   Type:  [System Boolean](http://msdn2.microsoft.com/en-us/library/a28wyd50)    
+     Source visibility.
+
+transparency
+:   Type:  [System Int32](http://msdn2.microsoft.com/en-us/library/td2s409d)    
+     Source transparency.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentOutOfRangeException](60f148c9-ece0-a6bb-4e12-bb4a9c8c8a24.htm) | The value is invalid. The valid range is 0 through 100 |
+
+# See Also
+
+[DirectContext3DHandleSettings Class](cc9d7b07-a4d9-8570-9ed8-c953e241c0d6.htm)
+
+[DirectContext3DHandleSettings Overload](872efff9-4d0f-69c5-c0f5-06a7544ff9e0.htm)
+
+[Autodesk.Revit.DB.DirectContext3D Namespace](f4ba10f0-55ea-5344-173b-688405391794.htm)

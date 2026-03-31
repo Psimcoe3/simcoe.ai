@@ -1,0 +1,50 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetSpecTypeId Method
+
+---
+
+
+
+|  |
+| --- |
+| [DimensionType Class](a6f6655d-3383-a0ea-670d-0bbe6d2bb964.htm)   [See Also](#seeAlsoToggle) |
+
+Gets the spec of this dimension style.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 21.0.0.0 (21.1.1.109)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ForgeTypeId GetSpecTypeId() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetSpecTypeId As ForgeTypeId ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: ForgeTypeId^ GetSpecTypeId() ``` |
+
+#### Return Value
+
+Identifier of the spec.
+
+# Remarks
+
+The spec will represent either length, angle or slope.
+
+# See Also
+
+[DimensionType Class](a6f6655d-3383-a0ea-670d-0bbe6d2bb964.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

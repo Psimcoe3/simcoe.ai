@@ -1,0 +1,60 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### RemoveAssociation Method
+
+---
+
+
+
+|  |
+| --- |
+| [AnalyticalToPhysicalAssociationManager Class](0f7f395b-3f70-aa6e-e584-b70c11f767ad.htm)   [See Also](#seeAlsoToggle) |
+
+This method will remove the association for the element with the given ElementId.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 23.0.0.0 (23.1.0.0)   
+  **Since:**  2023
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public void RemoveAssociation( 	ElementId id ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub RemoveAssociation ( _ 	id As ElementId _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: void RemoveAssociation( 	ElementId^ id ) ``` |
+
+#### Parameters
+
+id
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     Id of the element for which we want to remove the association.
+
+# Remarks
+
+If the id does not have any association, an exception is thrown.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | This element doesn't have an association defined. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[AnalyticalToPhysicalAssociationManager Class](0f7f395b-3f70-aa6e-e584-b70c11f767ad.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

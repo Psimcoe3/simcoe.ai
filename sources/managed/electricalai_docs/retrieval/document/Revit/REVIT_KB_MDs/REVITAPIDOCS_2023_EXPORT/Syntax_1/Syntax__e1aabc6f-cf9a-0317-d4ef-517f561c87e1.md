@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### FlowConversionMode Property
+
+---
+
+
+
+|  |
+| --- |
+| [PipePlumbingFixtureFlowData Class](11a35067-5428-3500-de8b-6319fa7f8c96.htm)   [See Also](#seeAlsoToggle) |
+
+The flow conversion mode of the pipe.
+
+**Namespace:**   [Autodesk.Revit.DB.Plumbing](cc553597-37c2-fcd9-6025-d904c129c80a.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public FlowConversionMode FlowConversionMode { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property FlowConversionMode As FlowConversionMode 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property FlowConversionMode FlowConversionMode { 	FlowConversionMode get (); } ``` |
+
+# See Also
+
+[PipePlumbingFixtureFlowData Class](11a35067-5428-3500-de8b-6319fa7f8c96.htm)
+
+[Autodesk.Revit.DB.Plumbing Namespace](cc553597-37c2-fcd9-6025-d904c129c80a.htm)

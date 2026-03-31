@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### NumberOfConnectedProperties Property
+
+---
+
+
+
+|  |
+| --- |
+| [AssetProperty Class](7be89499-d011-ab43-4715-0ee6f9335970.htm)   [See Also](#seeAlsoToggle) |
+
+The number of currently connected properties.
+
+**Namespace:**   [Autodesk.Revit.DB.Visual](f5a10581-6ac2-be19-0e32-f87d05bc8b83.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 18.0.0.0 (18.2.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public int NumberOfConnectedProperties { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property NumberOfConnectedProperties As Integer 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property int NumberOfConnectedProperties { 	int get (); } ``` |
+
+# See Also
+
+[AssetProperty Class](7be89499-d011-ab43-4715-0ee6f9335970.htm)
+
+[Autodesk.Revit.DB.Visual Namespace](f5a10581-6ac2-be19-0e32-f87d05bc8b83.htm)

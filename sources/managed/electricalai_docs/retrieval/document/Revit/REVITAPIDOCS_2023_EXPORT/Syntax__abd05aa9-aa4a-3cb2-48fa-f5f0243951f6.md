@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### InstanceId Property
+
+---
+
+
+
+|  |
+| --- |
+| [ExternalDataInstanceRemovingFromDocumentEventArgs Class](5c7c33a6-8c2b-05e2-7088-3199f1a26e34.htm)   [See Also](#seeAlsoToggle) |
+
+The Revit id of the external data instance being removed from Revit document.
+
+**Namespace:**   [Autodesk.Revit.DB.Events](b86712d6-83b3-e044-8016-f9881ecd3800.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 23.0.0.0 (23.1.0.0)   
+  **Since:**  2023
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ElementId InstanceId { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property InstanceId As ElementId 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property ElementId^ InstanceId { 	ElementId^ get (); } ``` |
+
+# See Also
+
+[ExternalDataInstanceRemovingFromDocumentEventArgs Class](5c7c33a6-8c2b-05e2-7088-3199f1a26e34.htm)
+
+[Autodesk.Revit.DB.Events Namespace](b86712d6-83b3-e044-8016-f9881ecd3800.htm)

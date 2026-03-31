@@ -1,0 +1,63 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetHookLength Method
+
+---
+
+
+
+|  |
+| --- |
+| [RebarBarType Class](467b44cc-54e7-3ecf-07e1-ad15d05fe800.htm)   [See Also](#seeAlsoToggle) |
+
+Identifies the hook length for a hook type
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public double GetHookLength( 	ElementId hookId ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetHookLength ( _ 	hookId As ElementId _ ) As Double ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: double GetHookLength( 	ElementId^ hookId ) ``` |
+
+#### Parameters
+
+hookId
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     id of the hook type
+
+#### Return Value
+
+The hook length for a hook type
+
+# Remarks
+
+If the AutoCalcHookLengths property is turned off, the default hook length will be returned
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | the rebar hook type id hookId is not valid |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[RebarBarType Class](467b44cc-54e7-3ecf-07e1-ad15d05fe800.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

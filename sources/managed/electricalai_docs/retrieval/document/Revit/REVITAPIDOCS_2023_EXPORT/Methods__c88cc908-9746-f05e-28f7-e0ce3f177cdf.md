@@ -1,0 +1,40 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### DocumentWorksharingEnabledEventArgs Members
+
+---
+
+
+
+|  |
+| --- |
+| [DocumentWorksharingEnabledEventArgs Class](e8e6a008-e97e-ddc3-6ac1-f625e04ff314.htm)   [Methods](#methodTableToggle)   [Properties](#propertyTableToggle)   [See Also](#seeAlsoToggle) |
+
+The  [DocumentWorksharingEnabledEventArgs](e8e6a008-e97e-ddc3-6ac1-f625e04ff314.htm)  type exposes the following members.
+
+# Methods
+
+|  | Name | Description |
+| --- | --- | --- |
+| Public method | [Dispose](697794d0-db4b-41ee-90a3-388296ffeefb.htm) | (Inherited from  [RevitAPIEventArgs](7c98499c-e345-cfda-ef89-48eccd3c9992.htm)  .) |
+| Public method | [Equals](http://msdn2.microsoft.com/en-us/library/bsc2ak47) | Determines whether the specified  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  is equal to the current  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  . (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+| Public method | [GetDocument](ec85ce1b-7767-0d6f-3ce5-c29a19468a7a.htm) | Returns document associated with this event |
+| Public method | [GetHashCode](http://msdn2.microsoft.com/en-us/library/zdee4b3y) | Serves as a hash function for a particular type. (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+| Public method | [GetType](http://msdn2.microsoft.com/en-us/library/dfwy45w9) | Gets the  [Type](http://msdn2.microsoft.com/en-us/library/42892f65)  of the current instance. (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+| Public method | [IsCancelled](5627aeaa-9d9c-dcbe-b34f-db40f1c025be.htm) | Indicates whether the event is being cancelled. (Inherited from  [RevitAPIEventArgs](7c98499c-e345-cfda-ef89-48eccd3c9992.htm)  .) |
+| Public method | [ToString](http://msdn2.microsoft.com/en-us/library/7bxwbwt2) | Returns a string that represents the current object. (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+
+# Properties
+
+|  | Name | Description |
+| --- | --- | --- |
+| Public property | [Cancellable](a393138a-34b5-1724-aa69-92cef651482b.htm) | Indicates whether an event may be cancelled by an event delegate. (Inherited from  [RevitAPIEventArgs](7c98499c-e345-cfda-ef89-48eccd3c9992.htm)  .) |
+| Public property | [IsValidObject](35c0066a-b3dc-9d37-c79e-c29f90713b2d.htm) | Specifies whether the .NET object represents a valid Revit entity. (Inherited from  [RevitAPIEventArgs](7c98499c-e345-cfda-ef89-48eccd3c9992.htm)  .) |
+
+# See Also
+
+[DocumentWorksharingEnabledEventArgs Class](e8e6a008-e97e-ddc3-6ac1-f625e04ff314.htm)
+
+[Autodesk.Revit.DB.Events Namespace](b86712d6-83b3-e044-8016-f9881ecd3800.htm)

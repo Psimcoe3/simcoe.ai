@@ -1,0 +1,61 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### ElementPhaseStatusFilter Constructor (ElementId, ICollection(ElementOnPhaseStatus))
+
+---
+
+
+
+|  |
+| --- |
+| [ElementPhaseStatusFilter Class](7767020a-2564-2c46-689d-59c2abe6e777.htm)   [See Also](#seeAlsoToggle) |
+
+Constructs a new instance of a file to match elements that have a given phase statuses on the input phase.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2012
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ElementPhaseStatusFilter( 	ElementId phaseId, 	ICollection<ElementOnPhaseStatus> phaseStatuses ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub New ( _ 	phaseId As ElementId, _ 	phaseStatuses As ICollection(Of ElementOnPhaseStatus) _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: ElementPhaseStatusFilter( 	ElementId^ phaseId,  	ICollection<ElementOnPhaseStatus>^ phaseStatuses ) ``` |
+
+#### Parameters
+
+phaseId
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     Id of the phase.
+
+phaseStatuses
+:   Type:  System.Collections.Generic ICollection   [ElementOnPhaseStatus](bfc481cc-11c8-de0b-1d71-7b2ffa711780.htm)    
+     Target statuses.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[ElementPhaseStatusFilter Class](7767020a-2564-2c46-689d-59c2abe6e777.htm)
+
+[ElementPhaseStatusFilter Overload](8e99068c-9562-334b-fc5f-65c0e620a131.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

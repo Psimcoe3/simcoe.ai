@@ -1,0 +1,42 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Points Property
+
+---
+
+
+
+|  |
+| --- |
+| [HermiteFace Class](cc020c7b-e36a-7e30-c227-28dbbd520b2d.htm)   [See Also](#seeAlsoToggle) |
+
+Interpolation points of the surface.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public IList<XYZ> Points { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property Points As IList(Of XYZ) 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property IList<XYZ^>^ Points { 	IList<XYZ^>^ get (); } ``` |
+
+# See Also
+
+[HermiteFace Class](cc020c7b-e36a-7e30-c227-28dbbd520b2d.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

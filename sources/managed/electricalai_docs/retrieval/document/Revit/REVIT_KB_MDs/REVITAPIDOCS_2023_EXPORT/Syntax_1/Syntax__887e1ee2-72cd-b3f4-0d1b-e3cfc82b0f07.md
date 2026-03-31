@@ -1,0 +1,71 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CreateGenericConnection Method
+
+---
+
+
+
+|  |
+| --- |
+| [StructuralConnectionHandler Class](78653026-36f1-6ab3-f2c0-728692c99b3c.htm)   [See Also](#seeAlsoToggle) |
+
+Creates a new instance of a Structural Connection Handler with a generic type, which defines the connection between given elements.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2021
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static StructuralConnectionHandler CreateGenericConnection( 	Document document, 	IList<ElementId> idsToConnect ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function CreateGenericConnection ( _ 	document As Document, _ 	idsToConnect As IList(Of ElementId) _ ) As StructuralConnectionHandler ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static StructuralConnectionHandler^ CreateGenericConnection( 	Document^ document,  	IList<ElementId^>^ idsToConnect ) ``` |
+
+#### Parameters
+
+document
+:   Type:  [Autodesk.Revit.DB Document](db03274b-a107-aa32-9034-f3e0df4bb1ec.htm)    
+     The Revit document.
+
+idsToConnect
+:   Type:  System.Collections.Generic IList   [ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     The list of element ids of connected elements.
+
+#### Return Value
+
+The newly created generic connection.
+
+# Remarks
+
+Elements should be of the following structural categories: framings (OST\_StructuralFraming), columns (OST\_StructuralColumns), walls (OST\_Walls), floors (OST\_Floors) or foundations (OST\_StructuralFoundations). The first of given elements is set as the primary one. A generic connection type will be created by default, if there is none present in the model.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | It verifies that we have at least one element id in the list. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | The document is in failure mode: an operation has failed, and Revit requires the user to either cancel the operation or fix the problem (usually by deleting certain elements). |
+| [Autodesk.Revit.Exceptions ModificationForbiddenException](53205486-5917-7c33-8e67-e362106ddc97.htm) | The document is in failure mode: an operation has failed, and Revit requires the user to either cancel the operation or fix the problem (usually by deleting certain elements). -or- The document is being loaded, or is in the midst of another sensitive process. |
+| [Autodesk.Revit.Exceptions ModificationOutsideTransactionException](8f025460-c283-ea99-aa8a-5a36e11528f4.htm) | The document has no open transaction. |
+
+# See Also
+
+[StructuralConnectionHandler Class](78653026-36f1-6ab3-f2c0-728692c99b3c.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

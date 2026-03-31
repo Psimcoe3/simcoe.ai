@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+   <AddIn Type="Command">
+    <Assembly>OperatingScheduleImport.dll</Assembly>
+    <ClientId>A773AAEC-DBB8-4212-9A2B-063FCDCBDAE2</ClientId>
+    <FullClassName>Revit.SDK.Samples.OperatingScheduleImport.CS.Command</FullClassName>
+    <Text>OperatingScheduleImport</Text>
+    <Description>An example of how to import an building operating schedule from a csv file.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+	<LanguageType>Unknown</LanguageType>
+	<VendorId>ADSK</VendorId>
+  </AddIn>
+</RevitAddIns>

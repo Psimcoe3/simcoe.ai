@@ -1,0 +1,279 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Create Method
+
+---
+
+
+
+|  |
+| --- |
+| [ViewSheet Class](af2ee879-173d-df3a-9793-8d5750a17b49.htm)   [Example](#exampleToggle)   [See Also](#seeAlsoToggle) |
+
+Creates a new ViewSheet.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static ViewSheet Create( 	Document document, 	ElementId titleBlockTypeId ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function Create ( _ 	document As Document, _ 	titleBlockTypeId As ElementId _ ) As ViewSheet ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static ViewSheet^ Create( 	Document^ document,  	ElementId^ titleBlockTypeId ) ``` |
+
+#### Parameters
+
+document
+:   Type:  [Autodesk.Revit.DB Document](db03274b-a107-aa32-9034-f3e0df4bb1ec.htm)    
+     The document to which the ViewSheet will be added.
+
+titleBlockTypeId
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     The type id of the TitleBlock type which will be used by the new ViewSheet. For no TitleBlock, pass invalid element ID.
+
+#### Return Value
+
+The new ViewSheet.
+
+# Examples
+
+![](https://d24b2zsrnzhmgb.cloudfront.net/static/img/chm/icons/CopyCode.gif) Copy  C#
+
+```
+private void CreateSheetView(Autodesk.Revit.DB.Document document, View3D view3D)
+{
+
+    // Get an available title block from document
+    FilteredElementCollector collector = new FilteredElementCollector(document);
+    collector.OfClass(typeof(FamilySymbol));
+    collector.OfCategory(BuiltInCategory.OST_TitleBlocks);
+
+    FamilySymbol fs = collector.FirstElement() as FamilySymbol;
+    if (fs != null)
+    {
+        using (Transaction t = new Transaction(document, "Create a new ViewSheet"))
+        {
+            t.Start();
+            try
+            {
+                // Create a sheet view
+                ViewSheet viewSheet = ViewSheet.Create(document, fs.Id);
+                if (null == viewSheet)
+                {
+                    throw new Exception("Failed to create new ViewSheet.");
+                }
+
+                // Add passed in view onto the center of the sheet
+                UV location = new UV((viewSheet.Outline.Max.U - viewSheet.Outline.Min.U) / 2,
+                                     (viewSheet.Outline.Max.V - viewSheet.Outline.Min.V) / 2);
+
+                //viewSheet.AddView(view3D, location);
+                Viewport.Create(document, viewSheet.Id, view3D.Id, new XYZ(location.U, location.V, 0));
+
+                // Print the sheet out
+                if (viewSheet.CanBePrinted)
+                {
+                    TaskDialog taskDialog = new TaskDialog("Revit");
+                    taskDialog.MainContent = "Print the sheet?";
+                    TaskDialogCommonButtons buttons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No;
+                    taskDialog.CommonButtons = buttons;
+                    TaskDialogResult result = taskDialog.Show();
+
+                    if (result == TaskDialogResult.Yes)
+                    {
+                        viewSheet.Print();
+                    }
+                }
+
+                t.Commit();
+            }
+            catch
+            {
+                t.RollBack();
+            }
+        }
+    }
+}
+```
+
+ 
+
+![](https://d24b2zsrnzhmgb.cloudfront.net/static/img/chm/icons/CopyCode.gif) Copy  C#
+
+```
+private void CreateSheetView(Autodesk.Revit.DB.Document document, View3D view3D)
+{
+
+    // Get an available title block from document
+    IEnumerable<FamilySymbol>�familyList =�from�elem�in�new�FilteredElementCollector(document)
+                                               .OfClass(typeof(FamilySymbol))
+                                               .OfCategory(BuiltInCategory.OST_TitleBlocks)�        
+                                           let�type = elem�as�FamilySymbol    �
+                                           where�type.Name.Contains("E1")�        
+                                           select�type;
+
+
+    // Create a sheet view
+    ViewSheet viewSheet = ViewSheet.Create(document, familyList.First().Id);
+    if (null == viewSheet)
+    {
+        throw new Exception("Failed to create new ViewSheet.");
+    }
+
+    // Add passed in view onto the center of the sheet
+    if (Viewport.CanAddViewToSheet(document, viewSheet.Id, view3D.Id))
+    {
+        BoundingBoxUV sheetBox = viewSheet.Outline;
+        double yPosition = (sheetBox.Max.V - sheetBox.Min.V) / 2 + sheetBox.Min.V;
+        double xPosition = (sheetBox.Max.U - sheetBox.Min.U) / 2 + sheetBox.Min.U;
+
+        XYZ origin = new XYZ(xPosition, yPosition, 0);
+        Viewport viewport = Viewport.Create(document, viewSheet.Id, view3D.Id, origin);
+    }
+
+    // Print the sheet out
+    if (viewSheet.CanBePrinted)
+    {
+       TaskDialog taskDialog = new TaskDialog("Revit");
+       taskDialog.MainContent = "Print the sheet?";
+       TaskDialogCommonButtons buttons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No;
+       taskDialog.CommonButtons = buttons;
+       TaskDialogResult result = taskDialog.Show();
+
+        if (result == TaskDialogResult.Yes)
+        {
+            viewSheet.Print();
+        }
+    }
+}
+```
+
+ 
+
+![](https://d24b2zsrnzhmgb.cloudfront.net/static/img/chm/icons/CopyCode.gif) Copy  VB.NET
+
+```
+Private Sub CreateSheetView(document As Autodesk.Revit.DB.Document, view3D As View3D)
+
+    ' Get an available title block from document
+    Dim collector As New FilteredElementCollector(document)
+    collector.OfClass(GetType(FamilySymbol))
+    collector.OfCategory(BuiltInCategory.OST_TitleBlocks)
+
+    Dim fs As FamilySymbol = TryCast(collector.FirstElement(), FamilySymbol)
+    If fs IsNot Nothing Then
+        Using t As New Transaction(document, "Create a new ViewSheet")
+            t.Start()
+            Try
+                ' Create a sheet view
+                Dim viewSheet__1 As ViewSheet = ViewSheet.Create(document, fs.Id)
+                If viewSheet__1 Is Nothing Then
+                    Throw New Exception("Failed to create new ViewSheet.")
+                End If
+
+                ' Add passed in view onto the center of the sheet
+                Dim location As New UV((viewSheet__1.Outline.Max.U - viewSheet__1.Outline.Min.U) / 2, (viewSheet__1.Outline.Max.V - viewSheet__1.Outline.Min.V) / 2)
+
+                'viewSheet.AddView(view3D, location);
+                Viewport.Create(document, viewSheet__1.Id, view3D.Id, New XYZ(location.U, location.V, 0))
+
+                ' Print the sheet out
+                If viewSheet__1.CanBePrinted Then
+                    Dim taskDialog As New TaskDialog("Revit")
+                    taskDialog.MainContent = "Print the sheet?"
+                    Dim buttons As TaskDialogCommonButtons = TaskDialogCommonButtons.Yes Or TaskDialogCommonButtons.No
+                    taskDialog.CommonButtons = buttons
+                    Dim result As TaskDialogResult = taskDialog.Show()
+
+                    If result = TaskDialogResult.Yes Then
+                        viewSheet__1.Print()
+                    End If
+                End If
+
+                t.Commit()
+            Catch
+                t.RollBack()
+            End Try
+        End Using
+    End If
+End Sub
+```
+
+ 
+
+![](https://d24b2zsrnzhmgb.cloudfront.net/static/img/chm/icons/CopyCode.gif) Copy  VB.NET
+
+```
+Private Sub CreateSheetView(document As Autodesk.Revit.DB.Document, view3D As View3D)
+
+    ' Get an available title block from document
+    Dim collector1 As New FilteredElementCollector(document)
+    collector1 = collector1.OfClass(GetType(FamilySymbol)).OfCategory(BuiltInCategory.OST_TitleBlocks)
+    Dim familyList As IEnumerable(Of FamilySymbol)
+
+    familyList = From elem In collector1
+                 Let fstype = TryCast(elem, FamilySymbol)
+                 Where fstype.Name.Contains("E1")
+                 Select fstype
+
+
+    ' Create a sheet view
+    Dim viewSheet__1 As ViewSheet = ViewSheet.Create(document, familyList.First().Id)
+    If viewSheet__1 Is Nothing Then
+        Throw New Exception("Failed to create new ViewSheet.")
+    End If
+
+    ' Add passed in view onto the center of the sheet
+    If Viewport.CanAddViewToSheet(document, viewSheet__1.Id, view3D.Id) Then
+        Dim sheetBox As BoundingBoxUV = viewSheet__1.Outline
+        Dim yPosition As Double = (sheetBox.Max.V - sheetBox.Min.V) / 2 + sheetBox.Min.V
+        Dim xPosition As Double = (sheetBox.Max.U - sheetBox.Min.U) / 2 + sheetBox.Min.U
+
+        Dim origin As New XYZ(xPosition, yPosition, 0)
+        Dim viewport__2 As Viewport = Viewport.Create(document, viewSheet__1.Id, view3D.Id, origin)
+    End If
+
+    ' Print the sheet out
+    If viewSheet__1.CanBePrinted Then
+        Dim taskDialog As New TaskDialog("Revit")
+        taskDialog.MainContent = "Print the sheet?"
+        Dim buttons As TaskDialogCommonButtons = TaskDialogCommonButtons.Yes Or TaskDialogCommonButtons.No
+        taskDialog.CommonButtons = buttons
+        Dim result As TaskDialogResult = taskDialog.Show()
+
+        If result = TaskDialogResult.Yes Then
+            viewSheet__1.Print()
+        End If
+    End If
+End Sub
+```
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | The ElementId titleBlockTypeId does not correspond to a TitleBlock type. -or- document is not a project document. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions ModificationForbiddenException](53205486-5917-7c33-8e67-e362106ddc97.htm) | The document is in failure mode: an operation has failed, and Revit requires the user to either cancel the operation or fix the problem (usually by deleting certain elements). -or- The document is being loaded, or is in the midst of another sensitive process. |
+| [Autodesk.Revit.Exceptions ModificationOutsideTransactionException](8f025460-c283-ea99-aa8a-5a36e11528f4.htm) | The document has no open transaction. |
+
+# See Also
+
+[ViewSheet Class](af2ee879-173d-df3a-9793-8d5750a17b49.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

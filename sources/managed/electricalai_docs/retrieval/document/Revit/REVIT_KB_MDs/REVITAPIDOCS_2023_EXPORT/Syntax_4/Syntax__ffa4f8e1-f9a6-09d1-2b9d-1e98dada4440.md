@@ -1,0 +1,40 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### OnShutdown Method
+
+---
+
+
+
+|  |
+| --- |
+| [IEntryPoint Interface](b12791d1-81ab-b326-2bc7-da785d78e1fc.htm)   [See Also](#seeAlsoToggle) |
+
+**Namespace:**   [Autodesk.Revit.DB.Macros](8b8f9876-f4c2-abff-fc5b-79e337d84e01.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` void OnShutdown() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Sub OnShutdown ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` void OnShutdown() ``` |
+
+# See Also
+
+[IEntryPoint Interface](b12791d1-81ab-b326-2bc7-da785d78e1fc.htm)
+
+[Autodesk.Revit.DB.Macros Namespace](8b8f9876-f4c2-abff-fc5b-79e337d84e01.htm)

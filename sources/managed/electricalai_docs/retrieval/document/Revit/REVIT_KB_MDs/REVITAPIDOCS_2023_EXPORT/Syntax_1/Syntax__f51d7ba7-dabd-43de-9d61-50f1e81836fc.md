@@ -1,0 +1,42 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Level Property
+
+---
+
+
+
+|  |
+| --- |
+| [PlanTopology Class](32cd44a8-9c84-47c4-5c8e-853559f05d41.htm)   [See Also](#seeAlsoToggle) |
+
+The Level of the PlanTopology.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public Level Level { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property Level As Level 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property Level^ Level { 	Level^ get (); } ``` |
+
+# See Also
+
+[PlanTopology Class](32cd44a8-9c84-47c4-5c8e-853559f05d41.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Reset Method
+
+---
+
+
+
+|  |
+| --- |
+| [CableTraySizeIterator Class](474b13d0-1543-32d8-bb41-205d8cdd449f.htm)   [See Also](#seeAlsoToggle) |
+
+Resets the iterator to the initial state.
+
+**Namespace:**   [Autodesk.Revit.DB.Electrical](212a1314-7843-2c6c-3322-363127e4059f.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 17.0.0.0 (17.0.1090.0)   
+  **Since:**  2017
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public virtual void Reset() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Overridable Sub Reset ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: virtual void Reset() ``` |
+
+# See Also
+
+[CableTraySizeIterator Class](474b13d0-1543-32d8-bb41-205d8cdd449f.htm)
+
+[Autodesk.Revit.DB.Electrical Namespace](212a1314-7843-2c6c-3322-363127e4059f.htm)

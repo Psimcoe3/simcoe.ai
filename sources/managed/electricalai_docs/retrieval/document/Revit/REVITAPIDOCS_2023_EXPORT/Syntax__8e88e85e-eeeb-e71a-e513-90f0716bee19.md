@@ -1,0 +1,60 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### ElementOwnerViewFilter Constructor (ElementId, Boolean)
+
+---
+
+
+
+|  |
+| --- |
+| [ElementOwnerViewFilter Class](cfaecf4c-b6b9-1481-de4f-e8d74e743911.htm)   [See Also](#seeAlsoToggle) |
+
+Constructs a new instance of a filter to match elements which are owned by a particular view, with the option to invert the filter and find elements not owned by the given view.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ElementOwnerViewFilter( 	ElementId viewId, 	bool inverted ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub New ( _ 	viewId As ElementId, _ 	inverted As Boolean _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: ElementOwnerViewFilter( 	ElementId^ viewId,  	bool inverted ) ``` |
+
+#### Parameters
+
+viewId
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     The view id to match. Pass invalid element id to create a filter that will pass non-view-specific elements.
+
+inverted
+:   Type:  System Boolean    
+     True if the filter should match all elements which are not owned by the given view.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[ElementOwnerViewFilter Class](cfaecf4c-b6b9-1481-de4f-e8d74e743911.htm)
+
+[ElementOwnerViewFilter Overload](fe804b9a-4ea8-a185-8d43-8df139218f1f.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

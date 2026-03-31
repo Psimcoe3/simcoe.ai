@@ -1,0 +1,48 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### VendorIdAttribute Constructor
+
+---
+
+
+
+|  |
+| --- |
+| [VendorIdAttribute Class](789e2e36-a560-cbf4-ed62-186d78ba4d51.htm)   [See Also](#seeAlsoToggle) |
+
+Constructs a new VendorIdAttribute.
+
+**Namespace:**   [Autodesk.Revit.DB.Macros](8b8f9876-f4c2-abff-fc5b-79e337d84e01.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2012
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public VendorIdAttribute( 	string vendorIdStr ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub New ( _ 	vendorIdStr As String _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: VendorIdAttribute( 	String^ vendorIdStr ) ``` |
+
+#### Parameters
+
+vendorIdStr
+:   Type:  [System String](http://msdn2.microsoft.com/en-us/library/s1wwdcbf)
+
+# See Also
+
+[VendorIdAttribute Class](789e2e36-a560-cbf4-ed62-186d78ba4d51.htm)
+
+[Autodesk.Revit.DB.Macros Namespace](8b8f9876-f4c2-abff-fc5b-79e337d84e01.htm)

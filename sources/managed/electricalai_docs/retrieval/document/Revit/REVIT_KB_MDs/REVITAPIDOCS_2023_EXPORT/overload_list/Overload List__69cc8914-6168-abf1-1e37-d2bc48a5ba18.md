@@ -1,0 +1,28 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CreateMultiPlaneFilter Method
+
+---
+
+
+
+|  |
+| --- |
+| [PointCloudFilterFactory Class](fcbc90c3-0a9d-7522-e483-cad73468d698.htm)   [See Also](#seeAlsoToggle) |
+
+# Overload List
+
+|  | Name | Description |
+| --- | --- | --- |
+| Public method Static member | [CreateMultiPlaneFilter(IList Plane )](fcb723de-befe-864d-9d4a-3084aea596b1.htm) | Creates a new point cloud filter based upon planar boundaries. |
+| Public method Static member | [CreateMultiPlaneFilter(IList Plane , Int32)](889dd57c-8913-706f-6039-af3c15672a09.htm) | Creates a new point cloud filter based upon planar boundaries. |
+
+# See Also
+
+[PointCloudFilterFactory Class](fcbc90c3-0a9d-7522-e483-cad73468d698.htm)
+
+[PointCloudFilterFactory Members](d8048af0-2244-0ef0-104d-23d07255583a.htm)
+
+[Autodesk.Revit.DB.PointClouds Namespace](5974062a-47d4-c7bb-16f2-d5dd193bd170.htm)

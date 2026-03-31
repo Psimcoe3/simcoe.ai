@@ -1,0 +1,73 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CreateSingleLayerCompoundStructure Method (MaterialFunctionAssignment, Double, ElementId)
+
+---
+
+
+
+|  |
+| --- |
+| [CompoundStructure Class](dc1a081e-8dab-565f-145d-a429098d353c.htm)   [See Also](#seeAlsoToggle) |
+
+Creates a CompoundStructure containing a single layer.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static CompoundStructure CreateSingleLayerCompoundStructure( 	MaterialFunctionAssignment layerFunction, 	double width, 	ElementId materialId ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function CreateSingleLayerCompoundStructure ( _ 	layerFunction As MaterialFunctionAssignment, _ 	width As Double, _ 	materialId As ElementId _ ) As CompoundStructure ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static CompoundStructure^ CreateSingleLayerCompoundStructure( 	MaterialFunctionAssignment layerFunction,  	double width,  	ElementId^ materialId ) ``` |
+
+#### Parameters
+
+layerFunction
+:   Type:  [Autodesk.Revit.DB MaterialFunctionAssignment](1cbeb006-f7a2-f6d2-491f-faa0b9a006fc.htm)    
+     The function of the single layer.
+
+width
+:   Type:  System Double    
+     The width of the single layer.
+
+materialId
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     The ElementId of the material for the single layer.
+
+#### Return Value
+
+The newly created compound structure.
+
+# Remarks
+
+It is not verified that materialId corresponds to a valid Material element.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions ArgumentOutOfRangeException](60f148c9-ece0-a6bb-4e12-bb4a9c8c8a24.htm) | The given value for width must be greater than 0 and no more than 30000 feet. -or- A value passed for an enumeration argument is not a member of that enumeration |
+
+# See Also
+
+[CompoundStructure Class](dc1a081e-8dab-565f-145d-a429098d353c.htm)
+
+[CreateSingleLayerCompoundStructure Overload](a21f3c6f-4c25-43b7-3714-75eab33db398.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

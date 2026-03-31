@@ -1,0 +1,77 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Create Method (Document, IList(CurveLoop), ElementId)
+
+---
+
+
+
+|  |
+| --- |
+| [SiteSubRegion Class](98cf9a80-873e-3703-5a95-a87672adf383.htm)   [See Also](#seeAlsoToggle) |
+
+Creates a new SiteSubRegion element with assigned TopographySurface to be hosted and adds it to the document.
+
+**Namespace:**   [Autodesk.Revit.DB.Architecture](720f0c58-cb2b-4f13-374a-7348ed0a1cd3.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static SiteSubRegion Create( 	Document document, 	IList<CurveLoop> curveLoops, 	ElementId hostTopoSurfaceId ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function Create ( _ 	document As Document, _ 	curveLoops As IList(Of CurveLoop), _ 	hostTopoSurfaceId As ElementId _ ) As SiteSubRegion ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static SiteSubRegion^ Create( 	Document^ document,  	IList<CurveLoop^>^ curveLoops,  	ElementId^ hostTopoSurfaceId ) ``` |
+
+#### Parameters
+
+document
+:   Type:  [Autodesk.Revit.DB Document](db03274b-a107-aa32-9034-f3e0df4bb1ec.htm)    
+     The document to be modified.
+
+curveLoops
+:   Type:  System.Collections.Generic IList   [CurveLoop](84824924-cb89-9e20-de6e-3461f429dfd6.htm)    
+     The boundary of the subregion.
+
+hostTopoSurfaceId
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     The element id of a TopographySurface assigned to be a host of new created SiteSubRegion.
+
+#### Return Value
+
+The new SubRegion surface.
+
+# Remarks
+
+This will create a new TopographySurface element which represents a subregion with a host TopographySurface assigned. If you need access to this Element you can obtain it from the TopographySurface property. See  [TopographySurface](a6e38474-7fe8-4c4a-e138-96dca3391ae9.htm)  for details.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | The input curve loops cannot compose a valid boundary, that means: no curve loop is contained in the given collection; these curve loops intersect with each other for some of them; or each curve loop is not closed individually; or each curve loop is not planar; or each curve loop is not in a plane parallel to the horizontal(XY) plane. -or- The ElementId hostTopoSurfaceId does not represent a TopographySurface. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | Failed to create the Sketch for the boundary of the current Subregion. -or- Cannot associate the new subregion with the assigned host because there is no geometric overlap, or they have mismatched design options. -or- The given curve loops intersect with curve loops of existing SiteSubRegions hosted on the same TopographySurface. -or- The boundary of SubRegion is entirely inside or overlaps at least one existing BuildingPad hosted on the same TopographySurface. This behavior is not allowed. |
+| [Autodesk.Revit.Exceptions ModificationForbiddenException](53205486-5917-7c33-8e67-e362106ddc97.htm) | The document is in failure mode: an operation has failed, and Revit requires the user to either cancel the operation or fix the problem (usually by deleting certain elements). -or- The document is being loaded, or is in the midst of another sensitive process. |
+| [Autodesk.Revit.Exceptions ModificationOutsideTransactionException](8f025460-c283-ea99-aa8a-5a36e11528f4.htm) | The document has no open transaction. |
+
+# See Also
+
+[SiteSubRegion Class](98cf9a80-873e-3703-5a95-a87672adf383.htm)
+
+[Create Overload](d29ca8ac-46b7-e22c-6753-a86651d48fbc.htm)
+
+[Autodesk.Revit.DB.Architecture Namespace](720f0c58-cb2b-4f13-374a-7348ed0a1cd3.htm)

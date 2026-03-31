@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Left Property
+
+---
+
+
+
+|  |
+| --- |
+| [Rectangle Class](c49d8b69-5d11-9f69-5f75-c36ad45ff77b.htm)   [See Also](#seeAlsoToggle) |
+
+The x-coordinate of the top-left corner of the rectangle.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 17.0.0.0 (17.0.1090.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public int Left { get; set; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Property Left As Integer 	Get 	Set ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property int Left { 	int get (); 	void set (int value); } ``` |
+
+# See Also
+
+[Rectangle Class](c49d8b69-5d11-9f69-5f75-c36ad45ff77b.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

@@ -1,0 +1,53 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IsInterrupted Method
+
+---
+
+
+
+|  |
+| --- |
+| [DrawContext Class](b9244325-08c8-8bbd-a9f3-5d91d638d85d.htm)   [See Also](#seeAlsoToggle) |
+
+Checks whether the current rendering pass has been interrupted.
+
+**Namespace:**   [Autodesk.Revit.DB.DirectContext3D](f4ba10f0-55ea-5344-173b-688405391794.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 18.0.0.0 (18.2.0.0)   
+  **Since:**  2017
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool IsInterrupted() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function IsInterrupted As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool IsInterrupted() ``` |
+
+#### Return Value
+
+True if the current rendering pass has been interrupted before its completion, false otherwise.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | This DrawContext is not available because Revit is not currently rendering. In general, this DrawContext must be used in the scope of the RenderScene() callback of IDirectContext3DServer. |
+
+# See Also
+
+[DrawContext Class](b9244325-08c8-8bbd-a9f3-5d91d638d85d.htm)
+
+[Autodesk.Revit.DB.DirectContext3D Namespace](f4ba10f0-55ea-5344-173b-688405391794.htm)

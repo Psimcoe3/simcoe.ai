@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### StructuralAssetClass Property
+
+---
+
+
+
+|  |
+| --- |
+| [StructuralAsset Class](39c2e2ad-474e-2514-bc15-07c24a989a61.htm)   [See Also](#seeAlsoToggle) |
+
+The type of material that this structural asset describes (e.g. wood, concrete, metal.)
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public StructuralAssetClass StructuralAssetClass { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property StructuralAssetClass As StructuralAssetClass 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property StructuralAssetClass StructuralAssetClass { 	StructuralAssetClass get (); } ``` |
+
+# See Also
+
+[StructuralAsset Class](39c2e2ad-474e-2514-bc15-07c24a989a61.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

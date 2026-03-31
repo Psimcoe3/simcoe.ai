@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### AttachToStructure Method
+
+---
+
+
+
+|  |
+| --- |
+| [FabricationRodInfo Class](b52fe314-2639-a697-cf97-b3e4824818f8.htm)   [See Also](#seeAlsoToggle) |
+
+Attaches to the nearest structural element.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 16.0.0.0 (16.0.0.0)   
+  **Since:**  2016
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public void AttachToStructure() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub AttachToStructure ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: void AttachToStructure() ``` |
+
+# See Also
+
+[FabricationRodInfo Class](b52fe314-2639-a697-cf97-b3e4824818f8.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

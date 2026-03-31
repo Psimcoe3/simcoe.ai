@@ -1,0 +1,51 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetReferenceNameForTopRail Method
+
+---
+
+
+
+|  |
+| --- |
+| [BalusterInfo Class](96a6917f-9f36-2e9a-3f94-a42ff103fff0.htm)   [See Also](#seeAlsoToggle) |
+
+Gets the name string to be used as a reference to Top Rail in the current language.
+
+**Namespace:**   [Autodesk.Revit.DB.Architecture](720f0c58-cb2b-4f13-374a-7348ed0a1cd3.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 21.0.0.0 (21.1.1.109)   
+  **Since:**  2020
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static string GetReferenceNameForTopRail() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function GetReferenceNameForTopRail As String ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static String^ GetReferenceNameForTopRail() ``` |
+
+#### Return Value
+
+The name string to be used as a reference to Top Rail.
+
+# Remarks
+
+This name can be used in the setter for  [BaseReferenceName](1000ce43-bb4b-0e0d-1cfd-19aef2b4a0b2.htm)  or  [TopReferenceName](700468c3-e872-a0f3-b9cf-7afe2bc837f6.htm)  . The name can also be compared with the value coming from the getter.
+
+# See Also
+
+[BalusterInfo Class](96a6917f-9f36-2e9a-3f94-a42ff103fff0.htm)
+
+[Autodesk.Revit.DB.Architecture Namespace](720f0c58-cb2b-4f13-374a-7348ed0a1cd3.htm)

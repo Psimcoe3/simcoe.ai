@@ -1,0 +1,121 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### StructuralSectionConcreteRectangle Constructor
+
+---
+
+
+
+|  |
+| --- |
+| [StructuralSectionConcreteRectangle Class](41507b3f-c1c1-bcc8-6606-fa270c324421.htm)   [See Also](#seeAlsoToggle) |
+
+Creates a new instance of Structural Section Concrete Rectangle shape with the associated set of parameters, used to attach to structural element.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure.StructuralSections](09862f38-63f6-a5f8-e560-ae775901bc92.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 16.0.0.0 (16.0.0.0)   
+  **Since:**  2016
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public StructuralSectionConcreteRectangle( 	double width, 	double height, 	double centroidHorizontal, 	double centroidVertical, 	double principalAxesAngle, 	double sectionArea, 	double perimeter, 	double nominalWeight, 	double momentOfInertiaStrongAxis, 	double momentOfInertiaWeakAxis, 	double elasticModulusStrongAxis, 	double elasticModulusWeakAxis, 	double plasticModulusStrongAxis, 	double plasticModulusWeakAxis, 	double torsionalMomentOfInertia, 	double torsionalModulus, 	double warpingConstant, 	double shearAreaStrongAxis, 	double shearAreaWeakAxis ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub New ( _ 	width As Double, _ 	height As Double, _ 	centroidHorizontal As Double, _ 	centroidVertical As Double, _ 	principalAxesAngle As Double, _ 	sectionArea As Double, _ 	perimeter As Double, _ 	nominalWeight As Double, _ 	momentOfInertiaStrongAxis As Double, _ 	momentOfInertiaWeakAxis As Double, _ 	elasticModulusStrongAxis As Double, _ 	elasticModulusWeakAxis As Double, _ 	plasticModulusStrongAxis As Double, _ 	plasticModulusWeakAxis As Double, _ 	torsionalMomentOfInertia As Double, _ 	torsionalModulus As Double, _ 	warpingConstant As Double, _ 	shearAreaStrongAxis As Double, _ 	shearAreaWeakAxis As Double _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: StructuralSectionConcreteRectangle( 	double width,  	double height,  	double centroidHorizontal,  	double centroidVertical,  	double principalAxesAngle,  	double sectionArea,  	double perimeter,  	double nominalWeight,  	double momentOfInertiaStrongAxis,  	double momentOfInertiaWeakAxis,  	double elasticModulusStrongAxis,  	double elasticModulusWeakAxis,  	double plasticModulusStrongAxis,  	double plasticModulusWeakAxis,  	double torsionalMomentOfInertia,  	double torsionalModulus,  	double warpingConstant,  	double shearAreaStrongAxis,  	double shearAreaWeakAxis ) ``` |
+
+#### Parameters
+
+width
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Section width.
+
+height
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Section height, depth.
+
+centroidHorizontal
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Distance from centroid to the left extremites along horizontal axis.
+
+centroidVertical
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Distance from centroid to the upper extremites along vertical axis.
+
+principalAxesAngle
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Rotation angle between the principal axes and cross section reference planes.
+
+sectionArea
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Cross section area.
+
+perimeter
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Painting surface of the unit length.
+
+nominalWeight
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Unit weight (not mass) per unit length, for self-weight calculation or quantity survey.
+
+momentOfInertiaStrongAxis
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Moment of Inertia about main strong axis (I).
+
+momentOfInertiaWeakAxis
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Moment of Inertia about main weak axis (I).
+
+elasticModulusStrongAxis
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Elastic section modulus about main strong axis for calculation of bending stresses.
+
+elasticModulusWeakAxis
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Elastic section modulus about main weak axis for calculation of bending stresses.
+
+plasticModulusStrongAxis
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Plastic section modulus in bending about main strong axis (Z, Wpl)
+
+plasticModulusWeakAxis
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Plastic section modulus in bending about main weak axis.
+
+torsionalMomentOfInertia
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Torsional Moment of inertia (J, IT, K), for calculation of torsional deformation
+
+torsionalModulus
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Section modulus for calculations of torsion stresses (Ct)
+
+warpingConstant
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Warping constant (Cw, Iomega, H)
+
+shearAreaStrongAxis
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Shear area (reduced extreme shear stress coefficient) in the direction of strong axis (Wq).
+
+shearAreaWeakAxis
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     Shear area (reduced extreme shear stress coefficient) in the direction of weak axis (Wq).
+
+# See Also
+
+[StructuralSectionConcreteRectangle Class](41507b3f-c1c1-bcc8-6606-fa270c324421.htm)
+
+[Autodesk.Revit.DB.Structure.StructuralSections Namespace](09862f38-63f6-a5f8-e560-ae775901bc92.htm)

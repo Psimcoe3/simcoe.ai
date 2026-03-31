@@ -1,0 +1,69 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### JoinGeometry Method
+
+---
+
+
+
+|  |
+| --- |
+| [JoinGeometryUtils Class](c45b6484-3efd-1d81-0b47-ba678857fff1.htm)   [See Also](#seeAlsoToggle) |
+
+Creates clean joins between two elements that share a common face.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static void JoinGeometry( 	Document document, 	Element firstElement, 	Element secondElement ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Sub JoinGeometry ( _ 	document As Document, _ 	firstElement As Element, _ 	secondElement As Element _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static void JoinGeometry( 	Document^ document,  	Element^ firstElement,  	Element^ secondElement ) ``` |
+
+#### Parameters
+
+document
+:   Type:  [Autodesk.Revit.DB Document](db03274b-a107-aa32-9034-f3e0df4bb1ec.htm)    
+     The document containing the two elements.
+
+firstElement
+:   Type:  [Autodesk.Revit.DB Element](eb16114f-69ea-f4de-0d0d-f7388b105a16.htm)    
+     The first element to be joined.
+
+secondElement
+:   Type:  [Autodesk.Revit.DB Element](eb16114f-69ea-f4de-0d0d-f7388b105a16.htm)    
+     The second element to be joined. This element must not be joined to the first element.
+
+# Remarks
+
+The visible edge between joined elements is removed. The joined elements then share the same line weight and fill pattern. This functionality is not available for family documents.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | document is not a project document. -or- The element firstElement was not found in the given document. -or- The element secondElement was not found in the given document. -or- The elements are already joined. -or- The elements cannot be joined. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | Please remove or add segments on curtain grids instead of joining or unjoining geometry of the panels. |
+
+# See Also
+
+[JoinGeometryUtils Class](c45b6484-3efd-1d81-0b47-ba678857fff1.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

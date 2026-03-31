@@ -1,0 +1,48 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IsValidMinorLapSplice Method
+
+---
+
+
+
+|  |
+| --- |
+| [FabricSheetType Class](892f0ce6-5548-d299-c976-9355ac4109ee.htm)   [See Also](#seeAlsoToggle) |
+
+Identifies if the input value is valid to be applied as the minor lap splice value for this FabricSheetType.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public bool IsValidMinorLapSplice( 	double minorLapSplice ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function IsValidMinorLapSplice ( _ 	minorLapSplice As Double _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: bool IsValidMinorLapSplice( 	double minorLapSplice ) ``` |
+
+#### Parameters
+
+minorLapSplice
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)
+
+# See Also
+
+[FabricSheetType Class](892f0ce6-5548-d299-c976-9355ac4109ee.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

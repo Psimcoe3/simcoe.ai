@@ -1,0 +1,59 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Transform1D Constructor (Double, Double)
+
+---
+
+
+
+|  |
+| --- |
+| [Transform1D Class](7366ab0c-173e-ff4b-fb56-4f307cf16bc9.htm)   [See Also](#seeAlsoToggle) |
+
+Constructs the transformation by specifying the scale and the translation.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 21.0.0.0 (21.1.1.109)   
+  **Since:**  2021
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public Transform1D( 	double scale, 	double translation ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub New ( _ 	scale As Double, _ 	translation As Double _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: Transform1D( 	double scale,  	double translation ) ``` |
+
+#### Parameters
+
+scale
+:   Type:  System Double    
+     The scale of the transformation.
+
+translation
+:   Type:  System Double    
+     The translational part of the transformation.
+
+# Remarks
+
+1D space is tranformed according to the following formula: t --> scale\*t + translation
+
+# See Also
+
+[Transform1D Class](7366ab0c-173e-ff4b-fb56-4f307cf16bc9.htm)
+
+[Transform1D Overload](c8d61a46-2668-7dea-1df8-f625081d6258.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

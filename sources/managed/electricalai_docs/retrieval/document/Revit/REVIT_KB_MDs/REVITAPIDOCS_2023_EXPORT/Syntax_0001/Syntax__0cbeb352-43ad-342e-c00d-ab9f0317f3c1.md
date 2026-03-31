@@ -1,0 +1,44 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CurrentObject Property
+
+---
+
+
+
+|  |
+| --- |
+| [ExportFontTableIterator Class](3ecdd8b3-57ff-9ec7-8f48-d381414413de.htm)   [See Also](#seeAlsoToggle) |
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` internal Object CurrentObject { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Friend ReadOnly Property CurrentObject As Object 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` internal: virtual property Object^ CurrentObject { 	Object^ get () sealed; } ``` |
+
+#### Implements
+
+ [IEnumerator Current](http://msdn2.microsoft.com/en-us/library/khfze649)
+
+# See Also
+
+[ExportFontTableIterator Class](3ecdd8b3-57ff-9ec7-8f48-d381414413de.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

@@ -1,0 +1,40 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Name Property
+
+---
+
+
+
+|  |
+| --- |
+| [ReferencePoint Class](b4b9baeb-2ec5-a2e1-1420-37f593d36aa4.htm)   [See Also](#seeAlsoToggle) |
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public override string Name { get; set; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Overrides Property Name As String 	Get 	Set ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: virtual property String^ Name { 	String^ get () override; 	void set (String^ value) override; } ``` |
+
+# See Also
+
+[ReferencePoint Class](b4b9baeb-2ec5-a2e1-1420-37f593d36aa4.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

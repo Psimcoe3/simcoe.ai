@@ -1,0 +1,52 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### StructuralSectionISlopedFlange Class
+
+---
+
+
+
+|  |
+| --- |
+| [Members](303e4294-2dd6-8c2e-08b1-bbc0e379f60c.htm)   [See Also](#seeAlsoToggle) |
+
+Defines parameters for I-shape Sloped Flange structural section.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure.StructuralSections](09862f38-63f6-a5f8-e560-ae775901bc92.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 18.0.0.0 (18.2.0.0)   
+  **Since:**  2015
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public class StructuralSectionISlopedFlange : StructuralSectionGeneralI ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Class StructuralSectionISlopedFlange _ 	Inherits StructuralSectionGeneralI ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public ref class StructuralSectionISlopedFlange : public StructuralSectionGeneralI ``` |
+
+# Inheritance Hierarchy
+
+[System Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)    
+  [Autodesk.Revit.DB.Structure.StructuralSections StructuralSection](65b59d7d-bd7b-c71b-7159-dfc506a912ee.htm)    
+  [Autodesk.Revit.DB.Structure.StructuralSections StructuralSectionRectangular](fc038108-6279-839c-285b-effe342b4491.htm)    
+  [Autodesk.Revit.DB.Structure.StructuralSections StructuralSectionHotRolled](60cc6328-1e99-2a7b-03fb-983e52350e55.htm)    
+  [Autodesk.Revit.DB.Structure.StructuralSections StructuralSectionGeneralI](28751ea7-5d5a-01a9-06a9-d895589bad07.htm)    
+  Autodesk.Revit.DB.Structure.StructuralSections StructuralSectionISlopedFlange
+
+# See Also
+
+[StructuralSectionISlopedFlange Members](303e4294-2dd6-8c2e-08b1-bbc0e379f60c.htm)
+
+[Autodesk.Revit.DB.Structure.StructuralSections Namespace](09862f38-63f6-a5f8-e560-ae775901bc92.htm)

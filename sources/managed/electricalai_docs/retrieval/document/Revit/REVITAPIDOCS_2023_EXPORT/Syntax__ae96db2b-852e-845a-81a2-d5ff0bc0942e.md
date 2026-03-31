@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetOpenConnectorIndicatorAwayColor Method
+
+---
+
+
+
+|  |
+| --- |
+| [UIFabricationUtils Class](92583384-10a7-9134-932c-85b7487b45bd.htm)   [See Also](#seeAlsoToggle) |
+
+Gets the color of the open connector indicator in away direction.
+
+**Namespace:**   [Autodesk.Revit.UI](e86fd90a-8957-02a6-da7f-ced248966e3e.htm)    
+  **Assembly:**   RevitAPIUI  (in RevitAPIUI.dll) Version: 17.0.0.0 (17.0.1090.0)   
+  **Since:**  2017
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static Color GetOpenConnectorIndicatorAwayColor() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function GetOpenConnectorIndicatorAwayColor As Color ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static Color^ GetOpenConnectorIndicatorAwayColor() ``` |
+
+# See Also
+
+[UIFabricationUtils Class](92583384-10a7-9134-932c-85b7487b45bd.htm)
+
+[Autodesk.Revit.UI Namespace](e86fd90a-8957-02a6-da7f-ced248966e3e.htm)

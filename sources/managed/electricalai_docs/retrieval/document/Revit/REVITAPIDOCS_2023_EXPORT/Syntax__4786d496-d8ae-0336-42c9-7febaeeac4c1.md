@@ -1,0 +1,68 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetGrossFloorArea Method
+
+---
+
+
+
+|  |
+| --- |
+| [MassInstanceUtils Class](c1918834-8fe4-b8fb-10bf-39c59ae34eeb.htm)   [See Also](#seeAlsoToggle) |
+
+Get the total occupiable floor area represented by a mass instance.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2012
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static double GetGrossFloorArea( 	Document document, 	ElementId massInstanceId ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function GetGrossFloorArea ( _ 	document As Document, _ 	massInstanceId As ElementId _ ) As Double ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static double GetGrossFloorArea( 	Document^ document,  	ElementId^ massInstanceId ) ``` |
+
+#### Parameters
+
+document
+:   Type:  [Autodesk.Revit.DB Document](db03274b-a107-aa32-9034-f3e0df4bb1ec.htm)    
+     The Document.
+
+massInstanceId
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     The ElementId of the mass instance.
+
+#### Return Value
+
+The gross floor area in square feet.
+
+# Remarks
+
+The area is computed from the cross sections that are created by intersecting the associated Levels with the mass instance Geometry.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | The ElementId massInstanceId is not a mass instance. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[MassInstanceUtils Class](c1918834-8fe4-b8fb-10bf-39c59ae34eeb.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

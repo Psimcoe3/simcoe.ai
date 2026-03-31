@@ -1,0 +1,61 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### FileExported Event
+
+---
+
+
+
+|  |
+| --- |
+| [Application Class](94db8ea8-d2c3-5e71-8030-466bcb8e4426.htm)   [See Also](#seeAlsoToggle) |
+
+Subscribe to the FileExported event to be notified immediately after Revit has finished exporting files of formats supported by the API.
+
+**Namespace:**   [Autodesk.Revit.ApplicationServices](91957e18-2935-006c-83ab-3b5b9dbb5928.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 17.0.0.0 (17.0.1090.0)   
+  **Since:**  2010
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public event EventHandler<FileExportedEventArgs> FileExported ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Event FileExported As EventHandler(Of FileExportedEventArgs) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public:  event EventHandler<FileExportedEventArgs^>^ FileExported { 	void add (EventHandler<FileExportedEventArgs^>^ value); 	void remove (EventHandler<FileExportedEventArgs^>^ value); } ``` |
+
+# Remarks
+
+This event is raised immediately after Revit has finished exporting files of formats supported by the API. It is raised even when file exporting failed or was cancelled (during FileExporting event).
+
+Handlers of this event are permitted to make modifications to any document (including the active document), except for documents that are currently in read-only mode.
+
+Check the 'Status' field in event's argument to see whether the action itself was successful or not. If export is a part of 'Publish to Buzzsaw' command which consists of two parts â€“ export of a document followed by publishing it to a BuzzSaw server, the event status only reflects the result of the Export action. The publishing part of the command could still be cancelled or could fail after FileExported event is raised.
+
+This event is not cancellable, for the process of exporting file has already been finished.
+
+If the action was not successful, the document may not be modified and new transactions may not be started.
+
+The following API functions are not available for the current document during this event:
+
+* [Close](da2f27b9-7255-4950-82a2-86e1432ff9f0.htm)  and similar overloads.
+
+Exception  [InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm)  will be thrown if any of the above methods is called during this event.
+
+# See Also
+
+[Application Class](94db8ea8-d2c3-5e71-8030-466bcb8e4426.htm)
+
+[Autodesk.Revit.ApplicationServices Namespace](91957e18-2935-006c-83ab-3b5b9dbb5928.htm)

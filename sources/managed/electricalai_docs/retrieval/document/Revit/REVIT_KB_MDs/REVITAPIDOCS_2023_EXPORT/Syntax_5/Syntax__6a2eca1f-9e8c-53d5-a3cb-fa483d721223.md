@@ -1,0 +1,46 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetPanel Method
+
+---
+
+
+
+|  |
+| --- |
+| [PanelScheduleView Class](ef4390e8-5a93-fe7f-580b-c8ec297f6b52.htm)   [See Also](#seeAlsoToggle) |
+
+Gets the panel for this view
+
+**Namespace:**   [Autodesk.Revit.DB.Electrical](212a1314-7843-2c6c-3322-363127e4059f.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ElementId GetPanel() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetPanel As ElementId ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: ElementId^ GetPanel() ``` |
+
+#### Return Value
+
+The id of the panel for this view
+
+# See Also
+
+[PanelScheduleView Class](ef4390e8-5a93-fe7f-580b-c8ec297f6b52.htm)
+
+[Autodesk.Revit.DB.Electrical Namespace](212a1314-7843-2c6c-3322-363127e4059f.htm)

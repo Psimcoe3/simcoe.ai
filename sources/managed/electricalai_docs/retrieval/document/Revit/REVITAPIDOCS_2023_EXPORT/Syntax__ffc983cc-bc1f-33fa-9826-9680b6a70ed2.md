@@ -1,0 +1,53 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IsValidForMaxEdgeLength Method
+
+---
+
+
+
+|  |
+| --- |
+| [OBJExportOptions Class](fe6a5fe3-737a-1d30-fa65-37cc84e6e9d5.htm)   [See Also](#seeAlsoToggle) |
+
+Checks whether the value is allowed (is in the allowed range) for MaxEdgeLength tessellation parameter.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 23.0.0.0 (23.1.0.0)   
+  **Since:**  2023
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool IsValidForMaxEdgeLength( 	double value ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function IsValidForMaxEdgeLength ( _ 	value As Double _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool IsValidForMaxEdgeLength( 	double value ) ``` |
+
+#### Parameters
+
+value
+:   Type:  System Double    
+     The value to be checked.
+
+#### Return Value
+
+True if the value is valid for MaxEdgeLength, false otherwise.
+
+# See Also
+
+[OBJExportOptions Class](fe6a5fe3-737a-1d30-fa65-37cc84e6e9d5.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

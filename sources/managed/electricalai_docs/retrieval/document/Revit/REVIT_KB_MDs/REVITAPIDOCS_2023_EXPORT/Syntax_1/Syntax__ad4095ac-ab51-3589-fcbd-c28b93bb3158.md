@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### SharedPosition Property
+
+---
+
+
+
+|  |
+| --- |
+| [BasePoint Class](154074ae-d653-aaff-b84b-6336a1cbafaa.htm)   [See Also](#seeAlsoToggle) |
+
+Shared position of the BasePoint based on the active ProjectLocation of its belonging Document. To get the shared position under other ProjectLocations, please use ProjectLocation.GetProjectPosition(BasePoint.Position).
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 21.0.0.0 (21.1.1.109)   
+  **Since:**  2019.2
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public XYZ SharedPosition { get; internal set; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Property SharedPosition As XYZ 	Get 	Friend Set ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property XYZ^ SharedPosition { 	XYZ^ get (); 	internal: void set (XYZ^ value); } ``` |
+
+# See Also
+
+[BasePoint Class](154074ae-d653-aaff-b84b-6336a1cbafaa.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

@@ -1,0 +1,51 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### SetEdgeReference Method
+
+---
+
+
+
+|  |
+| --- |
+| [PointOnEdge Class](bfd3b8e2-68d5-18e7-43e8-31798e962f10.htm)   [See Also](#seeAlsoToggle) |
+
+Change the edge or curve reference.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public void SetEdgeReference( 	Reference reference ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub SetEdgeReference ( _ 	reference As Reference _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: void SetEdgeReference( 	Reference^ reference ) ``` |
+
+#### Parameters
+
+reference
+:   Type:  [Autodesk.Revit.DB Reference](d28155ae-817b-1f31-9c3f-c9c6a28acc0d.htm)
+
+# Remarks
+
+The referenced element may be any model element, including FamilyInstance, FormElement, or CurveElement. The reference must be of type ElementReferenceType.REFERENCE\_TYPE\_LINEAR.
+
+# See Also
+
+[PointOnEdge Class](bfd3b8e2-68d5-18e7-43e8-31798e962f10.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

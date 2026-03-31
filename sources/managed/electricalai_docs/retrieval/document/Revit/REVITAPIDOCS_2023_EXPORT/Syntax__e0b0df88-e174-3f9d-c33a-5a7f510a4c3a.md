@@ -1,0 +1,42 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CorrectionFactors Property
+
+---
+
+
+
+|  |
+| --- |
+| [TemperatureRatingType Class](fe7e15d7-c31f-b24c-992f-332e54e9a5ba.htm)   [See Also](#seeAlsoToggle) |
+
+Get all correction factors defined in this temperature rating type and its corresponding material type.
+
+**Namespace:**   [Autodesk.Revit.DB.Electrical](212a1314-7843-2c6c-3322-363127e4059f.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public CorrectionFactorSet CorrectionFactors { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property CorrectionFactors As CorrectionFactorSet 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property CorrectionFactorSet^ CorrectionFactors { 	CorrectionFactorSet^ get (); } ``` |
+
+# See Also
+
+[TemperatureRatingType Class](fe7e15d7-c31f-b24c-992f-332e54e9a5ba.htm)
+
+[Autodesk.Revit.DB.Electrical Namespace](212a1314-7843-2c6c-3322-363127e4059f.htm)

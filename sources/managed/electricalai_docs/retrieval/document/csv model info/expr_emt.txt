@@ -1,0 +1,5 @@
+if((({templateName} = "*EMT*")) AND ({Outside Diameter} >= 0.5 AND {Outside Diameter} <= 1.0), 0.02,
+if((({templateName} = "*EMT*")) AND ({Outside Diameter} >= 1.25 AND {Outside Diameter} <= 1.5), 0.025,
+if((({templateName} = "*EMT*")) AND ({Outside Diameter} >= 2.0 AND {Outside Diameter} <= 3.0), 0.034,
+if((({templateName} = "*EMT*")) AND ({Outside Diameter} >= 3.5 AND {Outside Diameter} <= 4.0), 0.052,
+0))))

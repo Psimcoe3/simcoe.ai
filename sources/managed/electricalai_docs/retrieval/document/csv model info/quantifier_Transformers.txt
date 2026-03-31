@@ -1,0 +1,9 @@
+## Stratus.Field.Quantifier — Transformers
+Type: Decimal
+Is Expression: Checked
+
+if(
+  ({templateName} = "*Electrical Equipment 112 XFMER HK PAD*") OR ({templateName} = "*Electrical Equipment 45 XFMER HK PAD*") OR ({templateName} = "*Electrical Equipment Elec - Dry Type Transformer1*") OR ({templateName} = "*Electrical Equipment Siemens XFMR T3*") OR ({templateName} = "*Electrical Equipment Siemens XFMR T4*") OR ({templateName} = "*Electrical Equipment Siemens XFMR T5*") OR ({templateName} = "*Electrical Equipment Siemens XFMR T6*") OR ({templateName} = "*Electrical Equipment Transformer - Square D - Low Voltage - EX*") OR ({templateName} = "*Electrical Equipment UTILITY XFMR 1500 HOWARD*") OR ({templateName} = "*Electrical Equipment UTILITY XFMR 2500 HOWARD 212001-23*") OR ({templateName} = "*Electrical Equipment eE_EQ_Transformer_v1*") OR ({templateName} = "*Electrical Equipment eE_EQ_Transformer_v2*") OR ({templateName} = "*Electrical Equipment eE_EQ_Transformer_v3*") OR ({templateName} = "*Electrical Equipment eE_EQ_Transformer_v3_sPoint*") OR ({templateName} = "*Electrical Equipment eE_EQ_Transformer_v3_sPoint_IN PROGRESS*") OR ({templateName} = "*Generic Models Eversource Ductbank XFMR 1*") OR ({templateName} = "*Generic Models Eversource Ductbank XFMR 2*") OR ({templateName} = "*Generic Models Eversource Ductbank XFMR 4a*") OR ({templateName} = "*Generic Models Eversource Ductbank XFMR 4b*") OR ({templateName} = "*Generic Models Eversource Ductbank XFMR 4c*") OR ({templateName} = "*Generic Models Eversource Duxtbank XFMR 3*") OR ({templateName} = "*Generic Models Transformer Lines*"),
+  {Count},
+  0
+)

@@ -1,0 +1,59 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### ComboBox Members
+
+---
+
+
+
+|  |
+| --- |
+| [ComboBox Class](a5667995-e628-13df-c157-39c95b2435d6.htm)   [Methods](#methodTableToggle)   [Properties](#propertyTableToggle)   [Events](#eventTableToggle)   [See Also](#seeAlsoToggle) |
+
+The  [ComboBox](a5667995-e628-13df-c157-39c95b2435d6.htm)  type exposes the following members.
+
+# Methods
+
+|  | Name | Description |
+| --- | --- | --- |
+| Public method | [AddItem](6cbeeb24-76df-d3af-8a6f-300cefc63f05.htm) | Adds a new item to the ComboBox. |
+| Public method | [AddItems](3fef4a5e-1d55-2c8a-33ed-13a29d269e31.htm) | Adds a new items to the ComboBox. |
+| Public method | [AddSeparator](c52ae869-ff29-b9ce-9421-c5700e0daaba.htm) | Adds a separator to the drop-down list. |
+| Public method | [Equals](0620140c-8371-aef3-a747-02069218fc57.htm) | Determines whether the specified  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  is equal to the current  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  . (Inherited from  [RibbonItem](79225f03-1633-3722-15b0-752c91a3740d.htm)  .) |
+| Public method | [GetContextualHelp](ab7e7653-789b-6001-123b-5cfde2e2a132.htm) | Gets the contextual help bound with this control. (Inherited from  [RibbonItem](79225f03-1633-3722-15b0-752c91a3740d.htm)  .) |
+| Public method | [GetHashCode](http://msdn2.microsoft.com/en-us/library/zdee4b3y) | Serves as a hash function for a particular type. (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+| Public method | [GetItems](b64c88a5-f3a5-0bb9-dcf7-e09f8b46c908.htm) | Gets the copy of a collection of the ComboBoxMembers assigned to the ComboBox. |
+| Public method | [GetType](http://msdn2.microsoft.com/en-us/library/dfwy45w9) | Gets the  [Type](http://msdn2.microsoft.com/en-us/library/42892f65)  of the current instance. (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+| Public method | [SetContextualHelp](746fe5b0-c38b-56ae-b681-f7b3b816ea7d.htm) | Sets the contextual help bound with this button. (Inherited from  [RibbonItem](79225f03-1633-3722-15b0-752c91a3740d.htm)  .) |
+| Public method | [ToString](http://msdn2.microsoft.com/en-us/library/7bxwbwt2) | Returns a string that represents the current object. (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+
+# Properties
+
+|  | Name | Description |
+| --- | --- | --- |
+| Public property | [Current](114dac7f-7920-964e-4b54-808eb6d96d56.htm) | Gets or sets the current checked ComboBox member of the ComboBox. |
+| Public property | [Enabled](1e8498e5-1609-cf26-fb58-012e73db9f5b.htm) | Gets or sets a value indicating whether the item is enabled. (Inherited from  [RibbonItem](79225f03-1633-3722-15b0-752c91a3740d.htm)  .) |
+| Public property | [Image](7bc0f3a6-cd37-7b3a-f7fa-d81cabac4df0.htm) | The image shown on the ComboBox. |
+| Public property | [ItemText](37aa82da-384b-c258-b694-6e4ee03bdcb0.htm) | Gets or sets the text displayed on the item. (Inherited from  [RibbonItem](79225f03-1633-3722-15b0-752c91a3740d.htm)  .) |
+| Public property | [ItemType](a2684698-096c-d278-a29f-698bc487716c.htm) | Gets the item type. (Inherited from  [RibbonItem](79225f03-1633-3722-15b0-752c91a3740d.htm)  .) |
+| Public property | [LongDescription](b5d651b3-136b-a0b1-fe3c-d37c55196e87.htm) | Long description of the command tooltip (Inherited from  [RibbonItem](79225f03-1633-3722-15b0-752c91a3740d.htm)  .) |
+| Public property | [Name](07794356-fa07-1071-47f0-a1b13ee47f40.htm) | The name of the item. (Inherited from  [RibbonItem](79225f03-1633-3722-15b0-752c91a3740d.htm)  .) |
+| Public property | [ToolTip](afc95063-2798-2dfb-8313-8875738dc5e5.htm) | The description that appears as a ToolTip for the item. (Inherited from  [RibbonItem](79225f03-1633-3722-15b0-752c91a3740d.htm)  .) |
+| Public property | [ToolTipImage](dd4010ef-a6dd-6ad4-90fd-570b4a9add4d.htm) | The image to show as a part of the button extended tooltip (Inherited from  [RibbonItem](79225f03-1633-3722-15b0-752c91a3740d.htm)  .) |
+| Public property | [Visible](03c0742a-15ba-d46d-8cd7-5c5a1fb63a6c.htm) | Gets or sets a value indicating whether the item is visible. (Inherited from  [RibbonItem](79225f03-1633-3722-15b0-752c91a3740d.htm)  .) |
+
+# Events
+
+|  | Name | Description |
+| --- | --- | --- |
+| Public event | [CurrentChanged](9b786d54-6599-3bd9-f240-b27df8b03d1f.htm) | Subscribe to this event to be notified when the current item of the ComboBox is changed. |
+| Public event | [DropDownClosed](a20fbfd0-d7ab-eefb-a3d1-38f22882f1ec.htm) | Subscribe to this event to be notified when the drop-down of the ComboBox is closed. |
+| Public event | [DropDownOpened](7c1f5209-2198-fc8d-4ce5-2f1fc1d8e5c5.htm) | Subscribe to this event to be notified when the drop-down of the ComboBox is opened. |
+
+# See Also
+
+[ComboBox Class](a5667995-e628-13df-c157-39c95b2435d6.htm)
+
+[Autodesk.Revit.UI Namespace](e86fd90a-8957-02a6-da7f-ced248966e3e.htm)

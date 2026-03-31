@@ -1,0 +1,10 @@
+## Stratus.Field.Quantifier — Support Package
+Type: Decimal
+Is Expression: Checked
+
+if(
+  ({templateName} = "*Cable Tray Fittings Channel Horizontal Bend*") OR ({templateName} = "*Generic Models Atkore Custom Trapeze Hanger Thu Jun 08 2023*") OR ({templateName} = "*Generic Models GTP Channel Strut*") OR ({templateName} = "*Generic Models GTP Trapeze - 1 Tier - 2 Rod*") OR ({templateName} = "*Generic Models GTP Trapeze - 2 Tier - 2 Rod*") OR ({templateName} = "*Generic Models HW Channel Strut*") OR ({templateName} = "*Generic Models Strut*") OR ({templateName} = "*Generic Models Strut (vertical)*") OR ({templateName} = "*Generic Models Trmb_FieldPoints_MarkerGraphic_Hanger Point*") OR ({templateName} = "*Generic Models strut post base*") OR ({templateName} = "*Generic Models test hanger*"),
+  {Count},
+  0
+)
+

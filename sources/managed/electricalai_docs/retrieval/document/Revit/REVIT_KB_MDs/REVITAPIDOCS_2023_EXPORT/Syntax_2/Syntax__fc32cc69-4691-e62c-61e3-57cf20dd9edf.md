@@ -1,0 +1,74 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Export Method (String, String, STLExportOptions)
+
+---
+
+
+
+|  |
+| --- |
+| [Document Class](db03274b-a107-aa32-9034-f3e0df4bb1ec.htm)   [See Also](#seeAlsoToggle) |
+
+Exports a view specified in the export options to the STL format.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 23.0.0.0 (23.1.0.0)   
+  **Since:**  2021.1
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public bool Export( 	string folder, 	string name, 	STLExportOptions options ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function Export ( _ 	folder As String, _ 	name As String, _ 	options As STLExportOptions _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: bool Export( 	String^ folder,  	String^ name,  	STLExportOptions^ options ) ``` |
+
+#### Parameters
+
+folder
+:   Type:  System String    
+     Output folder into which the file will be exported. The folder must exist.
+
+name
+:   Type:  System String    
+     Indicates the name of the STL file to export. If it doesn't end with ".stl", this extension will be added automatically. The name cannot contain any of the following characters: \/:\*?"<>|. Empty name is not acceptable.
+
+options
+:   Type:  [Autodesk.Revit.DB STLExportOptions](c8870dfe-9259-4981-4545-a6c0d0440552.htm)    
+     Various options applicable to the STL format.
+
+#### Return Value
+
+True if successful, otherwise False.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | NullOrEmpty -or- Contains invalid characters. -or- The provided options are not valid. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions ForbiddenForDynamicUpdateException](c5b911f6-1e8f-2cd4-6965-286f41221fe0.htm) | This method may not be called during dynamic update. |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | Export is temporarily disabled. -or- Exporting is not allowed in the current application mode. |
+| [Autodesk.Revit.Exceptions InvalidPathArgumentException](3f3c93a6-008b-f9de-40d4-5cd99bb32b34.htm) | The folder does not exist. |
+| [Autodesk.Revit.Exceptions OptionalFunctionalityNotAvailableException](0612a676-b6ba-8c37-2e28-b197438305ab.htm) | The ShapeExporter functionality is not available in the installed Revit. |
+
+# See Also
+
+[Document Class](db03274b-a107-aa32-9034-f3e0df4bb1ec.htm)
+
+[Export Overload](2f535342-ee41-86f9-0022-92ba1f65112d.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

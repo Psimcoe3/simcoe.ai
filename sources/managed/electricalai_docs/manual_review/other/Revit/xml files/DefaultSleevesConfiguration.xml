@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="utf-16"?>
+<SleevesConfigurationData xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <PlacementDefinitions>
+    <SleevePlacementDefinition>
+      <HostSelectionFilter>
+        <Name>Walls / Floors</Name>
+        <Group />
+        <SubGroup />
+        <Operation>
+          <Id>1</Id>
+          <ParentId>0</ParentId>
+          <OperationType>And</OperationType>
+          <Parameter />
+          <Operator>Equal</Operator>
+          <InputType>Value</InputType>
+          <Children />
+        </Operation>
+        <CategoryIds>
+          <int>-2000032</int>
+          <int>-2000011</int>
+        </CategoryIds>
+        <DefaultAction>Unknown</DefaultAction>
+        <IncludePartInsulation>false</IncludePartInsulation>
+        <ExpandAssembliesGroups>false</ExpandAssembliesGroups>
+        <IncludeNestedElements>false</IncludeNestedElements>
+        <IsCaseSensitive>false</IsCaseSensitive>
+        <Precision>5</Precision>
+        <ForceDotNetEvaluation>false</ForceDotNetEvaluation>
+        <LinkedDocumentPaths />
+        <Id>e95040c3-a242-48e7-a805-f480444b9482</Id>
+        <PowerShellEnabled>false</PowerShellEnabled>
+        <PowerShellScript />
+        <PowerShellActiveView>false</PowerShellActiveView>
+        <PowerShellConnectedElements>false</PowerShellConnectedElements>
+        <PowerShellContainedElements>false</PowerShellContainedElements>
+        <PowerShellLinkedModels>false</PowerShellLinkedModels>
+        <PowerShellNestedElements>false</PowerShellNestedElements>
+        <PowerShellRunElements>false</PowerShellRunElements>
+        <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+        <PowerShellDataTableNames />
+      </HostSelectionFilter>
+      <HostSelectionFilterData>PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTE2Ij8+DQo8U2VsZWN0aW9uRmlsdGVyIHhtbG5zOnhzZD0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEiIHhtbG5zOnhzaT0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEtaW5zdGFuY2UiPg0KICA8TmFtZT5XYWxscyAvIEZsb29yczwvTmFtZT4NCiAgPEdyb3VwIC8+DQogIDxTdWJHcm91cCAvPg0KICA8T3BlcmF0aW9uPg0KICAgIDxJZD4xPC9JZD4NCiAgICA8UGFyZW50SWQ+MDwvUGFyZW50SWQ+DQogICAgPE9wZXJhdGlvblR5cGU+QW5kPC9PcGVyYXRpb25UeXBlPg0KICAgIDxQYXJhbWV0ZXIgLz4NCiAgICA8T3BlcmF0b3I+RXF1YWw8L09wZXJhdG9yPg0KICAgIDxJbnB1dFR5cGU+VmFsdWU8L0lucHV0VHlwZT4NCiAgICA8Q2hpbGRyZW4gLz4NCiAgPC9PcGVyYXRpb24+DQogIDxDYXRlZ29yeUlkcz4NCiAgICA8aW50Pi0yMDAwMDMyPC9pbnQ+DQogICAgPGludD4tMjAwMDAxMTwvaW50Pg0KICA8L0NhdGVnb3J5SWRzPg0KICA8RGVmYXVsdEFjdGlvbj5Vbmtub3duPC9EZWZhdWx0QWN0aW9uPg0KICA8SW5jbHVkZVBhcnRJbnN1bGF0aW9uPmZhbHNlPC9JbmNsdWRlUGFydEluc3VsYXRpb24+DQogIDxFeHBhbmRBc3NlbWJsaWVzR3JvdXBzPmZhbHNlPC9FeHBhbmRBc3NlbWJsaWVzR3JvdXBzPg0KICA8SW5jbHVkZU5lc3RlZEVsZW1lbnRzPmZhbHNlPC9JbmNsdWRlTmVzdGVkRWxlbWVudHM+DQogIDxJc0Nhc2VTZW5zaXRpdmU+ZmFsc2U8L0lzQ2FzZVNlbnNpdGl2ZT4NCiAgPFByZWNpc2lvbj41PC9QcmVjaXNpb24+DQogIDxGb3JjZURvdE5ldEV2YWx1YXRpb24+ZmFsc2U8L0ZvcmNlRG90TmV0RXZhbHVhdGlvbj4NCiAgPExpbmtlZERvY3VtZW50UGF0aHMgLz4NCiAgPElkPmU5NTA0MGMzLWEyNDItNDhlNy1hODA1LWY0ODA0NDRiOTQ4MjwvSWQ+DQogIDxQb3dlclNoZWxsRW5hYmxlZD5mYWxzZTwvUG93ZXJTaGVsbEVuYWJsZWQ+DQogIDxQb3dlclNoZWxsU2NyaXB0IC8+DQogIDxQb3dlclNoZWxsQWN0aXZlVmlldz5mYWxzZTwvUG93ZXJTaGVsbEFjdGl2ZVZpZXc+DQogIDxQb3dlclNoZWxsQ29ubmVjdGVkRWxlbWVudHM+ZmFsc2U8L1Bvd2VyU2hlbGxDb25uZWN0ZWRFbGVtZW50cz4NCiAgPFBvd2VyU2hlbGxDb250YWluZWRFbGVtZW50cz5mYWxzZTwvUG93ZXJTaGVsbENvbnRhaW5lZEVsZW1lbnRzPg0KICA8UG93ZXJTaGVsbExpbmtlZE1vZGVscz5mYWxzZTwvUG93ZXJTaGVsbExpbmtlZE1vZGVscz4NCiAgPFBvd2VyU2hlbGxOZXN0ZWRFbGVtZW50cz5mYWxzZTwvUG93ZXJTaGVsbE5lc3RlZEVsZW1lbnRzPg0KICA8UG93ZXJTaGVsbFJ1bkVsZW1lbnRzPmZhbHNlPC9Qb3dlclNoZWxsUnVuRWxlbWVudHM+DQogIDxQb3dlclNoZWxsUnVuRWxlbWVudHNQcm9jZXNzQnJhbmNoZXM+ZmFsc2U8L1Bvd2VyU2hlbGxSdW5FbGVtZW50c1Byb2Nlc3NCcmFuY2hlcz4NCiAgPFBvd2VyU2hlbGxEYXRhVGFibGVOYW1lcyAvPg0KPC9TZWxlY3Rpb25GaWx0ZXI+</HostSelectionFilterData>
+      <RunSelectionFilter>
+        <Name>Conduits</Name>
+        <Group />
+        <SubGroup />
+        <Operation>
+          <Id>1</Id>
+          <ParentId>0</ParentId>
+          <OperationType>And</OperationType>
+          <Parameter />
+          <Operator>Equal</Operator>
+          <InputType>Value</InputType>
+          <Children />
+        </Operation>
+        <CategoryIds>
+          <int>-2008132</int>
+        </CategoryIds>
+        <DefaultAction>Unknown</DefaultAction>
+        <IncludePartInsulation>false</IncludePartInsulation>
+        <ExpandAssembliesGroups>false</ExpandAssembliesGroups>
+        <IncludeNestedElements>false</IncludeNestedElements>
+        <IsCaseSensitive>false</IsCaseSensitive>
+        <Precision>5</Precision>
+        <ForceDotNetEvaluation>false</ForceDotNetEvaluation>
+        <LinkedDocumentPaths />
+        <Id>c002c8fb-8c09-438e-93f5-e8631959dd9d</Id>
+        <PowerShellEnabled>false</PowerShellEnabled>
+        <PowerShellScript />
+        <PowerShellActiveView>false</PowerShellActiveView>
+        <PowerShellConnectedElements>false</PowerShellConnectedElements>
+        <PowerShellContainedElements>false</PowerShellContainedElements>
+        <PowerShellLinkedModels>false</PowerShellLinkedModels>
+        <PowerShellNestedElements>false</PowerShellNestedElements>
+        <PowerShellRunElements>false</PowerShellRunElements>
+        <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+        <PowerShellDataTableNames />
+      </RunSelectionFilter>
+      <RunSelectionFilterData>PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTE2Ij8+DQo8U2VsZWN0aW9uRmlsdGVyIHhtbG5zOnhzZD0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEiIHhtbG5zOnhzaT0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEtaW5zdGFuY2UiPg0KICA8TmFtZT5Db25kdWl0czwvTmFtZT4NCiAgPEdyb3VwIC8+DQogIDxTdWJHcm91cCAvPg0KICA8T3BlcmF0aW9uPg0KICAgIDxJZD4xPC9JZD4NCiAgICA8UGFyZW50SWQ+MDwvUGFyZW50SWQ+DQogICAgPE9wZXJhdGlvblR5cGU+QW5kPC9PcGVyYXRpb25UeXBlPg0KICAgIDxQYXJhbWV0ZXIgLz4NCiAgICA8T3BlcmF0b3I+RXF1YWw8L09wZXJhdG9yPg0KICAgIDxJbnB1dFR5cGU+VmFsdWU8L0lucHV0VHlwZT4NCiAgICA8Q2hpbGRyZW4gLz4NCiAgPC9PcGVyYXRpb24+DQogIDxDYXRlZ29yeUlkcz4NCiAgICA8aW50Pi0yMDA4MTMyPC9pbnQ+DQogIDwvQ2F0ZWdvcnlJZHM+DQogIDxEZWZhdWx0QWN0aW9uPlVua25vd248L0RlZmF1bHRBY3Rpb24+DQogIDxJbmNsdWRlUGFydEluc3VsYXRpb24+ZmFsc2U8L0luY2x1ZGVQYXJ0SW5zdWxhdGlvbj4NCiAgPEV4cGFuZEFzc2VtYmxpZXNHcm91cHM+ZmFsc2U8L0V4cGFuZEFzc2VtYmxpZXNHcm91cHM+DQogIDxJbmNsdWRlTmVzdGVkRWxlbWVudHM+ZmFsc2U8L0luY2x1ZGVOZXN0ZWRFbGVtZW50cz4NCiAgPElzQ2FzZVNlbnNpdGl2ZT5mYWxzZTwvSXNDYXNlU2Vuc2l0aXZlPg0KICA8UHJlY2lzaW9uPjU8L1ByZWNpc2lvbj4NCiAgPEZvcmNlRG90TmV0RXZhbHVhdGlvbj5mYWxzZTwvRm9yY2VEb3ROZXRFdmFsdWF0aW9uPg0KICA8TGlua2VkRG9jdW1lbnRQYXRocyAvPg0KICA8SWQ+YzAwMmM4ZmItOGMwOS00MzhlLTkzZjUtZTg2MzE5NTlkZDlkPC9JZD4NCiAgPFBvd2VyU2hlbGxFbmFibGVkPmZhbHNlPC9Qb3dlclNoZWxsRW5hYmxlZD4NCiAgPFBvd2VyU2hlbGxTY3JpcHQgLz4NCiAgPFBvd2VyU2hlbGxBY3RpdmVWaWV3PmZhbHNlPC9Qb3dlclNoZWxsQWN0aXZlVmlldz4NCiAgPFBvd2VyU2hlbGxDb25uZWN0ZWRFbGVtZW50cz5mYWxzZTwvUG93ZXJTaGVsbENvbm5lY3RlZEVsZW1lbnRzPg0KICA8UG93ZXJTaGVsbENvbnRhaW5lZEVsZW1lbnRzPmZhbHNlPC9Qb3dlclNoZWxsQ29udGFpbmVkRWxlbWVudHM+DQogIDxQb3dlclNoZWxsTGlua2VkTW9kZWxzPmZhbHNlPC9Qb3dlclNoZWxsTGlua2VkTW9kZWxzPg0KICA8UG93ZXJTaGVsbE5lc3RlZEVsZW1lbnRzPmZhbHNlPC9Qb3dlclNoZWxsTmVzdGVkRWxlbWVudHM+DQogIDxQb3dlclNoZWxsUnVuRWxlbWVudHM+ZmFsc2U8L1Bvd2VyU2hlbGxSdW5FbGVtZW50cz4NCiAgPFBvd2VyU2hlbGxSdW5FbGVtZW50c1Byb2Nlc3NCcmFuY2hlcz5mYWxzZTwvUG93ZXJTaGVsbFJ1bkVsZW1lbnRzUHJvY2Vzc0JyYW5jaGVzPg0KICA8UG93ZXJTaGVsbERhdGFUYWJsZU5hbWVzIC8+DQo8L1NlbGVjdGlvbkZpbHRlcj4=</RunSelectionFilterData>
+      <SleeveFamilyName>eE_SV_AutoSleeve_Round</SleeveFamilyName>
+      <SleeveFamilyType>Generic Sleeve</SleeveFamilyType>
+      <SleeveFamilyFilePath>{ExtensionPath}\Resources\Content\Families\eVolve\eE_SV_AutoSleeve_Round.rfa</SleeveFamilyFilePath>
+      <IncrementWidthBy>Value</IncrementWidthBy>
+      <IncrementWidthValue>0.083333333333333343</IncrementWidthValue>
+      <IncrementLengthValue>0.083333333333333343</IncrementLengthValue>
+      <EvaluateInsulation>false</EvaluateInsulation>
+      <BoxOutRuleName>Box Out</BoxOutRuleName>
+    </SleevePlacementDefinition>
+    <SleevePlacementDefinition>
+      <HostSelectionFilter>
+        <Name>Walls / Floors</Name>
+        <Group />
+        <SubGroup />
+        <Operation>
+          <Id>1</Id>
+          <ParentId>0</ParentId>
+          <OperationType>And</OperationType>
+          <Parameter />
+          <Operator>Equal</Operator>
+          <InputType>Value</InputType>
+          <Children />
+        </Operation>
+        <CategoryIds>
+          <int>-2000032</int>
+          <int>-2000011</int>
+        </CategoryIds>
+        <DefaultAction>Unknown</DefaultAction>
+        <IncludePartInsulation>false</IncludePartInsulation>
+        <ExpandAssembliesGroups>false</ExpandAssembliesGroups>
+        <IncludeNestedElements>false</IncludeNestedElements>
+        <IsCaseSensitive>false</IsCaseSensitive>
+        <Precision>5</Precision>
+        <ForceDotNetEvaluation>false</ForceDotNetEvaluation>
+        <LinkedDocumentPaths />
+        <Id>559d8424-12ec-42b9-9200-8ba8fde5ef22</Id>
+        <PowerShellEnabled>false</PowerShellEnabled>
+        <PowerShellScript />
+        <PowerShellActiveView>false</PowerShellActiveView>
+        <PowerShellConnectedElements>false</PowerShellConnectedElements>
+        <PowerShellContainedElements>false</PowerShellContainedElements>
+        <PowerShellLinkedModels>false</PowerShellLinkedModels>
+        <PowerShellNestedElements>false</PowerShellNestedElements>
+        <PowerShellRunElements>false</PowerShellRunElements>
+        <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+        <PowerShellDataTableNames />
+      </HostSelectionFilter>
+      <HostSelectionFilterData>PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTE2Ij8+DQo8U2VsZWN0aW9uRmlsdGVyIHhtbG5zOnhzZD0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEiIHhtbG5zOnhzaT0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEtaW5zdGFuY2UiPg0KICA8TmFtZT5XYWxscyAvIEZsb29yczwvTmFtZT4NCiAgPEdyb3VwIC8+DQogIDxTdWJHcm91cCAvPg0KICA8T3BlcmF0aW9uPg0KICAgIDxJZD4xPC9JZD4NCiAgICA8UGFyZW50SWQ+MDwvUGFyZW50SWQ+DQogICAgPE9wZXJhdGlvblR5cGU+QW5kPC9PcGVyYXRpb25UeXBlPg0KICAgIDxQYXJhbWV0ZXIgLz4NCiAgICA8T3BlcmF0b3I+RXF1YWw8L09wZXJhdG9yPg0KICAgIDxJbnB1dFR5cGU+VmFsdWU8L0lucHV0VHlwZT4NCiAgICA8Q2hpbGRyZW4gLz4NCiAgPC9PcGVyYXRpb24+DQogIDxDYXRlZ29yeUlkcz4NCiAgICA8aW50Pi0yMDAwMDMyPC9pbnQ+DQogICAgPGludD4tMjAwMDAxMTwvaW50Pg0KICA8L0NhdGVnb3J5SWRzPg0KICA8RGVmYXVsdEFjdGlvbj5Vbmtub3duPC9EZWZhdWx0QWN0aW9uPg0KICA8SW5jbHVkZVBhcnRJbnN1bGF0aW9uPmZhbHNlPC9JbmNsdWRlUGFydEluc3VsYXRpb24+DQogIDxFeHBhbmRBc3NlbWJsaWVzR3JvdXBzPmZhbHNlPC9FeHBhbmRBc3NlbWJsaWVzR3JvdXBzPg0KICA8SW5jbHVkZU5lc3RlZEVsZW1lbnRzPmZhbHNlPC9JbmNsdWRlTmVzdGVkRWxlbWVudHM+DQogIDxJc0Nhc2VTZW5zaXRpdmU+ZmFsc2U8L0lzQ2FzZVNlbnNpdGl2ZT4NCiAgPFByZWNpc2lvbj41PC9QcmVjaXNpb24+DQogIDxGb3JjZURvdE5ldEV2YWx1YXRpb24+ZmFsc2U8L0ZvcmNlRG90TmV0RXZhbHVhdGlvbj4NCiAgPExpbmtlZERvY3VtZW50UGF0aHMgLz4NCiAgPElkPjU1OWQ4NDI0LTEyZWMtNDJiOS05MjAwLThiYThmZGU1ZWYyMjwvSWQ+DQogIDxQb3dlclNoZWxsRW5hYmxlZD5mYWxzZTwvUG93ZXJTaGVsbEVuYWJsZWQ+DQogIDxQb3dlclNoZWxsU2NyaXB0IC8+DQogIDxQb3dlclNoZWxsQWN0aXZlVmlldz5mYWxzZTwvUG93ZXJTaGVsbEFjdGl2ZVZpZXc+DQogIDxQb3dlclNoZWxsQ29ubmVjdGVkRWxlbWVudHM+ZmFsc2U8L1Bvd2VyU2hlbGxDb25uZWN0ZWRFbGVtZW50cz4NCiAgPFBvd2VyU2hlbGxDb250YWluZWRFbGVtZW50cz5mYWxzZTwvUG93ZXJTaGVsbENvbnRhaW5lZEVsZW1lbnRzPg0KICA8UG93ZXJTaGVsbExpbmtlZE1vZGVscz5mYWxzZTwvUG93ZXJTaGVsbExpbmtlZE1vZGVscz4NCiAgPFBvd2VyU2hlbGxOZXN0ZWRFbGVtZW50cz5mYWxzZTwvUG93ZXJTaGVsbE5lc3RlZEVsZW1lbnRzPg0KICA8UG93ZXJTaGVsbFJ1bkVsZW1lbnRzPmZhbHNlPC9Qb3dlclNoZWxsUnVuRWxlbWVudHM+DQogIDxQb3dlclNoZWxsUnVuRWxlbWVudHNQcm9jZXNzQnJhbmNoZXM+ZmFsc2U8L1Bvd2VyU2hlbGxSdW5FbGVtZW50c1Byb2Nlc3NCcmFuY2hlcz4NCiAgPFBvd2VyU2hlbGxEYXRhVGFibGVOYW1lcyAvPg0KPC9TZWxlY3Rpb25GaWx0ZXI+</HostSelectionFilterData>
+      <RunSelectionFilter>
+        <Name>Cable Trays</Name>
+        <Group />
+        <SubGroup />
+        <Operation>
+          <Id>1</Id>
+          <ParentId>0</ParentId>
+          <OperationType>And</OperationType>
+          <Parameter />
+          <Operator>Equal</Operator>
+          <InputType>Value</InputType>
+          <Children />
+        </Operation>
+        <CategoryIds>
+          <int>-2008130</int>
+        </CategoryIds>
+        <DefaultAction>Unknown</DefaultAction>
+        <IncludePartInsulation>false</IncludePartInsulation>
+        <ExpandAssembliesGroups>false</ExpandAssembliesGroups>
+        <IncludeNestedElements>false</IncludeNestedElements>
+        <IsCaseSensitive>false</IsCaseSensitive>
+        <Precision>5</Precision>
+        <ForceDotNetEvaluation>false</ForceDotNetEvaluation>
+        <LinkedDocumentPaths />
+        <Id>d2dea8df-27b5-4121-892e-0b300a916ac6</Id>
+        <PowerShellEnabled>false</PowerShellEnabled>
+        <PowerShellScript />
+        <PowerShellActiveView>false</PowerShellActiveView>
+        <PowerShellConnectedElements>false</PowerShellConnectedElements>
+        <PowerShellContainedElements>false</PowerShellContainedElements>
+        <PowerShellLinkedModels>false</PowerShellLinkedModels>
+        <PowerShellNestedElements>false</PowerShellNestedElements>
+        <PowerShellRunElements>false</PowerShellRunElements>
+        <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+        <PowerShellDataTableNames />
+      </RunSelectionFilter>
+      <RunSelectionFilterData>PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTE2Ij8+DQo8U2VsZWN0aW9uRmlsdGVyIHhtbG5zOnhzZD0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEiIHhtbG5zOnhzaT0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEtaW5zdGFuY2UiPg0KICA8TmFtZT5DYWJsZSBUcmF5czwvTmFtZT4NCiAgPEdyb3VwIC8+DQogIDxTdWJHcm91cCAvPg0KICA8T3BlcmF0aW9uPg0KICAgIDxJZD4xPC9JZD4NCiAgICA8UGFyZW50SWQ+MDwvUGFyZW50SWQ+DQogICAgPE9wZXJhdGlvblR5cGU+QW5kPC9PcGVyYXRpb25UeXBlPg0KICAgIDxQYXJhbWV0ZXIgLz4NCiAgICA8T3BlcmF0b3I+RXF1YWw8L09wZXJhdG9yPg0KICAgIDxJbnB1dFR5cGU+VmFsdWU8L0lucHV0VHlwZT4NCiAgICA8Q2hpbGRyZW4gLz4NCiAgPC9PcGVyYXRpb24+DQogIDxDYXRlZ29yeUlkcz4NCiAgICA8aW50Pi0yMDA4MTMwPC9pbnQ+DQogIDwvQ2F0ZWdvcnlJZHM+DQogIDxEZWZhdWx0QWN0aW9uPlVua25vd248L0RlZmF1bHRBY3Rpb24+DQogIDxJbmNsdWRlUGFydEluc3VsYXRpb24+ZmFsc2U8L0luY2x1ZGVQYXJ0SW5zdWxhdGlvbj4NCiAgPEV4cGFuZEFzc2VtYmxpZXNHcm91cHM+ZmFsc2U8L0V4cGFuZEFzc2VtYmxpZXNHcm91cHM+DQogIDxJbmNsdWRlTmVzdGVkRWxlbWVudHM+ZmFsc2U8L0luY2x1ZGVOZXN0ZWRFbGVtZW50cz4NCiAgPElzQ2FzZVNlbnNpdGl2ZT5mYWxzZTwvSXNDYXNlU2Vuc2l0aXZlPg0KICA8UHJlY2lzaW9uPjU8L1ByZWNpc2lvbj4NCiAgPEZvcmNlRG90TmV0RXZhbHVhdGlvbj5mYWxzZTwvRm9yY2VEb3ROZXRFdmFsdWF0aW9uPg0KICA8TGlua2VkRG9jdW1lbnRQYXRocyAvPg0KICA8SWQ+ZDJkZWE4ZGYtMjdiNS00MTIxLTg5MmUtMGIzMDBhOTE2YWM2PC9JZD4NCiAgPFBvd2VyU2hlbGxFbmFibGVkPmZhbHNlPC9Qb3dlclNoZWxsRW5hYmxlZD4NCiAgPFBvd2VyU2hlbGxTY3JpcHQgLz4NCiAgPFBvd2VyU2hlbGxBY3RpdmVWaWV3PmZhbHNlPC9Qb3dlclNoZWxsQWN0aXZlVmlldz4NCiAgPFBvd2VyU2hlbGxDb25uZWN0ZWRFbGVtZW50cz5mYWxzZTwvUG93ZXJTaGVsbENvbm5lY3RlZEVsZW1lbnRzPg0KICA8UG93ZXJTaGVsbENvbnRhaW5lZEVsZW1lbnRzPmZhbHNlPC9Qb3dlclNoZWxsQ29udGFpbmVkRWxlbWVudHM+DQogIDxQb3dlclNoZWxsTGlua2VkTW9kZWxzPmZhbHNlPC9Qb3dlclNoZWxsTGlua2VkTW9kZWxzPg0KICA8UG93ZXJTaGVsbE5lc3RlZEVsZW1lbnRzPmZhbHNlPC9Qb3dlclNoZWxsTmVzdGVkRWxlbWVudHM+DQogIDxQb3dlclNoZWxsUnVuRWxlbWVudHM+ZmFsc2U8L1Bvd2VyU2hlbGxSdW5FbGVtZW50cz4NCiAgPFBvd2VyU2hlbGxSdW5FbGVtZW50c1Byb2Nlc3NCcmFuY2hlcz5mYWxzZTwvUG93ZXJTaGVsbFJ1bkVsZW1lbnRzUHJvY2Vzc0JyYW5jaGVzPg0KICA8UG93ZXJTaGVsbERhdGFUYWJsZU5hbWVzIC8+DQo8L1NlbGVjdGlvbkZpbHRlcj4=</RunSelectionFilterData>
+      <SleeveFamilyName>eV_SV_AutoSleeve_Rectangle</SleeveFamilyName>
+      <SleeveFamilyType>eV_SV_AutoSleeve_Rectangle</SleeveFamilyType>
+      <SleeveFamilyFilePath>{ExtensionPath}\Resources\Content\Families\eVolve\eV_SV_AutoSleeve_Rectangle.rfa</SleeveFamilyFilePath>
+      <IncrementWidthBy>Value</IncrementWidthBy>
+      <IncrementWidthValue>0.16666666666666669</IncrementWidthValue>
+      <IncrementLengthValue>0.16666666666666669</IncrementLengthValue>
+      <EvaluateInsulation>false</EvaluateInsulation>
+    </SleevePlacementDefinition>
+  </PlacementDefinitions>
+  <BoxOutPlacementDefinitions>
+    <BoxOutPlacementDefinition>
+      <RuleName>Box Out</RuleName>
+      <FamilyName>eV_SV_AutoSleeve_Rectangle</FamilyName>
+      <FamilyType>eV_SV_AutoSleeve_Rectangle</FamilyType>
+      <FilePath>{ExtensionPath}\Resources\Content\Families\eVolve\eV_SV_AutoSleeve_Rectangle.rfa</FilePath>
+      <AssociationMethod>EdgeToEdge</AssociationMethod>
+      <AssociationValue>0.25</AssociationValue>
+      <IncrementMethod>IndexPosition</IncrementMethod>
+      <IncrementHeightValue>0.16666666666666669</IncrementHeightValue>
+      <IncrementWidthValue>0.16666666666666669</IncrementWidthValue>
+      <LengthExtensionValue>0.16666666666666669</LengthExtensionValue>
+      <EvaluateInsulation>false</EvaluateInsulation>
+    </BoxOutPlacementDefinition>
+  </BoxOutPlacementDefinitions>
+  <UseSourceElementLevelForSleeve>true</UseSourceElementLevelForSleeve>
+  <PlacementStatus>Placed</PlacementStatus>
+  <IncludePrimaryModelAsSource>false</IncludePrimaryModelAsSource>
+  <PlaceAlignmentLocks>false</PlaceAlignmentLocks>
+  <LinkedModelSources />
+</SleevesConfigurationData>

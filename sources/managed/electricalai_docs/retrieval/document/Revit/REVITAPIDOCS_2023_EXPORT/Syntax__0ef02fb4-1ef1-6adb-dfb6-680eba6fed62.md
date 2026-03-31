@@ -1,0 +1,71 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CreateCurve Method (IList(XYZ), IList(Double))
+
+---
+
+
+
+|  |
+| --- |
+| [NurbSpline Class](65c43ffe-3972-ae2b-4aa4-e2901cdbb3a8.htm)   [See Also](#seeAlsoToggle) |
+
+Creates a new geometric Curve object from NURBS curve data containing just control points and weights. The created curve may be a NURBSpline or a simpler curve such as line or arc.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 17.0.0.0 (17.0.1090.0)   
+  **Since:**  2017
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static Curve CreateCurve( 	IList<XYZ> controlPoints, 	IList<double> weights ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function CreateCurve ( _ 	controlPoints As IList(Of XYZ), _ 	weights As IList(Of Double) _ ) As Curve ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static Curve^ CreateCurve( 	IList<XYZ^>^ controlPoints,  	IList<double>^ weights ) ``` |
+
+#### Parameters
+
+controlPoints
+:   Type:  [System.Collections.Generic IList](http://msdn2.microsoft.com/en-us/library/5y536ey6)   [XYZ](c2fd995c-95c0-58fb-f5de-f3246cbc5600.htm)    
+     The control points of the NURBSpline.
+
+weights
+:   Type:  [System.Collections.Generic IList](http://msdn2.microsoft.com/en-us/library/5y536ey6)   [Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     The weights of the NURBSpline.
+
+#### Return Value
+
+The new Curve object.
+
+# Remarks
+
+There must be at least 2 control points. The number of weights must be equal to the the number of control points. The values of all weights must be positive.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | The number of control points must be at least 2. -or- The number of weights must be the same as the number of control points and all weights must be positive. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was NULL |
+| [Autodesk.Revit.Exceptions ArgumentsInconsistentException](05972c68-fa6d-3a83-d720-ad84fbc4780f.htm) | Curve length is too small for Revit's tolerance (as identified by Application.ShortCurveTolerance). |
+
+# See Also
+
+[NurbSpline Class](65c43ffe-3972-ae2b-4aa4-e2901cdbb3a8.htm)
+
+[CreateCurve Overload](774a9983-44a1-6cd9-36f2-0e40a819c5f7.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

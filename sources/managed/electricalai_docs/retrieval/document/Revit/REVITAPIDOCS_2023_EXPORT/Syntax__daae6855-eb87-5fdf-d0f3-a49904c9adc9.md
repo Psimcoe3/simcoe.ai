@@ -1,0 +1,42 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CannotUseAreaReinforcementHookTypeStyle Property
+
+---
+
+
+
+|  |
+| --- |
+| [BuiltInFailures RebarSystemFailures Class](ef87224e-09b6-8d07-3b24-3a3b322a9ae5.htm)   [See Also](#seeAlsoToggle) |
+
+At least one of the bars in the Area Reinforcement has a Bar Type or Shape that is incompatible with the Hook type. Check the Hook permissions for the Bar Type (see Hook Lengths) and the Hook and Rebar Shape styles.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 21.0.0.0 (21.1.1.109)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static FailureDefinitionId CannotUseAreaReinforcementHookTypeStyle { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared ReadOnly Property CannotUseAreaReinforcementHookTypeStyle As FailureDefinitionId 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static property FailureDefinitionId^ CannotUseAreaReinforcementHookTypeStyle { 	FailureDefinitionId^ get (); } ``` |
+
+# See Also
+
+[BuiltInFailures RebarSystemFailures Class](ef87224e-09b6-8d07-3b24-3a3b322a9ae5.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

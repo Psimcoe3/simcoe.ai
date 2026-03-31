@@ -1,0 +1,42 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### NameInUse Property
+
+---
+
+
+
+|  |
+| --- |
+| [BuiltInFailures GeneralFailures Class](d4679f32-45d9-bec2-e0ff-168c3aee6de9.htm)   [See Also](#seeAlsoToggle) |
+
+The name "[Name]" is already in use.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static FailureDefinitionId NameInUse { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared ReadOnly Property NameInUse As FailureDefinitionId 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static property FailureDefinitionId^ NameInUse { 	FailureDefinitionId^ get (); } ``` |
+
+# See Also
+
+[BuiltInFailures GeneralFailures Class](d4679f32-45d9-bec2-e0ff-168c3aee6de9.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

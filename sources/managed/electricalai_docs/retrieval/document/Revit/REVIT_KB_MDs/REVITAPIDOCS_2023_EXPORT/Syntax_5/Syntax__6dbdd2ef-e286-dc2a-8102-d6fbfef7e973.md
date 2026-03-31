@@ -1,0 +1,62 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### ReInsert Method (Definition, Binding, ForgeTypeId)
+
+---
+
+
+
+|  |
+| --- |
+| [BindingMap Class](4ce777fb-ab30-6d15-d019-5b430223ac62.htm)   [See Also](#seeAlsoToggle) |
+
+Removes an existing parameter and creates a new binding for a given parameter in a specified group.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public virtual bool ReInsert( 	Definition key, 	Binding item, 	ForgeTypeId groupTypeId ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Overridable Function ReInsert ( _ 	key As Definition, _ 	item As Binding, _ 	groupTypeId As ForgeTypeId _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: virtual bool ReInsert( 	Definition^ key,  	Binding^ item,  	ForgeTypeId^ groupTypeId ) ``` |
+
+#### Parameters
+
+key
+:   Type:  [Autodesk.Revit.DB Definition](8fe04f37-04e1-9e93-ffdb-e3900908e42a.htm)    
+     A parameter definition which can be an existing definition or one from a shared parameters file.
+
+item
+:   Type:  [Autodesk.Revit.DB Binding](47f6ad6f-8d00-af57-995e-dc6db1255f58.htm)    
+     An InstanceBinding or TypeBinding object which contains the set of categories to which the parameter should be bound.
+
+groupTypeId
+:   Type:  [Autodesk.Revit.DB ForgeTypeId](d9fcf276-9566-de83-2b0b-d89b65ccc8af.htm)    
+     The identifier of the parameter definition's parameter group, or empty if the parameter is not to be associated with any predefined group.
+
+# Remarks
+
+Note the type of the binding object dictates whether the parameter is bound to all instances or just types. A parameter definition cannot be bound to both instances and types. If the parameter binding already exists, remove the binding, create a new parameter binding. If the parameter binding related to the input key doesn't exist in the database, ReInsert will fail and false will be returned. In this case, Insert should be called.
+
+# See Also
+
+[BindingMap Class](4ce777fb-ab30-6d15-d019-5b430223ac62.htm)
+
+[ReInsert Overload](8ac26661-1c4b-6ba1-417f-e4ea09acf32c.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

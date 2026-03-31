@@ -1,0 +1,10 @@
+## Stratus.Field.Quantifier — Temporaries Package
+Type: Decimal
+Is Expression: Checked
+
+if(
+  ({templateName} = "*Generic Models TEMP DUCTBANK*"),
+  {Count},
+  0
+)
+

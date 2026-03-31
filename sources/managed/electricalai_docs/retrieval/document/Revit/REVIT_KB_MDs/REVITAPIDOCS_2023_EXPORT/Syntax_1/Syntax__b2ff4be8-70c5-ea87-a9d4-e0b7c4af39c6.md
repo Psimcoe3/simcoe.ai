@@ -1,0 +1,58 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### SaveAs Method
+
+---
+
+
+
+|  |
+| --- |
+| [PrintSetup Class](9dc30afc-373c-a532-6c89-ff3fa2b3ceed.htm)   [See Also](#seeAlsoToggle) |
+
+Save the current print setting to another print setting with the specified name.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public bool SaveAs( 	string newName ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function SaveAs ( _ 	newName As String _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: bool SaveAs( 	String^ newName ) ``` |
+
+#### Parameters
+
+newName
+:   Type:  [System String](http://msdn2.microsoft.com/en-us/library/s1wwdcbf)    
+     print setting name to be saved as.
+
+#### Return Value
+
+False if Save As operation fails, otherwise true.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | Thrown when the input newName already exists in current print setting list. |
+
+# See Also
+
+[PrintSetup Class](9dc30afc-373c-a532-6c89-ff3fa2b3ceed.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

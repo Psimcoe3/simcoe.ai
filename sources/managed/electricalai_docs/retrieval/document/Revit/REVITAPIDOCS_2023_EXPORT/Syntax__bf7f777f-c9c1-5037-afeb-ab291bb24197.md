@@ -1,0 +1,67 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### AddField Method (ScheduleFieldType, ElementId)
+
+---
+
+
+
+|  |
+| --- |
+| [ScheduleDefinition Class](420696e3-f3ec-1a1d-1205-36a8119d81e5.htm)   [See Also](#seeAlsoToggle) |
+
+Adds a regular field at the end of the list.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ScheduleField AddField( 	ScheduleFieldType fieldType, 	ElementId parameterId ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function AddField ( _ 	fieldType As ScheduleFieldType, _ 	parameterId As ElementId _ ) As ScheduleField ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: ScheduleField^ AddField( 	ScheduleFieldType fieldType,  	ElementId^ parameterId ) ``` |
+
+#### Parameters
+
+fieldType
+:   Type:  [Autodesk.Revit.DB ScheduleFieldType](9888db7d-00d0-4fd7-a1a9-cdd1fb5fce16.htm)    
+     The type of data displayed by the field.
+
+parameterId
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     The ID of the parameter displayed by the field.
+
+#### Return Value
+
+The new field.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions ArgumentOutOfRangeException](60f148c9-ece0-a6bb-4e12-bb4a9c8c8a24.htm) | A value passed for an enumeration argument is not a member of that enumeration |
+| [Autodesk.Revit.Exceptions ArgumentsInconsistentException](05972c68-fa6d-3a83-d720-ad84fbc4780f.htm) | The field specified by fieldType and parameterId may not included in this ScheduleDefinition. -or- The field specified by fieldType and parameterId is already included in this ScheduleDefinition. |
+
+# See Also
+
+[ScheduleDefinition Class](420696e3-f3ec-1a1d-1205-36a8119d81e5.htm)
+
+[AddField Overload](e9c2fbe0-2bdd-f556-f870-54714e2ef939.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

@@ -1,0 +1,34 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IExternalResourceUIServer Members
+
+---
+
+
+
+|  |
+| --- |
+| [IExternalResourceUIServer Interface](aee37f3f-98e9-79c6-e02d-1b07e3ffd89c.htm)   [Methods](#methodTableToggle)   [See Also](#seeAlsoToggle) |
+
+The  [IExternalResourceUIServer](aee37f3f-98e9-79c6-e02d-1b07e3ffd89c.htm)  type exposes the following members.
+
+# Methods
+
+|  | Name | Description |
+| --- | --- | --- |
+| Public method | [GetDBServerId](7a58e7fb-d4ed-cb5b-3b3d-496b6be34bd7.htm) | Implement this method to return the id of the server which is associated with this UI server. |
+| Public method | [GetDescription](ab8f162b-c7af-dafc-04f6-8cb3835caa13.htm) | Implement this method to return a description of the server. (Inherited from  [IExternalServer](91e4af0b-59c0-d640-107a-eebc4d99fa76.htm)  .) |
+| Public method | [GetName](df64b529-27e1-3a6a-7876-2145bb8a37b4.htm) | Implement this method to return the name of the server. (Inherited from  [IExternalServer](91e4af0b-59c0-d640-107a-eebc4d99fa76.htm)  .) |
+| Public method | [GetServerId](49b1955b-a729-b610-0138-592784d20171.htm) | Implement this method to return the id of the server. (Inherited from  [IExternalServer](91e4af0b-59c0-d640-107a-eebc4d99fa76.htm)  .) |
+| Public method | [GetServiceId](1f8da2c8-54d9-2d69-bdcc-e801d990d463.htm) | Implement this method to return the id of the service. (Inherited from  [IExternalServer](91e4af0b-59c0-d640-107a-eebc4d99fa76.htm)  .) |
+| Public method | [GetVendorId](76cf499a-4a59-9249-8995-e1ab9e629f37.htm) | Implement this method to return the id of the vendor of the server. (Inherited from  [IExternalServer](91e4af0b-59c0-d640-107a-eebc4d99fa76.htm)  .) |
+| Public method | [HandleBrowseResult](7a1805d4-0142-5162-4507-882ab705ab01.htm) | Implement this method to handle results from browsing external resources in the UI. It is recommended that the server only respond in the case of a critical error. |
+| Public method | [HandleLoadResourceResults](5a6b5313-eca3-8929-4fd2-750d924f06d7.htm) | Implement this method to display any UI related to messages or errors that result when the DB server associated with this UI server attempts to load an external resource. |
+
+# See Also
+
+[IExternalResourceUIServer Interface](aee37f3f-98e9-79c6-e02d-1b07e3ffd89c.htm)
+
+[Autodesk.Revit.UI Namespace](e86fd90a-8957-02a6-da7f-ced248966e3e.htm)

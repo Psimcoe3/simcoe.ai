@@ -1,0 +1,46 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CoolingAirTemperature Property
+
+---
+
+
+
+|  |
+| --- |
+| [Zone Class](b47e1280-b436-5f9d-17dc-5b315b50c5ee.htm)   [See Also](#seeAlsoToggle) |
+
+Get or set the Cooling Air Temperature of the Zone.
+
+**Namespace:**   [Autodesk.Revit.DB.Mechanical](0eafd899-5912-56fd-94b1-d286156e26fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public double CoolingAirTemperature { get; set; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Property CoolingAirTemperature As Double 	Get 	Set ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property double CoolingAirTemperature { 	double get (); 	void set (double value); } ``` |
+
+# Remarks
+
+This property is used to get or set the Cooling Air Temperature of the Zone.
+
+# See Also
+
+[Zone Class](b47e1280-b436-5f9d-17dc-5b315b50c5ee.htm)
+
+[Autodesk.Revit.DB.Mechanical Namespace](0eafd899-5912-56fd-94b1-d286156e26fc.htm)

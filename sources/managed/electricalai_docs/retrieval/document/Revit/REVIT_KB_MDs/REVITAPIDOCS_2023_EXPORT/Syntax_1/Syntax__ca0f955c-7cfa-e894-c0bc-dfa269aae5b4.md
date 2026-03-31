@@ -1,0 +1,60 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetLabelFor Method (BuiltInParameter)
+
+---
+
+
+
+|  |
+| --- |
+| [LabelUtils Class](39d096e3-6f2f-13ac-237b-7549d9841ef5.htm)   [See Also](#seeAlsoToggle) |
+
+Gets the user-visible name for a BuiltInParameter.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static string GetLabelFor( 	BuiltInParameter builtInParam ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function GetLabelFor ( _ 	builtInParam As BuiltInParameter _ ) As String ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static String^ GetLabelFor( 	BuiltInParameter builtInParam ) ``` |
+
+#### Parameters
+
+builtInParam
+:   Type:  [Autodesk.Revit.DB BuiltInParameter](fb011c91-be7e-f737-28c7-3f1e1917a0e0.htm)    
+     The BuiltInParameter to get the user-visible name.
+
+# Remarks
+
+The name is obtained in the current Revit language.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | Thrown when the BuiltInParameter cannot be found. |
+
+# See Also
+
+[LabelUtils Class](39d096e3-6f2f-13ac-237b-7549d9841ef5.htm)
+
+[GetLabelFor Overload](39e41221-70f9-fae6-53e6-872eff5a2c63.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

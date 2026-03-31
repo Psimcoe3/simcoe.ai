@@ -1,0 +1,61 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### SetHostId Method
+
+---
+
+
+
+|  |
+| --- |
+| [RebarContainer Class](61979a57-facc-d97a-7a35-ee04eed59156.htm)   [See Also](#seeAlsoToggle) |
+
+The element that contains the rebar.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2016
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public void SetHostId( 	Document doc, 	ElementId hostId ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub SetHostId ( _ 	doc As Document, _ 	hostId As ElementId _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: void SetHostId( 	Document^ doc,  	ElementId^ hostId ) ``` |
+
+#### Parameters
+
+doc
+:   Type:  [Autodesk.Revit.DB Document](db03274b-a107-aa32-9034-f3e0df4bb1ec.htm)    
+     The document containing both this element and the host element.
+
+hostId
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     The element that the rebar object belongs to, such as a structural wall, floor, foundation, beam, brace or column. The rebar does not need to be strictly inside the host, but it must be assigned to one host element.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | hostId is not a legal Rebar Container host. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions DisabledDisciplineException](3693dcdf-67fb-0128-3be8-cad150e9498e.htm) | None of the following disciplines is enabled: Structural. |
+
+# See Also
+
+[RebarContainer Class](61979a57-facc-d97a-7a35-ee04eed59156.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

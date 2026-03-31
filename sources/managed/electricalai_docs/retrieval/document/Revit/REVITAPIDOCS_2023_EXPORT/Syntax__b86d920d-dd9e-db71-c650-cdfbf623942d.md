@@ -1,0 +1,67 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### AreElementsValidForAssembly Method
+
+---
+
+
+
+|  |
+| --- |
+| [AssemblyInstance Class](4e60704c-dfe3-72b6-7892-6440503fa078.htm)   [See Also](#seeAlsoToggle) |
+
+Identifies if provided assembly members are valid.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2012
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool AreElementsValidForAssembly( 	Document document, 	ICollection<ElementId> assemblyMemberIds, 	ElementId assemblyId ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function AreElementsValidForAssembly ( _ 	document As Document, _ 	assemblyMemberIds As ICollection(Of ElementId), _ 	assemblyId As ElementId _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool AreElementsValidForAssembly( 	Document^ document,  	ICollection<ElementId^>^ assemblyMemberIds,  	ElementId^ assemblyId ) ``` |
+
+#### Parameters
+
+document
+:   Type:  [Autodesk.Revit.DB Document](db03274b-a107-aa32-9034-f3e0df4bb1ec.htm)    
+     The document.
+
+assemblyMemberIds
+:   Type:  System.Collections.Generic ICollection   [ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     Element ids to be tested for validity for membership of an assembly instance.
+
+assemblyId
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     Id of the existing assembly to add components to. If invalid, the method return whether the components can be added to a new assembly
+
+#### Return Value
+
+True if all member ids are valid, false otherwise.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[AssemblyInstance Class](4e60704c-dfe3-72b6-7892-6440503fa078.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

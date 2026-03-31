@@ -1,0 +1,1033 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ExternalIntegrationConfigurationData xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Definitions>
+    <ExternalIntegrationDefinition>
+      <IsMigrated70>true</IsMigrated70>
+      <Direction>Export</Direction>
+      <SelectionScope>Project</SelectionScope>
+      <ExpansionOption>NoExpansion</ExpansionOption>
+      <Name>eV_TrapezeEncoding_NoHardware</Name>
+      <Description>Used to generate unique hash for eVolve Trapeze Hangers using the EVOLVE part encoder. Note that the accuracy of the unique hash is determined by the parameters which are defined within this profile.</Description>
+      <Group>Part Encoder</Group>
+      <SubGroup>Trapeze Hangers</SubGroup>
+      <SelectionFilterData>PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTE2Ij8+DQo8U2VsZWN0aW9uRmlsdGVyIHhtbG5zOnhzZD0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEiIHhtbG5zOnhzaT0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEtaW5zdGFuY2UiPg0KICA8TmFtZT5lVm9sdmUgSGFuZ2VycyBOSFc8L05hbWU+DQogIDxHcm91cCAvPg0KICA8U3ViR3JvdXAgLz4NCiAgPE9wZXJhdGlvbj4NCiAgICA8SWQ+MTwvSWQ+DQogICAgPFBhcmVudElkPjA8L1BhcmVudElkPg0KICAgIDxPcGVyYXRpb25UeXBlPkFuZDwvT3BlcmF0aW9uVHlwZT4NCiAgICA8UGFyYW1ldGVyIC8+DQogICAgPE9wZXJhdG9yPkVxdWFsPC9PcGVyYXRvcj4NCiAgICA8SW5wdXRUeXBlPlZhbHVlPC9JbnB1dFR5cGU+DQogICAgPENoaWxkcmVuPg0KICAgICAgPFNlbGVjdGlvbkZpbHRlck9wZXJhdGlvbj4NCiAgICAgICAgPElkPjI8L0lkPg0KICAgICAgICA8UGFyZW50SWQ+MTwvUGFyZW50SWQ+DQogICAgICAgIDxPcGVyYXRpb25UeXBlPkNvbmRpdGlvbjwvT3BlcmF0aW9uVHlwZT4NCiAgICAgICAgPFBhcmFtZXRlcj5GYW1pbHkgTmFtZXwtMTAwMjAwMjwvUGFyYW1ldGVyPg0KICAgICAgICA8T3BlcmF0b3I+U3RhcnRzV2l0aDwvT3BlcmF0b3I+DQogICAgICAgIDxJbnB1dFR5cGU+VmFsdWU8L0lucHV0VHlwZT4NCiAgICAgICAgPFZhbHVlPmVWX0FTTV9IU19UcmFwZXplXzwvVmFsdWU+DQogICAgICAgIDxDaGlsZHJlbiAvPg0KICAgICAgPC9TZWxlY3Rpb25GaWx0ZXJPcGVyYXRpb24+DQogICAgICA8U2VsZWN0aW9uRmlsdGVyT3BlcmF0aW9uPg0KICAgICAgICA8SWQ+MzwvSWQ+DQogICAgICAgIDxQYXJlbnRJZD4xPC9QYXJlbnRJZD4NCiAgICAgICAgPE9wZXJhdGlvblR5cGU+Q29uZGl0aW9uPC9PcGVyYXRpb25UeXBlPg0KICAgICAgICA8UGFyYW1ldGVyPkZhbWlseSBOYW1lfC0xMDAyMDAyPC9QYXJhbWV0ZXI+DQogICAgICAgIDxPcGVyYXRvcj5Db250YWluczwvT3BlcmF0b3I+DQogICAgICAgIDxJbnB1dFR5cGU+VmFsdWU8L0lucHV0VHlwZT4NCiAgICAgICAgPFZhbHVlPk5IVzwvVmFsdWU+DQogICAgICAgIDxDaGlsZHJlbiAvPg0KICAgICAgPC9TZWxlY3Rpb25GaWx0ZXJPcGVyYXRpb24+DQogICAgPC9DaGlsZHJlbj4NCiAgPC9PcGVyYXRpb24+DQogIDxDYXRlZ29yeUlkcz4NCiAgICA8aW50Pi0yMDA4MTI4PC9pbnQ+DQogIDwvQ2F0ZWdvcnlJZHM+DQogIDxEZWZhdWx0QWN0aW9uPlVua25vd248L0RlZmF1bHRBY3Rpb24+DQogIDxJbmNsdWRlUGFydEluc3VsYXRpb24+ZmFsc2U8L0luY2x1ZGVQYXJ0SW5zdWxhdGlvbj4NCiAgPEV4cGFuZEFzc2VtYmxpZXNHcm91cHM+ZmFsc2U8L0V4cGFuZEFzc2VtYmxpZXNHcm91cHM+DQogIDxJbmNsdWRlTmVzdGVkRWxlbWVudHM+ZmFsc2U8L0luY2x1ZGVOZXN0ZWRFbGVtZW50cz4NCiAgPElzQ2FzZVNlbnNpdGl2ZT5mYWxzZTwvSXNDYXNlU2Vuc2l0aXZlPg0KICA8UHJlY2lzaW9uPjU8L1ByZWNpc2lvbj4NCiAgPEZvcmNlRG90TmV0RXZhbHVhdGlvbj5mYWxzZTwvRm9yY2VEb3ROZXRFdmFsdWF0aW9uPg0KICA8TGlua2VkRG9jdW1lbnRQYXRocyAvPg0KICA8SWQ+ZTJmN2FkMTEtNWQxMC00ZGVhLWJhMTItNmI4NjM3OWU4NmVmPC9JZD4NCiAgPFBvd2VyU2hlbGxFbmFibGVkPmZhbHNlPC9Qb3dlclNoZWxsRW5hYmxlZD4NCiAgPFBvd2VyU2hlbGxTY3JpcHQgLz4NCiAgPFBvd2VyU2hlbGxBY3RpdmVWaWV3PmZhbHNlPC9Qb3dlclNoZWxsQWN0aXZlVmlldz4NCiAgPFBvd2VyU2hlbGxDb25uZWN0ZWRFbGVtZW50cz5mYWxzZTwvUG93ZXJTaGVsbENvbm5lY3RlZEVsZW1lbnRzPg0KICA8UG93ZXJTaGVsbENvbnRhaW5lZEVsZW1lbnRzPmZhbHNlPC9Qb3dlclNoZWxsQ29udGFpbmVkRWxlbWVudHM+DQogIDxQb3dlclNoZWxsTGlua2VkTW9kZWxzPmZhbHNlPC9Qb3dlclNoZWxsTGlua2VkTW9kZWxzPg0KICA8UG93ZXJTaGVsbE5lc3RlZEVsZW1lbnRzPmZhbHNlPC9Qb3dlclNoZWxsTmVzdGVkRWxlbWVudHM+DQogIDxQb3dlclNoZWxsUnVuRWxlbWVudHM+ZmFsc2U8L1Bvd2VyU2hlbGxSdW5FbGVtZW50cz4NCiAgPFBvd2VyU2hlbGxSdW5FbGVtZW50c1Byb2Nlc3NCcmFuY2hlcz5mYWxzZTwvUG93ZXJTaGVsbFJ1bkVsZW1lbnRzUHJvY2Vzc0JyYW5jaGVzPg0KICA8UG93ZXJTaGVsbERhdGFUYWJsZU5hbWVzIC8+DQo8L1NlbGVjdGlvbkZpbHRlcj4=</SelectionFilterData>
+      <Fields>
+        <ExternalIntegrationFieldDefinition>
+          <Order>9</Order>
+          <ColumnName>T1_Strut_Type</ColumnName>
+          <ParameterName>&lt;T1_Strut_Type&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;T1_Strut_Type&gt;</SourceParameterTemplate>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>1</Order>
+          <ColumnName>Trapeze_Rod_Length_1</ColumnName>
+          <ParameterName>&lt;Trapeze_Rod_Length_1&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Trapeze_Rod_Length_1&gt;</SourceParameterTemplate>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>2</Order>
+          <ColumnName>Trapeze_Rod_Length_2</ColumnName>
+          <ParameterName>&lt;Trapeze_Rod_Length_2&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Trapeze_Rod_Length_2&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9IDANCmlmICgkZVZvbHZlRWxlbWVudC5Mb29rdXBQYXJhbWV0ZXIoIlRyYXBlemVfUm9kX0NlbnRlciIpLkFzSW50ZWdlcigpIC1lcSAxKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>3</Order>
+          <ColumnName>Trapeze_Rod_Length_3</ColumnName>
+          <ParameterName>&lt;Trapeze_Rod_Length_3&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Trapeze_Rod_Length_3&gt;</SourceParameterTemplate>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>11</Order>
+          <ColumnName>T2_Strut_Type</ColumnName>
+          <ParameterName>&lt;T2_Strut_Type&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Text</Type>
+          <SourceParameterTemplate>&lt;T2_Strut_Type&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl9bMi00XV9UaWVyX05IV192KiIpDQp7DQoJJHJlc3VsdCA9ICRlVm9sdmVGcm9tUGFyYW1ldGVyDQp9DQoNCiRyZXN1bHQ=</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>15</Order>
+          <ColumnName>T3_Strut_Type</ColumnName>
+          <ParameterName>&lt;T3_Strut_Type&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Text</Type>
+          <SourceParameterTemplate>&lt;T3_Strut_Type&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl9bMy00XV9UaWVyX05IV192KiIpDQp7DQoJJHJlc3VsdCA9ICRlVm9sdmVGcm9tUGFyYW1ldGVyDQp9DQoNCiRyZXN1bHQ=</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>19</Order>
+          <ColumnName>T4_Strut_Type</ColumnName>
+          <ParameterName>&lt;T4_Strut_Type&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Text</Type>
+          <SourceParameterTemplate>&lt;T4_Strut_Type&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl80X1RpZXJfTkhXX3YqIikNCnsNCgkkcmVzdWx0ID0gJGVWb2x2ZUZyb21QYXJhbWV0ZXINCn0NCg0KJHJlc3VsdA==</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>14</Order>
+          <ColumnName>T2_Offset_Height</ColumnName>
+          <ParameterName>&lt;T2_Offset_Height&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;T2_Offset_Height&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl9bMi00XV9UaWVyX05IV192KiIpDQp7DQoJJHJlc3VsdCA9ICRlVm9sdmVGcm9tUGFyYW1ldGVyDQp9DQoNCiRyZXN1bHQ=</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>18</Order>
+          <ColumnName>T3_Offset_Height</ColumnName>
+          <ParameterName>&lt;T3_Offset_Height&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;T3_Offset_Height&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl9bMy00XV9UaWVyX05IV192KiIpDQp7DQoJJHJlc3VsdCA9ICRlVm9sdmVGcm9tUGFyYW1ldGVyDQp9DQoNCiRyZXN1bHQ=</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>22</Order>
+          <ColumnName>T4_Offset_Height</ColumnName>
+          <ParameterName>&lt;T4_Offset_Height&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;T4_Offset_Height&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl80X1RpZXJfTkhXX3YqIikNCnsNCgkkcmVzdWx0ID0gJGVWb2x2ZUZyb21QYXJhbWV0ZXINCn0NCg0KJHJlc3VsdA==</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>4</Order>
+          <ColumnName>Hardware_Diameter</ColumnName>
+          <ParameterName>&lt;Hardware_Diameter&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Hardware_Diameter&gt;</SourceParameterTemplate>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>6</Order>
+          <ColumnName>Trapeze_Rod_Offset_2</ColumnName>
+          <ParameterName>&lt;Trapeze_Rod_Offset_2&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Trapeze_Rod_Offset_2&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9IDANCmlmICgkZVZvbHZlRWxlbWVudC5Mb29rdXBQYXJhbWV0ZXIoIlRyYXBlemVfUm9kX0NlbnRlciIpLkFzSW50ZWdlcigpIC1lcSAxKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>8</Order>
+          <ColumnName>Overall_Trapeze_Width</ColumnName>
+          <ParameterName>&lt;Overall_Trapeze_Width&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Overall_Trapeze_Width&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl8xX1RpZXJfTkhXX3YqIikNCnsNCgkkcmVzdWx0ID0gJGVWb2x2ZUZyb21QYXJhbWV0ZXINCn0NCg0KJHJlc3VsdA==</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>13</Order>
+          <ColumnName>T2_Length_Calc</ColumnName>
+          <ParameterName>&lt;T2_Length_Calc&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;T2_Length_Calc&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl9bMi00XV9UaWVyX05IV192KiIpDQp7DQoJJHJlc3VsdCA9ICRlVm9sdmVGcm9tUGFyYW1ldGVyDQp9DQoNCiRyZXN1bHQ=</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>17</Order>
+          <ColumnName>T3_Length_Calc</ColumnName>
+          <ParameterName>&lt;T3_Length_Calc&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;T3_Length_Calc&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl9bMy00XV9UaWVyX05IV192KiIpDQp7DQoJJHJlc3VsdCA9ICRlVm9sdmVGcm9tUGFyYW1ldGVyDQp9DQoNCiRyZXN1bHQ=</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>21</Order>
+          <ColumnName>T4_Length_Calc</ColumnName>
+          <ParameterName>&lt;T4_Length_Calc&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;T4_Length_Calc&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl80X1RpZXJfTkhXX3YqIikNCnsNCgkkcmVzdWx0ID0gJGVWb2x2ZUZyb21QYXJhbWV0ZXINCn0NCg0KJHJlc3VsdA==</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>10</Order>
+          <ColumnName>T1_Invert_Strut</ColumnName>
+          <ParameterName>&lt;T1_Invert_Strut&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;T1_Invert_Strut&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9IDANCmlmICgkZVZvbHZlRWxlbWVudC5Mb29rdXBQYXJhbWV0ZXIoIlQxX0JhY2tfdG9fQmFjayIpLkFzSW50ZWdlcigpIC1lcSAwKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>12</Order>
+          <ColumnName>T2_Invert_Strut</ColumnName>
+          <ParameterName>&lt;T2_Invert_Strut&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;T2_Invert_Strut&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoKCRlVm9sdmVFbGVtZW50Lk5hbWUgLWxpa2UgIipfWzItNF1fVGllcl9OSFdfdioiKSAtYW5kICgkZVZvbHZlRWxlbWVudC5Mb29rdXBQYXJhbWV0ZXIoIlQyX0JhY2tfdG9fQmFjayIpLkFzSW50ZWdlcigpIC1lcSAwKSkNCnsNCgkkcmVzdWx0ID0gJGVWb2x2ZUZyb21QYXJhbWV0ZXINCn0NCg0KJHJlc3VsdA0K</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>16</Order>
+          <ColumnName>T3_Invert_Strut</ColumnName>
+          <ParameterName>&lt;T3_Invert_Strut&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;T3_Invert_Strut&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl9bMy00XV9UaWVyX05IV192KiIpDQp7DQoJJHJlc3VsdCA9ICRlVm9sdmVGcm9tUGFyYW1ldGVyDQp9DQoNCiRyZXN1bHQ=</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>20</Order>
+          <ColumnName>T4_Invert_Strut</ColumnName>
+          <ParameterName>&lt;T4_Invert_Strut&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;T4_Invert_Strut&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl80X1RpZXJfTkhXX3YqIikNCnsNCgkkcmVzdWx0ID0gJGVWb2x2ZUZyb21QYXJhbWV0ZXINCn0NCg0KJHJlc3VsdA==</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>5</Order>
+          <ColumnName>Trapeze_Rod_Offset_1</ColumnName>
+          <ParameterName>&lt;Trapeze_Rod_Offset_1&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Trapeze_Rod_Offset_1&gt;</SourceParameterTemplate>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>7</Order>
+          <ColumnName>Trapeze_Rod_Offset_3</ColumnName>
+          <ParameterName>&lt;Trapeze_Rod_Offset_3&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Trapeze_Rod_Offset_3&gt;</SourceParameterTemplate>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+      </Fields>
+    </ExternalIntegrationDefinition>
+    <ExternalIntegrationDefinition>
+      <IsMigrated70>true</IsMigrated70>
+      <Direction>Export</Direction>
+      <SelectionScope>Project</SelectionScope>
+      <ExpansionOption>NoExpansion</ExpansionOption>
+      <Name>eV_TrapezeEncoding_Hardware</Name>
+      <Description>Used to generate unique hash for eVolve Trapeze Hangers using the EVOLVE part encoder. Note that the accuracy of the unique hash is determined by the parameters which are defined within this profile.</Description>
+      <Group>Part Encoder</Group>
+      <SubGroup>Trapeze Hangers</SubGroup>
+      <SelectionFilterData>PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTE2Ij8+DQo8U2VsZWN0aW9uRmlsdGVyIHhtbG5zOnhzZD0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEiIHhtbG5zOnhzaT0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEtaW5zdGFuY2UiPg0KICA8TmFtZT5lVm9sdmUgSGFuZ2VyczwvTmFtZT4NCiAgPEdyb3VwIC8+DQogIDxTdWJHcm91cCAvPg0KICA8T3BlcmF0aW9uPg0KICAgIDxJZD4xPC9JZD4NCiAgICA8UGFyZW50SWQ+MDwvUGFyZW50SWQ+DQogICAgPE9wZXJhdGlvblR5cGU+QW5kPC9PcGVyYXRpb25UeXBlPg0KICAgIDxQYXJhbWV0ZXIgLz4NCiAgICA8T3BlcmF0b3I+RXF1YWw8L09wZXJhdG9yPg0KICAgIDxJbnB1dFR5cGU+VmFsdWU8L0lucHV0VHlwZT4NCiAgICA8Q2hpbGRyZW4+DQogICAgICA8U2VsZWN0aW9uRmlsdGVyT3BlcmF0aW9uPg0KICAgICAgICA8SWQ+MjwvSWQ+DQogICAgICAgIDxQYXJlbnRJZD4xPC9QYXJlbnRJZD4NCiAgICAgICAgPE9wZXJhdGlvblR5cGU+Q29uZGl0aW9uPC9PcGVyYXRpb25UeXBlPg0KICAgICAgICA8UGFyYW1ldGVyPkZhbWlseSBOYW1lfC0xMDAyMDAyPC9QYXJhbWV0ZXI+DQogICAgICAgIDxPcGVyYXRvcj5TdGFydHNXaXRoPC9PcGVyYXRvcj4NCiAgICAgICAgPElucHV0VHlwZT5WYWx1ZTwvSW5wdXRUeXBlPg0KICAgICAgICA8VmFsdWU+ZVZfQVNNX0hTX1RyYXBlemVfPC9WYWx1ZT4NCiAgICAgICAgPENoaWxkcmVuIC8+DQogICAgICA8L1NlbGVjdGlvbkZpbHRlck9wZXJhdGlvbj4NCiAgICAgIDxTZWxlY3Rpb25GaWx0ZXJPcGVyYXRpb24+DQogICAgICAgIDxJZD4zPC9JZD4NCiAgICAgICAgPFBhcmVudElkPjE8L1BhcmVudElkPg0KICAgICAgICA8T3BlcmF0aW9uVHlwZT5Db25kaXRpb248L09wZXJhdGlvblR5cGU+DQogICAgICAgIDxQYXJhbWV0ZXI+RmFtaWx5IE5hbWV8LTEwMDIwMDI8L1BhcmFtZXRlcj4NCiAgICAgICAgPE9wZXJhdG9yPk5vdENvbnRhaW5zPC9PcGVyYXRvcj4NCiAgICAgICAgPElucHV0VHlwZT5WYWx1ZTwvSW5wdXRUeXBlPg0KICAgICAgICA8VmFsdWU+TkhXPC9WYWx1ZT4NCiAgICAgICAgPENoaWxkcmVuIC8+DQogICAgICA8L1NlbGVjdGlvbkZpbHRlck9wZXJhdGlvbj4NCiAgICA8L0NoaWxkcmVuPg0KICA8L09wZXJhdGlvbj4NCiAgPENhdGVnb3J5SWRzPg0KICAgIDxpbnQ+LTIwMDgxMjg8L2ludD4NCiAgPC9DYXRlZ29yeUlkcz4NCiAgPERlZmF1bHRBY3Rpb24+VW5rbm93bjwvRGVmYXVsdEFjdGlvbj4NCiAgPEluY2x1ZGVQYXJ0SW5zdWxhdGlvbj5mYWxzZTwvSW5jbHVkZVBhcnRJbnN1bGF0aW9uPg0KICA8RXhwYW5kQXNzZW1ibGllc0dyb3Vwcz5mYWxzZTwvRXhwYW5kQXNzZW1ibGllc0dyb3Vwcz4NCiAgPEluY2x1ZGVOZXN0ZWRFbGVtZW50cz5mYWxzZTwvSW5jbHVkZU5lc3RlZEVsZW1lbnRzPg0KICA8SXNDYXNlU2Vuc2l0aXZlPmZhbHNlPC9Jc0Nhc2VTZW5zaXRpdmU+DQogIDxQcmVjaXNpb24+NTwvUHJlY2lzaW9uPg0KICA8Rm9yY2VEb3ROZXRFdmFsdWF0aW9uPmZhbHNlPC9Gb3JjZURvdE5ldEV2YWx1YXRpb24+DQogIDxMaW5rZWREb2N1bWVudFBhdGhzIC8+DQogIDxJZD5lMmY3YWQxMS01ZDEwLTRkZWEtYmExMi02Yjg2Mzc5ZTg2ZWY8L0lkPg0KICA8UG93ZXJTaGVsbEVuYWJsZWQ+ZmFsc2U8L1Bvd2VyU2hlbGxFbmFibGVkPg0KICA8UG93ZXJTaGVsbFNjcmlwdCAvPg0KICA8UG93ZXJTaGVsbEFjdGl2ZVZpZXc+ZmFsc2U8L1Bvd2VyU2hlbGxBY3RpdmVWaWV3Pg0KICA8UG93ZXJTaGVsbENvbm5lY3RlZEVsZW1lbnRzPmZhbHNlPC9Qb3dlclNoZWxsQ29ubmVjdGVkRWxlbWVudHM+DQogIDxQb3dlclNoZWxsQ29udGFpbmVkRWxlbWVudHM+ZmFsc2U8L1Bvd2VyU2hlbGxDb250YWluZWRFbGVtZW50cz4NCiAgPFBvd2VyU2hlbGxMaW5rZWRNb2RlbHM+ZmFsc2U8L1Bvd2VyU2hlbGxMaW5rZWRNb2RlbHM+DQogIDxQb3dlclNoZWxsTmVzdGVkRWxlbWVudHM+ZmFsc2U8L1Bvd2VyU2hlbGxOZXN0ZWRFbGVtZW50cz4NCiAgPFBvd2VyU2hlbGxSdW5FbGVtZW50cz5mYWxzZTwvUG93ZXJTaGVsbFJ1bkVsZW1lbnRzPg0KICA8UG93ZXJTaGVsbFJ1bkVsZW1lbnRzUHJvY2Vzc0JyYW5jaGVzPmZhbHNlPC9Qb3dlclNoZWxsUnVuRWxlbWVudHNQcm9jZXNzQnJhbmNoZXM+DQogIDxQb3dlclNoZWxsRGF0YVRhYmxlTmFtZXMgLz4NCjwvU2VsZWN0aW9uRmlsdGVyPg==</SelectionFilterData>
+      <Fields>
+        <ExternalIntegrationFieldDefinition>
+          <Order>21</Order>
+          <ColumnName>T1_Strut_Type</ColumnName>
+          <ParameterName>&lt;T1_Strut_Type&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;T1_Strut_Type&gt;</SourceParameterTemplate>
+          <PowerShellScript />
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>1</Order>
+          <ColumnName>Trapeze_Rod_Length_1</ColumnName>
+          <ParameterName>&lt;Trapeze_Rod_Length_1&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Trapeze_Rod_Length_1&gt;</SourceParameterTemplate>
+          <PowerShellScript />
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>2</Order>
+          <ColumnName>Trapeze_Rod_Length_2</ColumnName>
+          <ParameterName>&lt;Trapeze_Rod_Length_2&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Trapeze_Rod_Length_2&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9IDANCmlmICgkZVZvbHZlRWxlbWVudC5Mb29rdXBQYXJhbWV0ZXIoIlRyYXBlemVfUm9kX0NlbnRlciIpLkFzSW50ZWdlcigpIC1lcSAxKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>3</Order>
+          <ColumnName>Trapeze_Rod_Length_3</ColumnName>
+          <ParameterName>&lt;Trapeze_Rod_Length_3&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Trapeze_Rod_Length_3&gt;</SourceParameterTemplate>
+          <PowerShellScript />
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>23</Order>
+          <ColumnName>T2_Strut_Type</ColumnName>
+          <ParameterName>&lt;T2_Strut_Type&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Text</Type>
+          <SourceParameterTemplate>&lt;T2_Strut_Type&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl9bMi00XV9UaWVyX3YqIikNCnsNCgkkcmVzdWx0ID0gJGVWb2x2ZUZyb21QYXJhbWV0ZXINCn0NCg0KJHJlc3VsdA==</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>27</Order>
+          <ColumnName>T3_Strut_Type</ColumnName>
+          <ParameterName>&lt;T3_Strut_Type&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Text</Type>
+          <SourceParameterTemplate>&lt;T3_Strut_Type&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl9bMy00XV9UaWVyX3YqIikNCnsNCgkkcmVzdWx0ID0gJGVWb2x2ZUZyb21QYXJhbWV0ZXINCn0NCg0KJHJlc3VsdA==</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>31</Order>
+          <ColumnName>T4_Strut_Type</ColumnName>
+          <ParameterName>&lt;T4_Strut_Type&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Text</Type>
+          <SourceParameterTemplate>&lt;T4_Strut_Type&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl80X1RpZXJfdioiKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>26</Order>
+          <ColumnName>T2_Offset_Height</ColumnName>
+          <ParameterName>&lt;T2_Offset_Height&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;T2_Offset_Height&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl9bMi00XV9UaWVyX3YqIikNCnsNCgkkcmVzdWx0ID0gJGVWb2x2ZUZyb21QYXJhbWV0ZXINCn0NCg0KJHJlc3VsdA==</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>30</Order>
+          <ColumnName>T3_Offset_Height</ColumnName>
+          <ParameterName>&lt;T3_Offset_Height&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;T3_Offset_Height&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl9bMy00XV9UaWVyX3YqIikNCnsNCgkkcmVzdWx0ID0gJGVWb2x2ZUZyb21QYXJhbWV0ZXINCn0NCg0KJHJlc3VsdA==</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>34</Order>
+          <ColumnName>T4_Offset_Height</ColumnName>
+          <ParameterName>&lt;T4_Offset_Height&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;T4_Offset_Height&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl80X1RpZXJfdioiKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>4</Order>
+          <ColumnName>Hardware_Diameter</ColumnName>
+          <ParameterName>&lt;Hardware_Diameter&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Hardware_Diameter&gt;</SourceParameterTemplate>
+          <PowerShellScript />
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>6</Order>
+          <ColumnName>Trapeze_Rod_Offset_2</ColumnName>
+          <ParameterName>&lt;Trapeze_Rod_Offset_2&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Trapeze_Rod_Offset_2&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9IDANCmlmICgkZVZvbHZlRWxlbWVudC5Mb29rdXBQYXJhbWV0ZXIoIlRyYXBlemVfUm9kX0NlbnRlciIpLkFzSW50ZWdlcigpIC1lcSAxKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>8</Order>
+          <ColumnName>R1_Beam_Clamp</ColumnName>
+          <ParameterName>&lt;R1_Beam_Clamp&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;R1_Beam_Clamp&gt;</SourceParameterTemplate>
+          <PowerShellScript />
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>9</Order>
+          <ColumnName>R2_Beam_Clamp</ColumnName>
+          <ParameterName>&lt;R2_Beam_Clamp&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;R2_Beam_Clamp&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9IDANCmlmICgkZVZvbHZlRWxlbWVudC5Mb29rdXBQYXJhbWV0ZXIoIlRyYXBlemVfUm9kX0NlbnRlciIpLkFzSW50ZWdlcigpIC1lcSAxKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>10</Order>
+          <ColumnName>R3_Beam_Clamp</ColumnName>
+          <ParameterName>&lt;R3_Beam_Clamp&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;R3_Beam_Clamp&gt;</SourceParameterTemplate>
+          <PowerShellScript />
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>11</Order>
+          <ColumnName>R1_Rod_Coupling</ColumnName>
+          <ParameterName>&lt;R1_Rod_Coupling&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;R1_Rod_Coupling&gt;</SourceParameterTemplate>
+          <PowerShellScript />
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>12</Order>
+          <ColumnName>R2_Rod_Coupling</ColumnName>
+          <ParameterName>&lt;R2_Rod_Coupling&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;R2_Rod_Coupling&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9IDANCmlmICgkZVZvbHZlRWxlbWVudC5Mb29rdXBQYXJhbWV0ZXIoIlRyYXBlemVfUm9kX0NlbnRlciIpLkFzSW50ZWdlcigpIC1lcSAxKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>13</Order>
+          <ColumnName>R3_Rod_Coupling</ColumnName>
+          <ParameterName>&lt;R3_Rod_Coupling&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;R3_Rod_Coupling&gt;</SourceParameterTemplate>
+          <PowerShellScript />
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>14</Order>
+          <ColumnName>R1_Blue_Banger</ColumnName>
+          <ParameterName>&lt;R1_Blue_Banger&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;R1_Blue_Banger&gt;</SourceParameterTemplate>
+          <PowerShellScript />
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>15</Order>
+          <ColumnName>R2_Blue_Banger</ColumnName>
+          <ParameterName>&lt;R2_Blue_Banger&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;R2_Blue_Banger&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9IDANCmlmICgkZVZvbHZlRWxlbWVudC5Mb29rdXBQYXJhbWV0ZXIoIlRyYXBlemVfUm9kX0NlbnRlciIpLkFzSW50ZWdlcigpIC1lcSAxKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>16</Order>
+          <ColumnName>R3_Blue_Banger</ColumnName>
+          <ParameterName>&lt;R3_Blue_Banger&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;R3_Blue_Banger&gt;</SourceParameterTemplate>
+          <PowerShellScript />
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>17</Order>
+          <ColumnName>R1_Embed</ColumnName>
+          <ParameterName>&lt;R1_Embed&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;R1_Embed&gt;</SourceParameterTemplate>
+          <PowerShellScript />
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>18</Order>
+          <ColumnName>R2_Embed</ColumnName>
+          <ParameterName>&lt;R2_Embed&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;R2_Embed&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9IDANCmlmICgkZVZvbHZlRWxlbWVudC5Mb29rdXBQYXJhbWV0ZXIoIlRyYXBlemVfUm9kX0NlbnRlciIpLkFzSW50ZWdlcigpIC1lcSAxKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>19</Order>
+          <ColumnName>R3_Embed</ColumnName>
+          <ParameterName>&lt;R3_Embed&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;R3_Embed&gt;</SourceParameterTemplate>
+          <PowerShellScript />
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>20</Order>
+          <ColumnName>Overall_Trapeze_Width</ColumnName>
+          <ParameterName>&lt;Overall_Trapeze_Width&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Overall_Trapeze_Width&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl8xX1RpZXJfdioiKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>25</Order>
+          <ColumnName>T2_Length_Calc</ColumnName>
+          <ParameterName>&lt;T2_Length_Calc&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;T2_Length_Calc&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl9bMi00XV9UaWVyX3YqIikNCnsNCgkkcmVzdWx0ID0gJGVWb2x2ZUZyb21QYXJhbWV0ZXINCn0NCg0KJHJlc3VsdA==</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>29</Order>
+          <ColumnName>T3_Length_Calc</ColumnName>
+          <ParameterName>&lt;T3_Length_Calc&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;T3_Length_Calc&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl9bMy00XV9UaWVyX3YqIikNCnsNCgkkcmVzdWx0ID0gJGVWb2x2ZUZyb21QYXJhbWV0ZXINCn0NCg0KJHJlc3VsdA==</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>33</Order>
+          <ColumnName>T4_Length_Calc</ColumnName>
+          <ParameterName>&lt;T4_Length_Calc&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;T4_Length_Calc&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl80X1RpZXJfdioiKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>22</Order>
+          <ColumnName>T1_Invert_Strut</ColumnName>
+          <ParameterName>&lt;T1_Invert_Strut&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;T1_Invert_Strut&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9IDANCmlmICgkZVZvbHZlRWxlbWVudC5Mb29rdXBQYXJhbWV0ZXIoIlQxX0JhY2tfdG9fQmFjayIpLkFzSW50ZWdlcigpIC1lcSAwKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>24</Order>
+          <ColumnName>T2_Invert_Strut</ColumnName>
+          <ParameterName>&lt;T2_Invert_Strut&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;T2_Invert_Strut&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoKCRlVm9sdmVFbGVtZW50Lk5hbWUgLWxpa2UgIipfWzItNF1fVGllcl92KiIpIC1hbmQgKCRlVm9sdmVFbGVtZW50Lkxvb2t1cFBhcmFtZXRlcigiVDJfQmFja190b19CYWNrIikuQXNJbnRlZ2VyKCkgLWVxIDApKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0DQo=</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>28</Order>
+          <ColumnName>T3_Invert_Strut</ColumnName>
+          <ParameterName>&lt;T3_Invert_Strut&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;T3_Invert_Strut&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl9bMy00XV9UaWVyX3YqIikNCnsNCgkkcmVzdWx0ID0gJGVWb2x2ZUZyb21QYXJhbWV0ZXINCn0NCg0KJHJlc3VsdA==</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>32</Order>
+          <ColumnName>T4_Invert_Strut</ColumnName>
+          <ParameterName>&lt;T4_Invert_Strut&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Boolean</Type>
+          <SourceParameterTemplate>&lt;T4_Invert_Strut&gt;</SourceParameterTemplate>
+          <PowerShellScript>JHJlc3VsdCA9ICRudWxsDQppZiAoJGVWb2x2ZUVsZW1lbnQuTmFtZSAtbGlrZSAiKl80X1RpZXJfdioiKQ0Kew0KCSRyZXN1bHQgPSAkZVZvbHZlRnJvbVBhcmFtZXRlcg0KfQ0KDQokcmVzdWx0</PowerShellScript>
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>5</Order>
+          <ColumnName>Trapeze_Rod_Offset_1</ColumnName>
+          <ParameterName>&lt;Trapeze_Rod_Offset_1&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Trapeze_Rod_Offset_1&gt;</SourceParameterTemplate>
+          <PowerShellScript />
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+        <ExternalIntegrationFieldDefinition>
+          <Order>7</Order>
+          <ColumnName>Trapeze_Rod_Offset_3</ColumnName>
+          <ParameterName>&lt;Trapeze_Rod_Offset_3&gt;</ParameterName>
+          <SpecialParameterName />
+          <UseDisplayValue>false</UseDisplayValue>
+          <Type>Decimal</Type>
+          <SourceParameterTemplate>&lt;Trapeze_Rod_Offset_3&gt;</SourceParameterTemplate>
+          <PowerShellScript />
+          <PowerShellActiveView>false</PowerShellActiveView>
+          <PowerShellConnectedElements>false</PowerShellConnectedElements>
+          <PowerShellContainedElements>false</PowerShellContainedElements>
+          <PowerShellLinkedModels>false</PowerShellLinkedModels>
+          <PowerShellNestedElements>false</PowerShellNestedElements>
+          <PowerShellRunElements>false</PowerShellRunElements>
+          <PowerShellRunElementsProcessBranches>false</PowerShellRunElementsProcessBranches>
+          <PowerShellDataTableNames />
+        </ExternalIntegrationFieldDefinition>
+      </Fields>
+    </ExternalIntegrationDefinition>
+  </Definitions>
+</ExternalIntegrationConfigurationData>

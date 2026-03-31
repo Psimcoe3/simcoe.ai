@@ -1,0 +1,5 @@
+if((({templateName} = "*RMC*") OR ({templateName} = "*RIGID*") OR ({templateName} = "*GRC*") OR ({templateName} = "*RGS*") OR ({templateName} = "*IMC*")) AND ({Outside Diameter} >= 0.5 AND {Outside Diameter} <= 1.0), 0.033,
+if((({templateName} = "*RMC*") OR ({templateName} = "*RIGID*") OR ({templateName} = "*GRC*") OR ({templateName} = "*RGS*") OR ({templateName} = "*IMC*")) AND ({Outside Diameter} >= 1.25 AND {Outside Diameter} <= 2.0), 0.04,
+if((({templateName} = "*RMC*") OR ({templateName} = "*RIGID*") OR ({templateName} = "*GRC*") OR ({templateName} = "*RGS*") OR ({templateName} = "*IMC*")) AND ({Outside Diameter} >= 2.5 AND {Outside Diameter} <= 3.5), 0.053,
+if((({templateName} = "*RMC*") OR ({templateName} = "*RIGID*") OR ({templateName} = "*GRC*") OR ({templateName} = "*RGS*") OR ({templateName} = "*IMC*")) AND ({Outside Diameter} >= 4.0 AND {Outside Diameter} <= 6.0), 0.1,
+0))))

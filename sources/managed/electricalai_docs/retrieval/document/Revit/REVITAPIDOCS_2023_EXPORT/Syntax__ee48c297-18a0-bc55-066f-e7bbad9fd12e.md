@@ -1,0 +1,59 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### RemovePartCustomData Method
+
+---
+
+
+
+|  |
+| --- |
+| [FabricationPart Class](c9b86162-c105-696a-a919-49a7a7938cc4.htm)   [See Also](#seeAlsoToggle) |
+
+Remove custom data from the fabrication part.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 18.0.0.0 (18.2.0.0)   
+  **Since:**  2018
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public bool RemovePartCustomData( 	int customId ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function RemovePartCustomData ( _ 	customId As Integer _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: bool RemovePartCustomData( 	int customId ) ``` |
+
+#### Parameters
+
+customId
+:   Type:  [System Int32](http://msdn2.microsoft.com/en-us/library/td2s409d)    
+     The identifier of the custom data field to remove.
+
+#### Return Value
+
+Returns true if the type was found and removed. The type will not be removed if it is not an optional type.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | The custom data does not exist on the part. |
+
+# See Also
+
+[FabricationPart Class](c9b86162-c105-696a-a919-49a7a7938cc4.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

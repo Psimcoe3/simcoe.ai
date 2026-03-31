@@ -1,0 +1,61 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IsNameUnique Method (Document, String)
+
+---
+
+
+
+|  |
+| --- |
+| [HVACLoadSpaceType Class](0fcf26fe-8542-3dc7-b9e8-8c89eda1a48d.htm)   [See Also](#seeAlsoToggle) |
+
+Determines whether a potential space type name is unique.
+
+**Namespace:**   [Autodesk.Revit.DB.Analysis](958e2e12-587d-f188-5d7b-f13d7dbfdf48.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2018
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool IsNameUnique( 	Document document, 	string name ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function IsNameUnique ( _ 	document As Document, _ 	name As String _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool IsNameUnique( 	Document^ document,  	String^ name ) ``` |
+
+#### Parameters
+
+document
+:   Type:  [Autodesk.Revit.DB Document](db03274b-a107-aa32-9034-f3e0df4bb1ec.htm)    
+     The document.
+
+name
+:   Type:  System String    
+     The candidate name.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[HVACLoadSpaceType Class](0fcf26fe-8542-3dc7-b9e8-8c89eda1a48d.htm)
+
+[IsNameUnique Overload](e2da86f2-b649-1a44-e529-93726ab0b6a4.htm)
+
+[Autodesk.Revit.DB.Analysis Namespace](958e2e12-587d-f188-5d7b-f13d7dbfdf48.htm)

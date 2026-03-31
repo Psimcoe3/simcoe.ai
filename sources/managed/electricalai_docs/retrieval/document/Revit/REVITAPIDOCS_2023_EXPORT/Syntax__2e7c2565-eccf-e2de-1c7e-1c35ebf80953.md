@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### TextureRealWorldOffsetX Property
+
+---
+
+
+
+|  |
+| --- |
+| [BumpMap Class](7301801c-eef2-3077-7891-a3ee27db1a9b.htm)   [See Also](#seeAlsoToggle) |
+
+The property labeled "Offset X" from the "BumpMap" schema.
+
+**Namespace:**   [Autodesk.Revit.DB.Visual](f5a10581-6ac2-be19-0e32-f87d05bc8b83.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 18.0.0.0 (18.2.0.0)   
+  **Since:**  2018.1
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static string TextureRealWorldOffsetX { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared ReadOnly Property TextureRealWorldOffsetX As String 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static property String^ TextureRealWorldOffsetX { 	String^ get (); } ``` |
+
+# Remarks
+
+This property is of type "AssetPropertyDistance".
+
+# See Also
+
+[BumpMap Class](7301801c-eef2-3077-7891-a3ee27db1a9b.htm)
+
+[Autodesk.Revit.DB.Visual Namespace](f5a10581-6ac2-be19-0e32-f87d05bc8b83.htm)

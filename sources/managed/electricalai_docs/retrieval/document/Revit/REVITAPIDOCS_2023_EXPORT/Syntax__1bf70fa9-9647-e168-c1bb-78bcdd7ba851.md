@@ -1,0 +1,88 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### SetFromCurvesAndShape Method
+
+---
+
+
+
+|  |
+| --- |
+| [RebarContainerItem Class](764f647c-9c3e-b971-1c44-b63f756e1448.htm)   [See Also](#seeAlsoToggle) |
+
+Set an instance of a RebarContainerItem element according to the parameters list. The instance will have the default shape parameters from the RebarShape. If the RebarShapeDefinesHooks flag in ReinforcementSettings has been set to true, then both the curves and hooks must match the RebarShape definition. Otherwise, the hooks can be different than the defaults specified in the RebarShape
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2016
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public void SetFromCurvesAndShape( 	RebarShape rebarShape, 	RebarBarType barType, 	RebarHookType startHook, 	RebarHookType endHook, 	XYZ norm, 	IList<Curve> curves, 	RebarHookOrientation startHookOrient, 	RebarHookOrientation endHookOrient ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub SetFromCurvesAndShape ( _ 	rebarShape As RebarShape, _ 	barType As RebarBarType, _ 	startHook As RebarHookType, _ 	endHook As RebarHookType, _ 	norm As XYZ, _ 	curves As IList(Of Curve), _ 	startHookOrient As RebarHookOrientation, _ 	endHookOrient As RebarHookOrientation _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: void SetFromCurvesAndShape( 	RebarShape^ rebarShape,  	RebarBarType^ barType,  	RebarHookType^ startHook,  	RebarHookType^ endHook,  	XYZ^ norm,  	IList<Curve^>^ curves,  	RebarHookOrientation startHookOrient,  	RebarHookOrientation endHookOrient ) ``` |
+
+#### Parameters
+
+rebarShape
+:   Type:  [Autodesk.Revit.DB.Structure RebarShape](0a370e32-eaba-785e-7e1f-9330929525fc.htm)    
+     A RebarShape element that defines the shape of the rebar. A RebarShape element matches curves and hooks. A RebarShape element provides RebarStyle of the rebar.
+
+barType
+:   Type:  [Autodesk.Revit.DB.Structure RebarBarType](467b44cc-54e7-3ecf-07e1-ad15d05fe800.htm)    
+     A RebarBarType element that defines bar diameter, bend radius and material of the rebar.
+
+startHook
+:   Type:  [Autodesk.Revit.DB.Structure RebarHookType](3c7a78d5-f92b-e58b-e7c9-7927537498fd.htm)    
+     A RebarHookType element that defines the hook for the start of the bar. If this parameter is    a null reference (  Nothing  in Visual Basic)  , it means to create a rebar with no hook.
+
+endHook
+:   Type:  [Autodesk.Revit.DB.Structure RebarHookType](3c7a78d5-f92b-e58b-e7c9-7927537498fd.htm)    
+     A RebarHookType element that defines the hook for the end of the bar. If this parameter is    a null reference (  Nothing  in Visual Basic)  , it means to create a rebar with no hook.
+
+norm
+:   Type:  [Autodesk.Revit.DB XYZ](c2fd995c-95c0-58fb-f5de-f3246cbc5600.htm)    
+     The normal to the plane that the rebar curves lie on.
+
+curves
+:   Type:  System.Collections.Generic IList   [Curve](400cc9b6-9ff7-de85-6fd8-c20002209d25.htm)    
+     An array of curves that define the shape of the rebar curves. They must belong to the plane defined by the normal and origin. Bends and hooks should not be included in the array of curves.
+
+startHookOrient
+:   Type:  [Autodesk.Revit.DB.Structure RebarHookOrientation](e8365754-0811-8d4e-864a-55bf34af3a87.htm)    
+     Defines the orientation of the hook plane at the start of the rebar with respect to the orientation of the first curve and the plane normal. Only two values are permitted: Value = Right: The hook is on your right as you stand at the end of the bar, with the bar behind you, taking the bar's normal as "up." Value = Left: The hook is on your left as you stand at the end of the bar, with the bar behind you, taking the bar's normal as "up."
+
+endHookOrient
+:   Type:  [Autodesk.Revit.DB.Structure RebarHookOrientation](e8365754-0811-8d4e-864a-55bf34af3a87.htm)    
+     Defines the orientation of the hook plane at the end of the rebar with respect to the orientation of the last curve and the plane normal. Only two values are permitted: Value = Right: The hook is on your right as you stand at the end of the bar, with the bar behind you, taking the bar's normal as "up." Value = Left: The hook is on your left as you stand at the end of the bar, with the bar behind you, taking the bar's normal as "up."
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | The input curves is empty. -or- The input curves contains at least one curve which is not a bound Line or bound Arc and is not supported for this operation. -or- curves do not form a valid CurveLoop. -or- The input curves contains at least one helical curve and is not supported for this operation. -or- The rebarShape has End Treatments |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions ArgumentOutOfRangeException](60f148c9-ece0-a6bb-4e12-bb4a9c8c8a24.htm) | norm has zero length. -or- A value passed for an enumeration argument is not a member of that enumeration |
+| [Autodesk.Revit.Exceptions ArgumentsInconsistentException](05972c68-fa6d-3a83-d720-ad84fbc4780f.htm) | curves contains non-fillet arcs with radii that are less than the minimum bend radius for the RebarBarType and RebarShape style. |
+| [Autodesk.Revit.Exceptions DisabledDisciplineException](3693dcdf-67fb-0128-3be8-cad150e9498e.htm) | None of the following disciplines is enabled: Structural. |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | rebarShape does not match curves. |
+
+# See Also
+
+[RebarContainerItem Class](764f647c-9c3e-b971-1c44-b63f756e1448.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

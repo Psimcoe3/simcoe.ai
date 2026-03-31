@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### SheetMassUnit Property
+
+---
+
+
+
+|  |
+| --- |
+| [FabricSheetType Class](892f0ce6-5548-d299-c976-9355ac4109ee.htm)   [See Also](#seeAlsoToggle) |
+
+The sheet mass per area unit.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public double SheetMassUnit { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property SheetMassUnit As Double 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property double SheetMassUnit { 	double get (); } ``` |
+
+# See Also
+
+[FabricSheetType Class](892f0ce6-5548-d299-c976-9355ac4109ee.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

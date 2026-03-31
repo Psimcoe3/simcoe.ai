@@ -1,0 +1,45 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Append Method
+
+---
+
+
+
+|  |
+| --- |
+| [ReferencePointArray Class](4780adea-9e68-b0b4-09c7-68f7752dd650.htm)   [See Also](#seeAlsoToggle) |
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public virtual void Append( 	ReferencePoint item ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Overridable Sub Append ( _ 	item As ReferencePoint _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: virtual void Append( 	ReferencePoint^ item ) ``` |
+
+#### Parameters
+
+item
+:   Type:  [Autodesk.Revit.DB ReferencePoint](b4b9baeb-2ec5-a2e1-1420-37f593d36aa4.htm)
+
+# See Also
+
+[ReferencePointArray Class](4780adea-9e68-b0b4-09c7-68f7752dd650.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

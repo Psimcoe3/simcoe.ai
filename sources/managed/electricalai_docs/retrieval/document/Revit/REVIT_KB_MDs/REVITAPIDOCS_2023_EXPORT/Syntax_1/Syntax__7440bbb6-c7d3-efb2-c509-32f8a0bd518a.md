@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### FirstRowNumber Property
+
+---
+
+
+
+|  |
+| --- |
+| [TableSectionData Class](a0e6f821-5f53-1eb0-eba1-16554b3c0dc8.htm)   [See Also](#seeAlsoToggle) |
+
+The first row in this section of the table.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public int FirstRowNumber { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property FirstRowNumber As Integer 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property int FirstRowNumber { 	int get (); } ``` |
+
+# Remarks
+
+Some table sections have row 0 as their first row while others start with row 1.
+
+# See Also
+
+[TableSectionData Class](a0e6f821-5f53-1eb0-eba1-16554b3c0dc8.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

@@ -1,0 +1,50 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IsGraphicsAvailable Method
+
+---
+
+
+
+|  |
+| --- |
+| [OptionalFunctionalityUtils Class](98d35b3b-34ec-4105-f7c5-16e9215b6b52.htm)   [See Also](#seeAlsoToggle) |
+
+Checks whether the graphics functionality is available to support display, print, and export functionality.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool IsGraphicsAvailable() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function IsGraphicsAvailable As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool IsGraphicsAvailable() ``` |
+
+#### Return Value
+
+True if the Graphics functionality is available in the installed Revit.
+
+# Remarks
+
+Graphics functionality is optional functionality that does not have to be part of the Revit installation.
+
+# See Also
+
+[OptionalFunctionalityUtils Class](98d35b3b-34ec-4105-f7c5-16e9215b6b52.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

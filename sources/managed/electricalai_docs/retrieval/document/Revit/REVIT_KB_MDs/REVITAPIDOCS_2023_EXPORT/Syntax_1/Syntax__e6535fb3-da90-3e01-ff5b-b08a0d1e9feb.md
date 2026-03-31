@@ -1,0 +1,62 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### VisibleInViewFilter Constructor (Document, ElementId)
+
+---
+
+
+
+|  |
+| --- |
+| [VisibleInViewFilter Class](2425b0fb-7b28-1609-e45e-f1e196885248.htm)   [See Also](#seeAlsoToggle) |
+
+Constructs a new instance of a VisibleInViewFilter.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2021
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public VisibleInViewFilter( 	Document document, 	ElementId viewId ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub New ( _ 	document As Document, _ 	viewId As ElementId _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: VisibleInViewFilter( 	Document^ document,  	ElementId^ viewId ) ``` |
+
+#### Parameters
+
+document
+:   Type:  [Autodesk.Revit.DB Document](db03274b-a107-aa32-9034-f3e0df4bb1ec.htm)    
+     The document that owns the view.
+
+viewId
+:   Type:  [Autodesk.Revit.DB ElementId](44f3f7b1-3229-3404-93c9-dc5e70337dd6.htm)    
+     The view id.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | viewId is not a view. -or- viewId is not valid for element iteration, because it has no way of representing drawn elements. Many view templates will fail this check. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[VisibleInViewFilter Class](2425b0fb-7b28-1609-e45e-f1e196885248.htm)
+
+[VisibleInViewFilter Overload](f2c5a3aa-bb7e-6960-d7b5-645d1b37f67e.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

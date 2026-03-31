@@ -1,0 +1,46 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Dispose Method
+
+---
+
+
+
+|  |
+| --- |
+| [DesignToFabricationConverter Class](b2165e08-c8a4-5674-12ff-d359eba911d4.htm)   [See Also](#seeAlsoToggle) |
+
+Releases all resources used by the  [DesignToFabricationConverter](b2165e08-c8a4-5674-12ff-d359eba911d4.htm)
+
+**Namespace:**   [Autodesk.Revit.DB.Fabrication](49e74a25-7ea1-efa6-548a-a3c3d0655e43.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 17.0.0.0 (17.0.1090.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public void Dispose() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub Dispose ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: virtual void Dispose() sealed ``` |
+
+#### Implements
+
+ [IDisposable Dispose](http://msdn2.microsoft.com/en-us/library/es4s3w1d)
+
+# See Also
+
+[DesignToFabricationConverter Class](b2165e08-c8a4-5674-12ff-d359eba911d4.htm)
+
+[Autodesk.Revit.DB.Fabrication Namespace](49e74a25-7ea1-efa6-548a-a3c3d0655e43.htm)

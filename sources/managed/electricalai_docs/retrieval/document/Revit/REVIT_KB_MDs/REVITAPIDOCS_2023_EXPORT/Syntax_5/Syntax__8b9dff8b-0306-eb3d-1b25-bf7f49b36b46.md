@@ -1,0 +1,56 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### ExportLinetypeKey Constructor (ExportLinetypeKey)
+
+---
+
+
+
+|  |
+| --- |
+| [ExportLinetypeKey Class](7f67a1c8-cc9b-9b17-aa87-664657ee9d7d.htm)   [See Also](#seeAlsoToggle) |
+
+Constructs a new copy of the input ExportLinetypeKey object.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ExportLinetypeKey( 	ExportLinetypeKey other ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub New ( _ 	other As ExportLinetypeKey _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: ExportLinetypeKey( 	ExportLinetypeKey^ other ) ``` |
+
+#### Parameters
+
+other
+:   Type:  [Autodesk.Revit.DB ExportLinetypeKey](7f67a1c8-cc9b-9b17-aa87-664657ee9d7d.htm)
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[ExportLinetypeKey Class](7f67a1c8-cc9b-9b17-aa87-664657ee9d7d.htm)
+
+[ExportLinetypeKey Overload](33628875-475d-4d9b-38bd-b3116bd56aa7.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

@@ -1,0 +1,53 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IsDone Method
+
+---
+
+
+
+|  |
+| --- |
+| [FilteredElementIterator Class](bb879a42-15eb-1704-7abc-0f4509ca89d2.htm)   [See Also](#seeAlsoToggle) |
+
+Identifies if the iteration has completed.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2011
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public virtual bool IsDone() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Overridable Function IsDone As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: virtual bool IsDone() ``` |
+
+#### Return Value
+
+True if the iteration has no more matching elements. False if there are more element ids to be iterated.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | The FilteredElementCollector that yielded this iterator has been reset by another operation. No further iteration is permitted with this iterator. |
+
+# See Also
+
+[FilteredElementIterator Class](bb879a42-15eb-1704-7abc-0f4509ca89d2.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

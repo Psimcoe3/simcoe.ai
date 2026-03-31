@@ -1,0 +1,29 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### NewRooms2 Method
+
+---
+
+
+
+|  |
+| --- |
+| [Document Class](ab1718f9-45fb-b3d3-827e-32ff81cf929c.htm)   [See Also](#seeAlsoToggle) |
+
+# Overload List
+
+|  | Name | Description |
+| --- | --- | --- |
+| Public method | [NewRooms2(Level)](5d5f7f56-c86c-d87e-ff6c-eb4e465a5183.htm) | Creates new rooms in each plan circuit found in the given level in the last phase. |
+| Public method | [NewRooms2(Level, Phase)](716dba64-4853-685b-bb3f-6c071b0cd0c8.htm) | Creates new rooms in each plan circuit found in the given level in the given phase. |
+| Public method | [NewRooms2(Phase, Int32)](d17f1295-77c6-f8ca-2e5e-6351ef0f520a.htm) | Creates new unplaced rooms in the given phase. |
+
+# See Also
+
+[Document Class](ab1718f9-45fb-b3d3-827e-32ff81cf929c.htm)
+
+[Document Members](4f835512-a922-c7da-d389-3bdcb41a5660.htm)
+
+[Autodesk.Revit.Creation Namespace](ded320da-058a-4edd-0418-0582389559a7.htm)

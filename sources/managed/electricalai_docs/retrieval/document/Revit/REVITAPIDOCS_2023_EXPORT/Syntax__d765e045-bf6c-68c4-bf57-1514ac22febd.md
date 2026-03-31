@@ -1,0 +1,51 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IsValid Method (Element)
+
+---
+
+
+
+|  |
+| --- |
+| [Alignment Class](6594712d-3b22-9b08-ab4c-782df88f36d1.htm)   [See Also](#seeAlsoToggle) |
+
+Checks if the element is a valid alignment.
+
+**Namespace:**   [Autodesk.Revit.DB.Infrastructure](cedea963-42a0-acf8-0f0e-5477c4212ae9.htm)    
+  **Assembly:**   Autodesk.CivilAlignments.DBApplication  (in Autodesk.CivilAlignments.DBApplication.dll) Version: 21.0.0.0 (21.1.1.109)   
+  **Since:**  2021.1
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool IsValid( 	Element element ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function IsValid ( _ 	element As Element _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool IsValid( 	Element^ element ) ``` |
+
+#### Parameters
+
+element
+:   Type:  [Autodesk.Revit.DB Element](eb16114f-69ea-f4de-0d0d-f7388b105a16.htm)    
+     The element to validate.
+
+# See Also
+
+[Alignment Class](6594712d-3b22-9b08-ab4c-782df88f36d1.htm)
+
+[IsValid Overload](7df07cca-c16d-391f-6aff-339974400be2.htm)
+
+[Autodesk.Revit.DB.Infrastructure Namespace](cedea963-42a0-acf8-0f0e-5477c4212ae9.htm)

@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetCutLayerModifiers Method
+
+---
+
+
+
+|  |
+| --- |
+| [ExportLayerInfo Class](88a99694-968a-99f7-870a-f46737bd5927.htm)   [See Also](#seeAlsoToggle) |
+
+Gets all the cut layer modifiers from the layer info.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public IList<LayerModifier> GetCutLayerModifiers() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetCutLayerModifiers As IList(Of LayerModifier) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: IList<LayerModifier^>^ GetCutLayerModifiers() ``` |
+
+#### Return Value
+
+The cut layer modifier array.
+
+# See Also
+
+[ExportLayerInfo Class](88a99694-968a-99f7-870a-f46737bd5927.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

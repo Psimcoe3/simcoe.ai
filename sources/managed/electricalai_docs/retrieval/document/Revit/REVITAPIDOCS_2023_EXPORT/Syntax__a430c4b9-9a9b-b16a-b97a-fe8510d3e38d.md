@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetReference Method
+
+---
+
+
+
+|  |
+| --- |
+| [ReferenceWithContext Class](fccc2688-a00f-9e3a-26bf-f6d04a58c56c.htm)   [See Also](#seeAlsoToggle) |
+
+Gets the reference of the geometric object.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2012
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public Reference GetReference() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetReference As Reference ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: Reference^ GetReference() ``` |
+
+#### Return Value
+
+The reference of a geometric object when it is returned by FindReferencesWithContextByDirection(XYZ, XYZ, View3D) or ReferenceIntersector.Find(XYZ, XYZ).
+
+# See Also
+
+[ReferenceWithContext Class](fccc2688-a00f-9e3a-26bf-f6d04a58c56c.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

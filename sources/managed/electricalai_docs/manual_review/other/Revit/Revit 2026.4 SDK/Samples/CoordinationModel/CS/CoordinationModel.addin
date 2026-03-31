@@ -1,0 +1,176 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Command">
+    <Assembly>CoordinationModel.dll</Assembly>
+    <ClientId>D8A4AEC1-33EA-47B8-9169-DF65B7853901</ClientId>
+    <FullClassName>Revit.SDK.Samples.CoordinationModel.LinkCMLocal.CS.Command</FullClassName>
+    <Text>Link local coordination model</Text>
+    <Description>Link a local Navisworks file as a coordination model.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>CoordinationModel.dll</Assembly>
+    <ClientId>FC91513D-CE1E-47A9-82B4-608E498A772A</ClientId>
+    <FullClassName>Revit.SDK.Samples.CoordinationModel.LinkCMCloud.CS.Command</FullClassName>
+    <Text>Link cloud coordination model</Text>
+    <Description>Link a cloud model view as a coordination model.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>CoordinationModel.dll</Assembly>
+    <ClientId>82AF44E0-8FD9-4D0A-9D68-C4DB8F33FB5C</ClientId>
+    <FullClassName>Revit.SDK.Samples.CoordinationModel.ReloadCM.CS.Command</FullClassName>
+    <Text>Reload coordination model(s)</Text>
+    <Description>Reload one or more coordination model types.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>CoordinationModel.dll</Assembly>
+    <ClientId>5B065A86-3D36-4466-BE89-A587C72F8DB9</ClientId>
+    <FullClassName>Revit.SDK.Samples.CoordinationModel.ReloadAllCMs.CS.Command</FullClassName>
+    <Text>Reload all coordination models</Text>
+    <Description>Reload all coordination model types.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>CoordinationModel.dll</Assembly>
+    <ClientId>EFBC932E-1EF3-4B30-8A55-B2CF91D54671</ClientId>
+    <FullClassName>Revit.SDK.Samples.CoordinationModel.UnloadCM.CS.Command</FullClassName>
+    <Text>Unload coordination model(s)</Text>
+    <Description>Unload one or more coordination model types.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>CoordinationModel.dll</Assembly>
+    <ClientId>D60B8326-D6AB-440D-B895-D04BE65D7A4F</ClientId>
+    <FullClassName>Revit.SDK.Samples.CoordinationModel.ToggleCMInstanceVis.CS.Command</FullClassName>
+    <Text>Toggle the visibility of coordination model instance(s)</Text>
+    <Description>Toggle the visibility of one or more coordination model instances.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>CoordinationModel.dll</Assembly>
+    <ClientId>EDD907D0-9283-4F58-B906-4BBD0606BDB1</ClientId>
+    <FullClassName>Revit.SDK.Samples.CoordinationModel.ToggleAllCMInstancesVis.CS.Command</FullClassName>
+    <Text>Toggle the visibility of all coordination model instance(s)</Text>
+    <Description>Toggle the visibility of all coordination model instances in the Revit model.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>CoordinationModel.dll</Assembly>
+    <ClientId>09FAD4F6-ED79-4966-8F45-6FA298E45AB3</ClientId>
+    <FullClassName>Revit.SDK.Samples.CoordinationModel.ToggleCMTypeVis.CS.Command</FullClassName>
+    <Text>Toggle the visibility of coordination model type(s)</Text>
+    <Description>Toggle the visibility of one or more coordination model types.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>CoordinationModel.dll</Assembly>
+    <ClientId>E2097ED6-BED7-483C-87B7-2A90A221DC17</ClientId>
+    <FullClassName>Revit.SDK.Samples.CoordinationModel.ToggleCMCatVis.CS.Command</FullClassName>
+    <Text>Toggle the visibility of coordination model categories</Text>
+    <Description>Toggle the visibility of one or more coordination model categories.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>CoordinationModel.dll</Assembly>
+    <ClientId>FA8A8E9C-80A8-40E6-B18C-73CB039E2A46</ClientId>
+    <FullClassName>Revit.SDK.Samples.CoordinationModel.ToggleCMElemVis.CS.Command</FullClassName>
+    <Text>Toggle the visibility of coordination model element(s)</Text>
+    <Description>Toggle the visibility of one or more coordination model elements.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>CoordinationModel.dll</Assembly>
+    <ClientId>2C859E5B-C51C-436D-B199-C29C62E267A5</ClientId>
+    <FullClassName>Revit.SDK.Samples.CoordinationModel.SetCMTypeColor.CS.Command</FullClassName>
+    <Text>Toggle the color of coordination model type(s)</Text>
+    <Description>Toggle the color of one or more coordination model types between red and green.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>CoordinationModel.dll</Assembly>
+    <ClientId>7D936A98-DC06-4F71-B049-B41DA757F2BF</ClientId>
+    <FullClassName>Revit.SDK.Samples.CoordinationModel.SetCMCatColor.CS.Command</FullClassName>
+    <Text>Toggle the color of coordination model categories</Text>
+    <Description>Toggle the color of one or more coordination model categories between red and green.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>CoordinationModel.dll</Assembly>
+    <ClientId>467C3563-1E6E-42B5-86C7-B953FBB88CD4</ClientId>
+    <FullClassName>Revit.SDK.Samples.CoordinationModel.SetCMTypeTransp.CS.Command</FullClassName>
+    <Text>Toggle the transparency of coordination model type(s)</Text>
+    <Description>Toggle the transparency of one or more coordination model types between 75 and 0.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+   <AddIn Type="Command">
+      <Assembly>CoordinationModel.dll</Assembly>
+      <ClientId>016B027A-6F4F-4116-B061-3D71EFB824FF</ClientId>
+      <FullClassName>Revit.SDK.Samples.CoordinationModel.ReloadFromCMCloud.CS.Command</FullClassName>
+      <Text>Reload coordination model from Autodesk Docs model view</Text>
+      <Description>Reload coordination model type from Autodesk Docs model view</Description>
+      <VisibilityMode>AlwaysVisible</VisibilityMode>
+      <VendorId>ADSK</VendorId>
+      <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+   </AddIn>
+   <AddIn Type="Command">
+      <Assembly>CoordinationModel.dll</Assembly>
+      <ClientId>90F2A7FF-EBA0-4999-8FFA-D4091FBAA3D2</ClientId>
+      <FullClassName>Revit.SDK.Samples.CoordinationModel.ReloadFromCMLocal.CS.Command</FullClassName>
+      <Text>Reload coordination model from local file path</Text>
+      <Description>Reload coordination model type from local file path</Description>
+      <VisibilityMode>AlwaysVisible</VisibilityMode>
+      <VendorId>ADSK</VendorId>
+      <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+   </AddIn>
+   <AddIn Type="Command">
+      <Assembly>CoordinationModel.dll</Assembly>
+      <ClientId>4FC1A963-1A80-40F3-BAC5-F3BC25FCC359</ClientId>
+      <FullClassName>Revit.SDK.Samples.CoordinationModel.SetCMElemCatColor.CS.Command</FullClassName>
+      <Text>Toggle the color of a coordination model element category</Text>
+      <Description>Toggle the color of a coordination model element category between red and green.</Description>
+      <VisibilityMode>AlwaysVisible</VisibilityMode>
+      <VendorId>ADSK</VendorId>
+      <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+   </AddIn>
+   <AddIn Type="Command">
+      <Assembly>CoordinationModel.dll</Assembly>
+      <ClientId>25295222-1204-4B5A-BEC8-13418973ECF7</ClientId>
+      <FullClassName>Revit.SDK.Samples.CoordinationModel.ListCMElemProperties.CS.Command</FullClassName>
+      <Text>Get properties of coordination model element</Text>
+      <Description>Get properties of coordination model element and list them in a file</Description>
+      <VisibilityMode>AlwaysVisible</VisibilityMode>
+      <VendorId>ADSK</VendorId>
+      <VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+   </AddIn>
+   <ManifestSettings>
+    <UseRevitContext>False</UseRevitContext>
+  </ManifestSettings>
+</RevitAddIns>

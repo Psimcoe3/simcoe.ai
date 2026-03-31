@@ -1,0 +1,63 @@
+# RSMeans Labor Expressions (Auto-Generated)
+
+## Stratus.Field.RSMeans EMT Labor Hrs / LF
+Type: Decimal
+Is Expression: Checked
+
+if((({templateName} = "*EMT*")) AND ({Outside Diameter} >= 0.5 AND {Outside Diameter} <= 1.0), 0.02,
+if((({templateName} = "*EMT*")) AND ({Outside Diameter} >= 1.25 AND {Outside Diameter} <= 1.5), 0.025,
+if((({templateName} = "*EMT*")) AND ({Outside Diameter} >= 2.0 AND {Outside Diameter} <= 3.0), 0.034,
+if((({templateName} = "*EMT*")) AND ({Outside Diameter} >= 3.5 AND {Outside Diameter} <= 4.0), 0.052,
+0))))
+
+
+---
+
+## Stratus.Field.RSMeans Rigid Labor Hrs / LF
+Type: Decimal
+Is Expression: Checked
+
+if((({templateName} = "*RMC*") OR ({templateName} = "*RIGID*") OR ({templateName} = "*GRC*") OR ({templateName} = "*RGS*") OR ({templateName} = "*IMC*")) AND ({Outside Diameter} >= 0.5 AND {Outside Diameter} <= 1.0), 0.033,
+if((({templateName} = "*RMC*") OR ({templateName} = "*RIGID*") OR ({templateName} = "*GRC*") OR ({templateName} = "*RGS*") OR ({templateName} = "*IMC*")) AND ({Outside Diameter} >= 1.25 AND {Outside Diameter} <= 2.0), 0.04,
+if((({templateName} = "*RMC*") OR ({templateName} = "*RIGID*") OR ({templateName} = "*GRC*") OR ({templateName} = "*RGS*") OR ({templateName} = "*IMC*")) AND ({Outside Diameter} >= 2.5 AND {Outside Diameter} <= 3.5), 0.053,
+if((({templateName} = "*RMC*") OR ({templateName} = "*RIGID*") OR ({templateName} = "*GRC*") OR ({templateName} = "*RGS*") OR ({templateName} = "*IMC*")) AND ({Outside Diameter} >= 4.0 AND {Outside Diameter} <= 6.0), 0.1,
+0))))
+
+
+---
+
+## Stratus.Field.RSMeans PVC40 Labor Hrs / LF
+Type: Decimal
+Is Expression: Checked
+
+if((({templateName} = "*PVC*")) AND ({Outside Diameter} >= 0.5 AND {Outside Diameter} <= 1.0), 0.02,
+if((({templateName} = "*PVC*")) AND ({Outside Diameter} >= 1.25 AND {Outside Diameter} <= 2.0), 0.023,
+if((({templateName} = "*PVC*")) AND ({Outside Diameter} = 2.5), 0.032,
+if((({templateName} = "*PVC*")) AND ({Outside Diameter} >= 3.0 AND {Outside Diameter} <= 3.5), 0.047,
+if((({templateName} = "*PVC*")) AND ({Outside Diameter} >= 4.0 AND {Outside Diameter} <= 6.0), 0.07,
+0)))))
+
+
+---
+
+## Stratus.Field.RSMeans Labor Unit
+Type: String
+Is Expression: Checked
+
+if((({templateName} = "*EMT*") OR ({templateName} = "*RMC*") OR ({templateName} = "*RIGID*") OR ({templateName} = "*GRC*") OR ({templateName} = "*RGS*") OR ({templateName} = "*IMC*") OR ({templateName} = "*PVC*")), "L.F.", "Ea.")
+
+
+---
+
+## Stratus.Field.RSMeans Labor Total Hrs
+Type: Decimal
+Is Expression: Checked
+
+if(({templateName} = "*EMT*"),
+  {Stratus.Field.RSMeans EMT Labor Hrs / LF} * {Length},
+if(({templateName} = "*RMC*") OR ({templateName} = "*RIGID*") OR ({templateName} = "*GRC*") OR ({templateName} = "*RGS*") OR ({templateName} = "*IMC*"),
+  {Stratus.Field.RSMeans Rigid Labor Hrs / LF} * {Length},
+if(({templateName} = "*PVC*"),
+  {Stratus.Field.RSMeans PVC40 Labor Hrs / LF} * {Length},
+  0)))
+

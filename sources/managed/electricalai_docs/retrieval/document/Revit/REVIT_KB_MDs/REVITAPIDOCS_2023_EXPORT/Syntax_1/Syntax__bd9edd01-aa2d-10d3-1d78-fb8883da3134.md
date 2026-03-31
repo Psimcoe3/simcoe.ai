@@ -1,0 +1,61 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### AddDefinition Method (String, GeometryObject)
+
+---
+
+
+
+|  |
+| --- |
+| [DirectShapeLibrary Class](07489bae-ab9f-e2a8-0ac1-0a4d70cea458.htm)   [See Also](#seeAlsoToggle) |
+
+Add a definition to be reused by instances. A definition is a single geometry object.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2015
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public void AddDefinition( 	string id, 	GeometryObject GNode ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub AddDefinition ( _ 	id As String, _ 	GNode As GeometryObject _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: void AddDefinition( 	String^ id,  	GeometryObject^ GNode ) ``` |
+
+#### Parameters
+
+id
+:   Type:  System String    
+     ID of the definition to be added. Must be unique.
+
+GNode
+:   Type:  [Autodesk.Revit.DB GeometryObject](e0f15010-0e19-6216-e2f0-ab7978145daa.htm)    
+     Definition as a single Geometry object
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[DirectShapeLibrary Class](07489bae-ab9f-e2a8-0ac1-0a4d70cea458.htm)
+
+[AddDefinition Overload](5beed65b-f2cc-fd85-e854-9617ebb753ed.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

@@ -1,0 +1,42 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Knots Property
+
+---
+
+
+
+|  |
+| --- |
+| [NurbSpline Class](65c43ffe-3972-ae2b-4aa4-e2901cdbb3a8.htm)   [See Also](#seeAlsoToggle) |
+
+Return/set the knots of the nurb spline.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public DoubleArray Knots { get; set; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Property Knots As DoubleArray 	Get 	Set ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property DoubleArray^ Knots { 	DoubleArray^ get (); 	void set (DoubleArray^ value); } ``` |
+
+# See Also
+
+[NurbSpline Class](65c43ffe-3972-ae2b-4aa4-e2901cdbb3a8.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

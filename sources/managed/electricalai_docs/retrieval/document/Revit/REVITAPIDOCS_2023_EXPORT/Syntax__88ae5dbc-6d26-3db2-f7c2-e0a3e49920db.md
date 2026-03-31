@@ -1,0 +1,42 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Ampacity Property
+
+---
+
+
+
+|  |
+| --- |
+| [WireSize Class](e4a5cfed-7952-4622-5fca-b556703e36b6.htm)   [See Also](#seeAlsoToggle) |
+
+Get ampacity which be used for specifying size, the unit is ampere.
+
+**Namespace:**   [Autodesk.Revit.DB.Electrical](212a1314-7843-2c6c-3322-363127e4059f.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public long Ampacity { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property Ampacity As Long 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property long long Ampacity { 	long long get (); } ``` |
+
+# See Also
+
+[WireSize Class](e4a5cfed-7952-4622-5fca-b556703e36b6.htm)
+
+[Autodesk.Revit.DB.Electrical Namespace](212a1314-7843-2c6c-3322-363127e4059f.htm)

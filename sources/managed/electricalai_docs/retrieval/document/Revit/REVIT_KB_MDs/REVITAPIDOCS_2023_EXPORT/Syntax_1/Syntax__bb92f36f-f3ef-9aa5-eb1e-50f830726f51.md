@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CanTotalByAssemblyType Method
+
+---
+
+
+
+|  |
+| --- |
+| [ScheduleField Class](3d6b0eb5-ed36-278d-a5df-38b6d600e876.htm)   [See Also](#seeAlsoToggle) |
+
+Indicates if totals by assembly type can be enabled for this field.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public bool CanTotalByAssemblyType() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function CanTotalByAssemblyType As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: bool CanTotalByAssemblyType() ``` |
+
+#### Return Value
+
+True if this field can be totaled by assembly type, false otherwise.
+
+# See Also
+
+[ScheduleField Class](3d6b0eb5-ed36-278d-a5df-38b6d600e876.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

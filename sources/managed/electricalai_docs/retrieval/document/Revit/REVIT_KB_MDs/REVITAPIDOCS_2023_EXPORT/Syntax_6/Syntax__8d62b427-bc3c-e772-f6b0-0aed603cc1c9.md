@@ -1,0 +1,58 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### SetShape Method (IList(GeometryObject))
+
+---
+
+
+
+|  |
+| --- |
+| [DirectShape Class](bfbd137b-c2c2-71bb-6f4a-992d0dcf6ea8.htm)   [See Also](#seeAlsoToggle) |
+
+Builds the shape of this object from the supplied collection of GeometryObjects. The objects are copied. If the new shape is identical to the old one, the old shape will be kept.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2015
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public void SetShape( 	IList<GeometryObject> pGeomArr ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub SetShape ( _ 	pGeomArr As IList(Of GeometryObject) _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: void SetShape( 	IList<GeometryObject^>^ pGeomArr ) ``` |
+
+#### Parameters
+
+pGeomArr
+:   Type:  System.Collections.Generic IList   [GeometryObject](e0f15010-0e19-6216-e2f0-ab7978145daa.htm)    
+     Shape of this object expressed as a collection of GeometryObjects. The supported types of GeometryObjects are: Solid, Mesh, GeometryInstance, Point and Curve.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | At least one member of pGeomArr does not satisfy DirectShape validation criteria. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[DirectShape Class](bfbd137b-c2c2-71bb-6f4a-992d0dcf6ea8.htm)
+
+[SetShape Overload](d8642243-fb35-0cbe-08d8-df4518929946.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetEndConstraint Method
+
+---
+
+
+
+|  |
+| --- |
+| [RebarUpdateCurvesData Class](ff847aea-8397-8b79-b039-16a72e479c9f.htm)   [See Also](#seeAlsoToggle) |
+
+Gets the current constraint for the end handle of the Rebar.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 18.0.0.0 (18.2.0.0)   
+  **Since:**  2018
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public RebarConstraint GetEndConstraint() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetEndConstraint As RebarConstraint ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: RebarConstraint^ GetEndConstraint() ``` |
+
+#### Return Value
+
+Returns the current constraint for the end handle of the Rebar. Return value is null is no constraint is present.
+
+# See Also
+
+[RebarUpdateCurvesData Class](ff847aea-8397-8b79-b039-16a72e479c9f.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

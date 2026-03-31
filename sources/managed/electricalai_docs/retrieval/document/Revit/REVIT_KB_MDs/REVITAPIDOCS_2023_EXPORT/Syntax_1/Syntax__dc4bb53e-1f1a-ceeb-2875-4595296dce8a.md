@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### ComposedName Property
+
+---
+
+
+
+|  |
+| --- |
+| [EnergyAnalysisSpace Class](cd0567d0-f5e0-a850-6d10-bde911831947.htm)   [See Also](#seeAlsoToggle) |
+
+The composed name for this space.
+
+**Namespace:**   [Autodesk.Revit.DB.Analysis](958e2e12-587d-f188-5d7b-f13d7dbfdf48.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2012
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public string ComposedName { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property ComposedName As String 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property String^ ComposedName { 	String^ get (); } ``` |
+
+# Remarks
+
+This value is composed of the name and description attributes, separated by a space.
+
+# See Also
+
+[EnergyAnalysisSpace Class](cd0567d0-f5e0-a850-6d10-bde911831947.htm)
+
+[Autodesk.Revit.DB.Analysis Namespace](958e2e12-587d-f188-5d7b-f13d7dbfdf48.htm)

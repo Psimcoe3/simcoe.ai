@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+   <AddIn Type="Command">
+    <Assembly>ElectricalConductors.dll</Assembly>
+    <ClientId>8226F18E-2457-4BF3-8441-8CE404961369</ClientId>
+    <FullClassName>Revit.SDK.Samples.ElectricalConductors.CS.SetConductorSizeOnCircuit</FullClassName>
+    <Text>Set Conductor Size On Circuit</Text>
+    <Description>Set conductor sizes on a circuit.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+	<LanguageType>Unknown</LanguageType>
+	<VendorId>ADSK</VendorId>
+	<VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+   <AddIn Type="Command">
+    <Assembly>ElectricalConductors.dll</Assembly>
+    <ClientId>075529DA-CF5F-4713-BAE9-27C6E86F8984</ClientId>
+    <FullClassName>Revit.SDK.Samples.ElectricalConductors.CS.RemoveCableSize</FullClassName>
+    <Text>Remove Cable Size</Text>
+    <Description>Remove a cable size.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+	<LanguageType>Unknown</LanguageType>
+	<VendorId>ADSK</VendorId>
+	<VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>ElectricalConductors.dll</Assembly>
+    <ClientId>F0D74D43-E5CA-4469-B556-0AF0A6822974</ClientId>
+    <FullClassName>Revit.SDK.Samples.ElectricalConductors.CS.RemoveConductorSize</FullClassName>
+    <Text>Remove Conductor Size</Text>
+    <Description>Remove a conductor size.</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+	<LanguageType>Unknown</LanguageType>
+	<VendorId>ADSK</VendorId>
+	<VendorDescription>Autodesk, www.autodesk.com</VendorDescription>
+  </AddIn>
+</RevitAddIns>

@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### TotalSize Property
+
+---
+
+
+
+|  |
+| --- |
+| [DataTransferProgressChangedEventArgs Class](a5a0081b-e990-ac8f-68dc-be0915955d1d.htm)   [See Also](#seeAlsoToggle) |
+
+Total expected data size to transfer, in bytes.
+
+**Namespace:**   [Autodesk.Revit.DB.Events](b86712d6-83b3-e044-8016-f9881ecd3800.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 17.0.0.0 (17.0.1090.0)   
+  **Since:**  2017 Subscription Update
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public double TotalSize { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property TotalSize As Double 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property double TotalSize { 	double get (); } ``` |
+
+# See Also
+
+[DataTransferProgressChangedEventArgs Class](a5a0081b-e990-ac8f-68dc-be0915955d1d.htm)
+
+[Autodesk.Revit.DB.Events Namespace](b86712d6-83b3-e044-8016-f9881ecd3800.htm)

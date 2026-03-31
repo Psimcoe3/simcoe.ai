@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <OutputType>Library</OutputType>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Autodesk.ResultsBuilder.DBApplication, Version=2025.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files\Autodesk\Revit 2025\AddIns\ResultsManagerExplorer\Autodesk.ResultsBuilder.DBApplication.dll</HintPath>
+    </Reference>
+    <Reference Include="RevitAPI">
+      <HintPath>C:\Program Files\Autodesk\Revit 2025\RevitAPI.dll</HintPath>
+    </Reference>
+    <Reference Include="RevitAPIUI">
+      <HintPath>C:\Program Files\Autodesk\Revit 2025\RevitAPIUI.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="QueryingResults.addin" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
+  </ItemGroup>
+  <PropertyGroup>
+    <!--
+    <PostBuildEvent>copy $(ProjectDir)QueryingResults.addin  "c:\ProgramData\Autodesk\Revit\Addins\2025\QueryingResults.addin"</PostBuildEvent>
+    <AssemblyTitle>QueryingResults</AssemblyTitle>
+    <Company>Autodesk</Company>
+    <Product>QueryingResults</Product>
+    <Copyright>Copyright © Autodesk 2012</Copyright>
+    <AssemblyVersion>2017.0.0.0</AssemblyVersion>
+    <FileVersion>2017.0.0.0</FileVersion>
+    -->
+  </PropertyGroup>
+</Project>

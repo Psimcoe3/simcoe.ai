@@ -1,0 +1,46 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### PathSketch Property
+
+---
+
+
+
+|  |
+| --- |
+| [Sweep Class](ed383459-badd-2323-4f73-0d94fd76ce0f.htm)   [See Also](#seeAlsoToggle) |
+
+The sketched path for the sweep.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public Sketch PathSketch { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property PathSketch As Sketch 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property Sketch^ PathSketch { 	Sketch^ get (); } ``` |
+
+# Remarks
+
+If the sweep is based on selected 3d curves, this property is    a null reference (  Nothing  in Visual Basic)  .
+
+# See Also
+
+[Sweep Class](ed383459-badd-2323-4f73-0d94fd76ce0f.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

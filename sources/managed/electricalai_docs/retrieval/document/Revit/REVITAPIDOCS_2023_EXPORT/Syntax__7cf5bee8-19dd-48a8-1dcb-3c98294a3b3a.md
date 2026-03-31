@@ -1,0 +1,60 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IsSolidInView Method
+
+---
+
+
+
+|  |
+| --- |
+| [PathReinforcement Class](1593a849-b883-73d4-7c02-a2522877d71d.htm)   [See Also](#seeAlsoToggle) |
+
+Checks if this Path Reinforcement is shown solidly in a 3D view.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 23.0.0.0 (23.1.0.0)   
+  **Since:**  2014
+
+# Syntax
+
+| C# |
+| --- |
+| ``` [ObsoleteAttribute("This method is deprecated in Revit 2023 and may be removed in a later version of Revit. The PathReinforcement will always be shown solidly in 3D views with Fine level of detail. To change this, you can override the detail level of view for Structural Rebar category.")] public bool IsSolidInView( 	View3D view ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` <ObsoleteAttribute("This method is deprecated in Revit 2023 and may be removed in a later version of Revit. The PathReinforcement will always be shown solidly in 3D views with Fine level of detail. To change this, you can override the detail level of view for Structural Rebar category.")> _ Public Function IsSolidInView ( _ 	view As View3D _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` [ObsoleteAttribute(L"This method is deprecated in Revit 2023 and may be removed in a later version of Revit. The PathReinforcement will always be shown solidly in 3D views with Fine level of detail. To change this, you can override the detail level of view for Structural Rebar category.")] public: bool IsSolidInView( 	View3D^ view ) ``` |
+
+#### Parameters
+
+view
+:   Type:  [Autodesk.Revit.DB View3D](d795a238-fc24-1875-e64f-a2bef56ae949.htm)    
+     The 3D view element
+
+#### Return Value
+
+True if Path Reinforcement is shown solidly, false otherwise.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions InapplicableDataException](dc1a6d15-8923-a1fe-722a-4e976634a519.htm) | This element doesn't have valid visibility data. |
+
+# See Also
+
+[PathReinforcement Class](1593a849-b883-73d4-7c02-a2522877d71d.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

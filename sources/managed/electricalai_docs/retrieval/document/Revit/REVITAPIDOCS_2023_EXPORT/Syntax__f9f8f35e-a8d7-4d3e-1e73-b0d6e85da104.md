@@ -1,0 +1,63 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CreateIntegerOfType Method
+
+---
+
+
+
+|  |
+| --- |
+| [IFCData Class](34762033-771a-ebee-bd69-509c55ae78f0.htm)   [See Also](#seeAlsoToggle) |
+
+Creates an integer data object of the specified type.
+
+**Namespace:**   [Autodesk.Revit.DB.IFC](b823fafb-1ba1-896b-4097-142c2817ce74.htm)    
+  **Assembly:**   RevitAPIIFC  (in RevitAPIIFC.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static IFCData CreateIntegerOfType( 	int value, 	string typeName ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function CreateIntegerOfType ( _ 	value As Integer, _ 	typeName As String _ ) As IFCData ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static IFCData^ CreateIntegerOfType( 	int value,  	String^ typeName ) ``` |
+
+#### Parameters
+
+value
+:   Type:  System Int32    
+     The integer value.
+
+typeName
+:   Type:  System String    
+     The type name.
+
+#### Return Value
+
+The IFCData object.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[IFCData Class](34762033-771a-ebee-bd69-509c55ae78f0.htm)
+
+[Autodesk.Revit.DB.IFC Namespace](b823fafb-1ba1-896b-4097-142c2817ce74.htm)

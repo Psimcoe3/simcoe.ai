@@ -1,0 +1,75 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Create Method (Document, IList(CurveLoop), XYZ, AreaLoadType)
+
+---
+
+
+
+|  |
+| --- |
+| [AreaLoad Class](5dc205a9-cafd-911b-6a56-26f2e8bfcdc1.htm)   [See Also](#seeAlsoToggle) |
+
+Creates a new non-hosted area load within the project.
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2016
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static AreaLoad Create( 	Document aDoc, 	IList<CurveLoop> loops, 	XYZ forceVector, 	AreaLoadType symbol ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function Create ( _ 	aDoc As Document, _ 	loops As IList(Of CurveLoop), _ 	forceVector As XYZ, _ 	symbol As AreaLoadType _ ) As AreaLoad ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static AreaLoad^ Create( 	Document^ aDoc,  	IList<CurveLoop^>^ loops,  	XYZ^ forceVector,  	AreaLoadType^ symbol ) ``` |
+
+#### Parameters
+
+aDoc
+:   Type:  [Autodesk.Revit.DB Document](db03274b-a107-aa32-9034-f3e0df4bb1ec.htm)    
+     Document to which new area load will be added.
+
+loops
+:   Type:  System.Collections.Generic IList   [CurveLoop](84824924-cb89-9e20-de6e-3461f429dfd6.htm)    
+     The loops that define geometry of the area load. The curve loop collection should contains a closed loops consisting of lines.
+
+forceVector
+:   Type:  [Autodesk.Revit.DB XYZ](c2fd995c-95c0-58fb-f5de-f3246cbc5600.htm)    
+     The force vector applied to the 1st reference point of the area load.
+
+symbol
+:   Type:  [Autodesk.Revit.DB.Structure AreaLoadType](eb4b548c-059a-d0d7-2431-8203c29dfebd.htm)    
+     The symbol of the AreaLoad. Set    a null reference (  Nothing  in Visual Basic)  to use default type.
+
+#### Return Value
+
+If successful, returns an object of the newly created AreaLoad.    a null reference (  Nothing  in Visual Basic)  is returned if the operation fails.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | Thrown when force vector is equal zero. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | Thrown if type could not be set for newly created line load. |
+
+# See Also
+
+[AreaLoad Class](5dc205a9-cafd-911b-6a56-26f2e8bfcdc1.htm)
+
+[Create Overload](ad04ec26-96a4-ddc4-305a-e6316cdb6a70.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

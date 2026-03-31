@@ -1,0 +1,46 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### ModelCurveArrArrayIterator Members
+
+---
+
+
+
+|  |
+| --- |
+| [ModelCurveArrArrayIterator Class](d4814afc-1580-c846-d69e-c1a02a211bcd.htm)   [Constructors](#constructorTableToggle)   [Methods](#methodTableToggle)   [Properties](#propertyTableToggle)   [See Also](#seeAlsoToggle) |
+
+The  [ModelCurveArrArrayIterator](d4814afc-1580-c846-d69e-c1a02a211bcd.htm)  type exposes the following members.
+
+# Constructors
+
+|  | Name | Description |
+| --- | --- | --- |
+| Public method | [ModelCurveArrArrayIterator](85888484-5f47-66a6-665d-6b5698044250.htm) | For Internal Use Only. |
+
+# Methods
+
+|  | Name | Description |
+| --- | --- | --- |
+| Public method | [Dispose](7c03212a-b587-1c89-3912-efea0d2619c5.htm) | Causes the object to release immediately any resources it may be utilizing. (Inherited from  [APIObject](beb86ef5-39ad-3f0d-0cd9-0c929387a2bb.htm)  .) |
+| Public method | [Equals](http://msdn2.microsoft.com/en-us/library/bsc2ak47) | Determines whether the specified  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  is equal to the current  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  . (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+| Public method | [GetHashCode](http://msdn2.microsoft.com/en-us/library/zdee4b3y) | Serves as a hash function for a particular type. (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+| Public method | [GetType](http://msdn2.microsoft.com/en-us/library/dfwy45w9) | Gets the  [Type](http://msdn2.microsoft.com/en-us/library/42892f65)  of the current instance. (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+| Public method | [MoveNext](97cd10d8-0bac-1cc5-1283-681c6fe4e03d.htm) | Move the iterator one item forward. |
+| Public method | [Reset](c776ea83-22d4-b520-0992-8ea0adaa790f.htm) | Bring the iterator back to the start of the array. |
+| Public method | [ToString](http://msdn2.microsoft.com/en-us/library/7bxwbwt2) | Returns a string that represents the current object. (Inherited from  [Object](http://msdn2.microsoft.com/en-us/library/e5kfa45b)  .) |
+
+# Properties
+
+|  | Name | Description |
+| --- | --- | --- |
+| Public property | [Current](fad499fb-32ba-18e2-54ad-aeb93512ac4b.htm) | Retrieves the item that is the current focus of the iterator. |
+| Public property | [IsReadOnly](d516bcd2-a3fd-a578-58f6-f1add979bd07.htm) | Identifies if the object is read-only or modifiable. (Inherited from  [APIObject](beb86ef5-39ad-3f0d-0cd9-0c929387a2bb.htm)  .) |
+
+# See Also
+
+[ModelCurveArrArrayIterator Class](d4814afc-1580-c846-d69e-c1a02a211bcd.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

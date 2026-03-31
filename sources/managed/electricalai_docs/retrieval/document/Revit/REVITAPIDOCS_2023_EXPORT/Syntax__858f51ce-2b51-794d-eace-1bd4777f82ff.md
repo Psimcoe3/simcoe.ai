@@ -1,0 +1,43 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### FtOfWaterPer100ft Property
+
+---
+
+
+
+|  |
+| --- |
+| [SymbolTypeId Class](6f430fd2-cbd1-237a-d4f5-4c9697e945e1.htm)   [See Also](#seeAlsoToggle) |
+
+Symbol FT/100ft, indicating unit Feet of water (39.2 Â°F) per 100 feet.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2021
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static ForgeTypeId FtOfWaterPer100ft { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared ReadOnly Property FtOfWaterPer100ft As ForgeTypeId 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static property ForgeTypeId^ FtOfWaterPer100ft { 	ForgeTypeId^ get (); } ``` |
+
+# See Also
+
+[SymbolTypeId Class](6f430fd2-cbd1-237a-d4f5-4c9697e945e1.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

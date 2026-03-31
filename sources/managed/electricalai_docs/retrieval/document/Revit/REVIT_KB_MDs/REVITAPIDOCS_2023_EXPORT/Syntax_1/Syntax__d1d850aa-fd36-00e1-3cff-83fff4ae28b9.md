@@ -1,0 +1,56 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Inequality Operator
+
+---
+
+
+
+|  |
+| --- |
+| [PerformanceAdviserRuleId Class](3cd02844-a37b-9a93-e926-7d7f32450839.htm)   [See Also](#seeAlsoToggle) |
+
+Compares two PerformanceAdviserRuleId instances.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool operator !=( 	PerformanceAdviserRuleId first, 	PerformanceAdviserRuleId second ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Operator <> ( _ 	first As PerformanceAdviserRuleId, _ 	second As PerformanceAdviserRuleId _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool operator !=( 	PerformanceAdviserRuleId^ first,  	PerformanceAdviserRuleId^ second ) ``` |
+
+#### Parameters
+
+first
+:   Type:  [Autodesk.Revit.DB PerformanceAdviserRuleId](3cd02844-a37b-9a93-e926-7d7f32450839.htm)    
+     The first PerformanceAdviserRuleId.
+
+second
+:   Type:  [Autodesk.Revit.DB PerformanceAdviserRuleId](3cd02844-a37b-9a93-e926-7d7f32450839.htm)    
+     The second PerformanceAdviserRuleId.
+
+#### Return Value
+
+True if the inputs are different, false if they are identical.
+
+# See Also
+
+[PerformanceAdviserRuleId Class](3cd02844-a37b-9a93-e926-7d7f32450839.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

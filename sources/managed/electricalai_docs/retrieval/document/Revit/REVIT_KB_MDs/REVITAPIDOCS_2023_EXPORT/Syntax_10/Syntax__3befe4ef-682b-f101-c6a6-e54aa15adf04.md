@@ -1,0 +1,53 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetClipRectangle Method
+
+---
+
+
+
+|  |
+| --- |
+| [DrawContext Class](b9244325-08c8-8bbd-a9f3-5d91d638d85d.htm)   [See Also](#seeAlsoToggle) |
+
+Gets the clip rectangle for the Revit view where rendering takes place. The clip rectangle is the area currently being redrawn, which may be smaller than the view rectangle.
+
+**Namespace:**   [Autodesk.Revit.DB.DirectContext3D](f4ba10f0-55ea-5344-173b-688405391794.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 18.0.0.0 (18.2.0.0)   
+  **Since:**  2017
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static Rectangle GetClipRectangle() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function GetClipRectangle As Rectangle ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static Rectangle^ GetClipRectangle() ``` |
+
+#### Return Value
+
+The clip rectangle.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | This DrawContext is not available because Revit is not currently rendering. In general, this DrawContext must be used in the scope of the RenderScene() callback of IDirectContext3DServer. |
+
+# See Also
+
+[DrawContext Class](b9244325-08c8-8bbd-a9f3-5d91d638d85d.htm)
+
+[Autodesk.Revit.DB.DirectContext3D Namespace](f4ba10f0-55ea-5344-173b-688405391794.htm)

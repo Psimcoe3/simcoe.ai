@@ -1,0 +1,42 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### Document Property
+
+---
+
+
+
+|  |
+| --- |
+| [IFCExternalServiceUIData Class](bbd91fea-754e-fb79-4383-dcb3ef22efac.htm)   [See Also](#seeAlsoToggle) |
+
+return the document
+
+**Namespace:**   [Autodesk.Revit.UI](e86fd90a-8957-02a6-da7f-ced248966e3e.htm)    
+  **Assembly:**   RevitAPIUI  (in RevitAPIUI.dll) Version: 23.0.0.0 (23.1.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public Document Document { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property Document As Document 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property Document^ Document { 	Document^ get (); } ``` |
+
+# See Also
+
+[IFCExternalServiceUIData Class](bbd91fea-754e-fb79-4383-dcb3ef22efac.htm)
+
+[Autodesk.Revit.UI Namespace](e86fd90a-8957-02a6-da7f-ced248966e3e.htm)

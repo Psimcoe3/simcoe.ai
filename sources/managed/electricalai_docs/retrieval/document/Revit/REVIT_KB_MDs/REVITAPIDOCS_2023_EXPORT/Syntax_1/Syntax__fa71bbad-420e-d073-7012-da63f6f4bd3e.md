@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetRelatedProducts Method
+
+---
+
+
+
+|  |
+| --- |
+| [ExporterIFC Class](c8697b81-e080-9202-14d3-ec883f951521.htm)   [See Also](#seeAlsoToggle) |
+
+Gets all products not associated to stories.
+
+**Namespace:**   [Autodesk.Revit.DB.IFC](b823fafb-1ba1-896b-4097-142c2817ce74.htm)    
+  **Assembly:**   RevitAPIIFC  (in RevitAPIIFC.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public ICollection<IFCAnyHandle> GetRelatedProducts() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetRelatedProducts As ICollection(Of IFCAnyHandle) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: ICollection<IFCAnyHandle^>^ GetRelatedProducts() ``` |
+
+#### Return Value
+
+The collection of products.
+
+# See Also
+
+[ExporterIFC Class](c8697b81-e080-9202-14d3-ec883f951521.htm)
+
+[Autodesk.Revit.DB.IFC Namespace](b823fafb-1ba1-896b-4097-142c2817ce74.htm)

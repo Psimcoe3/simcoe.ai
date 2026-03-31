@@ -1,0 +1,78 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### SetLayoutAsMinimumClearSpacing Method
+
+---
+
+
+
+|  |
+| --- |
+| [RebarShapeDrivenAccessor Class](6d2f77e7-bbe2-5bd5-723a-bf27c3df1a65.htm)   [See Also](#seeAlsoToggle) |
+
+Sets the Layout Rule property of rebar set to MinimumClearSpacing
+
+**Namespace:**   [Autodesk.Revit.DB.Structure](d586b341-f687-9d90-e96d-255806b7d4fc.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 18.0.0.0 (18.2.0.0)   
+  **Since:**  2018
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public void SetLayoutAsMinimumClearSpacing( 	double spacing, 	double arrayLength, 	bool barsOnNormalSide, 	bool includeFirstBar, 	bool includeLastBar ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub SetLayoutAsMinimumClearSpacing ( _ 	spacing As Double, _ 	arrayLength As Double, _ 	barsOnNormalSide As Boolean, _ 	includeFirstBar As Boolean, _ 	includeLastBar As Boolean _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: void SetLayoutAsMinimumClearSpacing( 	double spacing,  	double arrayLength,  	bool barsOnNormalSide,  	bool includeFirstBar,  	bool includeLastBar ) ``` |
+
+#### Parameters
+
+spacing
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     The maximum spacing between rebar in rebar set
+
+arrayLength
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     The distribution length of rebar set
+
+barsOnNormalSide
+:   Type:  [System Boolean](http://msdn2.microsoft.com/en-us/library/a28wyd50)    
+     Identifies if the bars of the rebar set are on the same side of the rebar plane indicated by the normal
+
+includeFirstBar
+:   Type:  [System Boolean](http://msdn2.microsoft.com/en-us/library/a28wyd50)    
+     Identifies if the first bar in rebar set is shown
+
+includeLastBar
+:   Type:  [System Boolean](http://msdn2.microsoft.com/en-us/library/a28wyd50)    
+     Identifies if the last bar in rebar set is shown
+
+# Remarks
+
+When changing the layout rule to MinimumClearSpacing, you must also simultaneously set Spacing, SetLength, BarsOnNormalSide, IncludeFirstBar, and IncludeLastBar properties.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentOutOfRangeException](60f148c9-ece0-a6bb-4e12-bb4a9c8c8a24.htm) | The spacing isn't bigger than 0.0. -or- the set length arrayLength isn't acceptable. |
+| [Autodesk.Revit.Exceptions DisabledDisciplineException](3693dcdf-67fb-0128-3be8-cad150e9498e.htm) | None of the following disciplines is enabled: Structural. |
+| [Autodesk.Revit.Exceptions InapplicableDataException](dc1a6d15-8923-a1fe-722a-4e976634a519.htm) | This RebarShapeDrivenAccessor is an instance of a spiral or multiplanar shape. |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | This RebarShapeDrivenAccessor doesn't contain a valid rebar reference. |
+
+# See Also
+
+[RebarShapeDrivenAccessor Class](6d2f77e7-bbe2-5bd5-723a-bf27c3df1a65.htm)
+
+[Autodesk.Revit.DB.Structure Namespace](d586b341-f687-9d90-e96d-255806b7d4fc.htm)

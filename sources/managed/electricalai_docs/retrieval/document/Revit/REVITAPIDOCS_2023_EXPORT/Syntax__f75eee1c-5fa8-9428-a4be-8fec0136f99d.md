@@ -1,0 +1,50 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### IssuedBy Property
+
+---
+
+
+
+|  |
+| --- |
+| [Revision Class](af882c60-68ae-2e53-5c41-7aa43cfc1df4.htm)   [See Also](#seeAlsoToggle) |
+
+Indicates who has issued or will issue this Revision.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2015
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public string IssuedBy { get; set; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Property IssuedBy As String 	Get 	Set ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property String^ IssuedBy { 	String^ get (); 	void set (String^ value); } ``` |
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | When setting this property: A non-optional argument was null |
+| [Autodesk.Revit.Exceptions InvalidOperationException](9e715f03-3884-e539-4dd6-8d7545733adc.htm) | When setting this property: This operation cannot be performed on Revisions that have already been issued. |
+
+# See Also
+
+[Revision Class](af882c60-68ae-2e53-5c41-7aa43cfc1df4.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

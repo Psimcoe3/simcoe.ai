@@ -1,0 +1,46 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### SummaryShowsVerticalHeaders Property
+
+---
+
+
+
+|  |
+| --- |
+| [PanelScheduleData Class](d24fcc19-3240-8f07-68ca-ce7b62f7aac3.htm)   [See Also](#seeAlsoToggle) |
+
+Shows text in the Load Summary section's headers vertically instead of horizontally
+
+**Namespace:**   [Autodesk.Revit.DB.Electrical](212a1314-7843-2c6c-3322-363127e4059f.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public bool SummaryShowsVerticalHeaders { get; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public ReadOnly Property SummaryShowsVerticalHeaders As Boolean 	Get ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property bool SummaryShowsVerticalHeaders { 	bool get (); } ``` |
+
+# Remarks
+
+Setting this value must go through the appropriate update function (updateVerticalHeadersInSection)
+
+# See Also
+
+[PanelScheduleData Class](d24fcc19-3240-8f07-68ca-ce7b62f7aac3.htm)
+
+[Autodesk.Revit.DB.Electrical Namespace](212a1314-7843-2c6c-3322-363127e4059f.htm)

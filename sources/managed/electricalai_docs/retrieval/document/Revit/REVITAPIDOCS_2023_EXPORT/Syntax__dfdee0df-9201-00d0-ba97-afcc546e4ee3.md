@@ -1,0 +1,42 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### RasterQuality Property
+
+---
+
+
+
+|  |
+| --- |
+| [PrintParameters Class](59e6cfe9-b1e8-70c0-814b-ee69c8fca411.htm)   [See Also](#seeAlsoToggle) |
+
+The raster quality type.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public RasterQualityType RasterQuality { get; set; } ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Property RasterQuality As RasterQualityType 	Get 	Set ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: property RasterQualityType RasterQuality { 	RasterQualityType get (); 	void set (RasterQualityType value); } ``` |
+
+# See Also
+
+[PrintParameters Class](59e6cfe9-b1e8-70c0-814b-ee69c8fca411.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

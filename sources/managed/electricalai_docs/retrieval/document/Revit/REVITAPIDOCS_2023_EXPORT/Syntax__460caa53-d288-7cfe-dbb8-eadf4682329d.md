@@ -1,0 +1,62 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### ScaleBasisAndOrigin Method
+
+---
+
+
+
+|  |
+| --- |
+| [Transform Class](58dd01c8-b3fc-7142-e4f3-c524079a282d.htm)   [See Also](#seeAlsoToggle) |
+
+Scales the basis vectors and the origin of this transformation and returns the result.
+
+**Namespace:**   [Autodesk.Revit.DB](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public Transform ScaleBasisAndOrigin( 	double scale ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function ScaleBasisAndOrigin ( _ 	scale As Double _ ) As Transform ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: Transform^ ScaleBasisAndOrigin( 	double scale ) ``` |
+
+#### Parameters
+
+scale
+:   Type:  [System Double](http://msdn2.microsoft.com/en-us/library/643eft0t)    
+     The scale value.
+
+#### Return Value
+
+The transformation equal to the composition of the two transformations.
+
+# Remarks
+
+The resulting transformation is equivalent to the application of this transformation and then the uniform scale, in this order.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | Thrown when the specified value is an infinite number. |
+
+# See Also
+
+[Transform Class](58dd01c8-b3fc-7142-e4f3-c524079a282d.htm)
+
+[Autodesk.Revit.DB Namespace](87546ba7-461b-c646-cbb1-2cb8f5bff8b2.htm)

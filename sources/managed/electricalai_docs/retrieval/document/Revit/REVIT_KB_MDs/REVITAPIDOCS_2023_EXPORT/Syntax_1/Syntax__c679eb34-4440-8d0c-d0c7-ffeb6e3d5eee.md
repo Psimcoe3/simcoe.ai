@@ -1,0 +1,47 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### GetLegend Method
+
+---
+
+
+
+|  |
+| --- |
+| [SpatialFieldManager Class](0a6d155e-6ef1-7215-f8f1-c1d8203797ee.htm)   [See Also](#seeAlsoToggle) |
+
+Returns legend element or NULL
+
+**Namespace:**   [Autodesk.Revit.DB.Analysis](958e2e12-587d-f188-5d7b-f13d7dbfdf48.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 2015.0.0.0 (2015.0.0.0)   
+  **Since:**  2011
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public AnalysisDisplayLegend GetLegend() ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Function GetLegend As AnalysisDisplayLegend ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: AnalysisDisplayLegend^ GetLegend() ``` |
+
+#### Return Value
+
+The legend element or NULL
+
+# See Also
+
+[SpatialFieldManager Class](0a6d155e-6ef1-7215-f8f1-c1d8203797ee.htm)
+
+[Autodesk.Revit.DB.Analysis Namespace](958e2e12-587d-f188-5d7b-f13d7dbfdf48.htm)

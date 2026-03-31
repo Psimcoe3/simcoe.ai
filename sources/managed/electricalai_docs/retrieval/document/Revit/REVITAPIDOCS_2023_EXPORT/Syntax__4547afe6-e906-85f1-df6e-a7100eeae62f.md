@@ -1,0 +1,55 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### CanBeHydraulicLoopBoundary Method
+
+---
+
+
+
+|  |
+| --- |
+| [PipingSystem Class](6abbdfa2-69a5-eef1-2663-89a5faf91831.htm)   [See Also](#seeAlsoToggle) |
+
+Checks if the element can be used as a hydraulic loop boundary.
+
+**Namespace:**   [Autodesk.Revit.DB.Plumbing](cc553597-37c2-fcd9-6025-d904c129c80a.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2019
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public static bool CanBeHydraulicLoopBoundary( 	Element element ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Shared Function CanBeHydraulicLoopBoundary ( _ 	element As Element _ ) As Boolean ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: static bool CanBeHydraulicLoopBoundary( 	Element^ element ) ``` |
+
+#### Parameters
+
+element
+:   Type:  [Autodesk.Revit.DB Element](eb16114f-69ea-f4de-0d0d-f7388b105a16.htm)    
+     The element to be checked.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[PipingSystem Class](6abbdfa2-69a5-eef1-2663-89a5faf91831.htm)
+
+[Autodesk.Revit.DB.Plumbing Namespace](cc553597-37c2-fcd9-6025-d904c129c80a.htm)

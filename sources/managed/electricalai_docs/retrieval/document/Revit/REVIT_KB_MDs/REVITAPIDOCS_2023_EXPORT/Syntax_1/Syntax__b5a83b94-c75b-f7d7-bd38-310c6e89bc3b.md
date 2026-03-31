@@ -1,0 +1,60 @@
+[✨ Located in SF Bay Area or LA? Get free Revit AI automation consulting from YC-backed AI engineers →](https://archilabs.ai/ca-revit-ai-pilot)
+
+
+
+#### SetLightDistribution Method
+
+---
+
+
+
+|  |
+| --- |
+| [LightType Class](42c83d85-60cd-52c3-7b97-b89e81d7d9fe.htm)   [See Also](#seeAlsoToggle) |
+
+Replace the current LightDistribution object with the given object
+
+**Namespace:**   [Autodesk.Revit.DB.Lighting](a6a04f07-7fd2-0a4e-12e7-01842ee6daaf.htm)    
+  **Assembly:**   RevitAPI  (in RevitAPI.dll) Version: 22.0.0.0 (22.1.0.0)   
+  **Since:**  2013
+
+# Syntax
+
+| C# |
+| --- |
+| ``` public void SetLightDistribution( 	LightDistribution lightDistribution ) ``` |
+
+ 
+
+| Visual Basic |
+| --- |
+| ``` Public Sub SetLightDistribution ( _ 	lightDistribution As LightDistribution _ ) ``` |
+
+ 
+
+| Visual C++ |
+| --- |
+| ``` public: void SetLightDistribution( 	LightDistribution^ lightDistribution ) ``` |
+
+#### Parameters
+
+lightDistribution
+:   Type:  [Autodesk.Revit.DB.Lighting LightDistribution](39162cb5-d13b-c7fa-9297-9a70c5678ac6.htm)    
+     An instance of an object derived from LightDistribution
+
+# Remarks
+
+The argument object is cloned Light distribution is a family element parameter. All other LightType properties and methods except for light shape are family type parameters. Changes to family type parameters may not be committed in the same transaction with changes to family element parameters, otherwise the modifications to the family type may be lost. Always use a separate transaction for changes to the shape and distribution of a light.
+
+# Exceptions
+
+| Exception | Condition |
+| --- | --- |
+| [Autodesk.Revit.Exceptions ArgumentException](2e6e4206-97a8-dd4b-df5d-4269f4bb6088.htm) | The LightDistribution is the argument that is being validated The LightDistribution is not valid because it of a different derived type than the current LightDistribution derived type. |
+| [Autodesk.Revit.Exceptions ArgumentNullException](631e1424-60f4-929b-4e52-dda9dcd26316.htm) | A non-optional argument was null |
+
+# See Also
+
+[LightType Class](42c83d85-60cd-52c3-7b97-b89e81d7d9fe.htm)
+
+[Autodesk.Revit.DB.Lighting Namespace](a6a04f07-7fd2-0a4e-12e7-01842ee6daaf.htm)
