@@ -648,4 +648,79 @@ def validate_evaluate_config(cfg: dict, num_examples: int) -> None:
     validate_retrieval_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
+
+
+def validate_release_artifact_config(cfg: dict) -> None:
+    data = require_section(cfg, "data")
+    training = require_section(cfg, "training")
+    export = require_section(cfg, "export")
+    evaluation = require_section(cfg, "evaluation")
+
+    validate_architecture_config(cfg)
+    validate_release_config(cfg)
+
+    require_keys(data, "data", {"processed_dir"})
+    require_keys(training, "training", {"output_dir"})
+    require_keys(
+        export,
+        "export",
+        {"merged_16bit_dir", "gguf_dir", "gguf_quantisation", "ollama_modelfile"},
+    )
+    require_keys(
+        evaluation,
+        "evaluation",
+        {"results_path", "judge_model"},
+    )
+
+    require_non_empty_string(data["processed_dir"], "data.processed_dir")
+    require_non_empty_string(training["output_dir"], "training.output_dir")
+    require_non_empty_string(export["merged_16bit_dir"], "export.merged_16bit_dir")
+    require_non_empty_string(export["gguf_dir"], "export.gguf_dir")
+    require_non_empty_string(export["gguf_quantisation"], "export.gguf_quantisation")
+    require_non_empty_string(export["ollama_modelfile"], "export.ollama_modelfile")
+    require_non_empty_string(evaluation["results_path"], "evaluation.results_path")
+    require_optional_string(evaluation["judge_model"], "evaluation.judge_model")
+    require_optional_string(
+        evaluation.get("golden_benchmark_path"),
+        "evaluation.golden_benchmark_path",
+    )
+
+    configured_num_examples = require_optional_positive_int(
+        evaluation.get("num_examples"),
+        "evaluation.num_examples",
+    )
+    quick_num_examples = require_optional_positive_int(
+        evaluation.get("quick_num_examples"),
+        "evaluation.quick_num_examples",
+    )
+    max_new_tokens = require_optional_positive_int(
+        evaluation.get("max_new_tokens"),
+        "evaluation.max_new_tokens",
+    )
+    quick_max_new_tokens = require_optional_positive_int(
+        evaluation.get("quick_max_new_tokens"),
+        "evaluation.quick_max_new_tokens",
+    )
+    inference_batch_size = require_optional_positive_int(
+        evaluation.get("inference_batch_size"),
+        "evaluation.inference_batch_size",
+    )
+    judge_concurrency = require_optional_positive_int(
+        evaluation.get("judge_concurrency"),
+        "evaluation.judge_concurrency",
+    )
+
+    if configured_num_examples is not None and quick_num_examples is not None:
+        if quick_num_examples > configured_num_examples:
+            fail("evaluation.quick_num_examples cannot exceed evaluation.num_examples")
+
+    if max_new_tokens is not None and quick_max_new_tokens is not None:
+        if quick_max_new_tokens > max_new_tokens:
+            fail("evaluation.quick_max_new_tokens cannot exceed evaluation.max_new_tokens")
+
+    if inference_batch_size is not None and inference_batch_size < 1:
+        fail("evaluation.inference_batch_size must be a positive integer")
+
+    if judge_concurrency is not None and judge_concurrency < 1:
+        fail("evaluation.judge_concurrency must be a positive integer")
     validate_deterministic_tools_config(cfg)

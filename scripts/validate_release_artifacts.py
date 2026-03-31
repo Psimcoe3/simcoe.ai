@@ -16,11 +16,7 @@ import os
 
 from config_validation import (
     load_config,
-    validate_evaluate_config,
-    validate_export_config,
-    validate_prepare_data_config,
-    validate_release_config,
-    validate_train_config,
+    validate_release_artifact_config,
 )
 from manifest_utils import read_json_file
 
@@ -485,14 +481,6 @@ def validate_release_artifacts(cfg: dict, config_path: str) -> list[str]:
     return errors
 
 
-def _resolve_validation_num_examples(cfg: dict) -> int:
-    evaluation = cfg.get("evaluation") if isinstance(cfg.get("evaluation"), dict) else {}
-    configured = evaluation.get("quick_num_examples") or evaluation.get("num_examples") or 1
-    if isinstance(configured, int) and configured > 0:
-        return configured
-    return 1
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Validate release manifests and existing artifacts without rerunning evaluation."
@@ -501,11 +489,7 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_config(args.config)
-    validate_prepare_data_config(cfg)
-    validate_train_config(cfg)
-    validate_export_config(cfg)
-    validate_release_config(cfg)
-    validate_evaluate_config(cfg, _resolve_validation_num_examples(cfg))
+    validate_release_artifact_config(cfg)
 
     errors = validate_release_artifacts(cfg, args.config)
     if errors:

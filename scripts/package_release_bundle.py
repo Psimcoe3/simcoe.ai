@@ -17,11 +17,7 @@ import tempfile
 
 from config_validation import (
     load_config,
-    validate_evaluate_config,
-    validate_export_config,
-    validate_prepare_data_config,
-    validate_release_config,
-    validate_train_config,
+    validate_release_artifact_config,
 )
 from manifest_utils import current_utc_timestamp, read_json_file, write_json_file
 
@@ -48,14 +44,6 @@ def _read_manifest(path: str, label: str) -> dict:
     if not isinstance(payload, dict):
         raise ValueError(f"{label} must contain a top-level JSON object")
     return payload
-
-
-def _resolve_validation_num_examples(cfg: dict) -> int:
-    evaluation = cfg.get("evaluation") if isinstance(cfg.get("evaluation"), dict) else {}
-    configured = evaluation.get("quick_num_examples") or evaluation.get("num_examples") or 1
-    if isinstance(configured, int) and configured > 0:
-        return configured
-    return 1
 
 
 def _resolve_release_bundle_plan(cfg: dict, config_path: str, include_gguf: bool) -> dict:
@@ -280,11 +268,7 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_config(args.config)
-    validate_prepare_data_config(cfg)
-    validate_train_config(cfg)
-    validate_export_config(cfg)
-    validate_release_config(cfg)
-    validate_evaluate_config(cfg, _resolve_validation_num_examples(cfg))
+    validate_release_artifact_config(cfg)
 
     bundle_path = build_release_bundle(cfg, args.config, args.out, include_gguf=args.include_gguf)
     print("\n✅  Release verification bundle created.")
