@@ -243,8 +243,7 @@ def build_release_bundle(cfg: dict, config_path: str, out_path: str, include_ggu
             else:
                 _write_placeholder(staged_path, file_entry.get("original_size_bytes"))
 
-        bundle_manifest = {key: value for key, value in bundle_plan.items() if key != "repo_root"}
-        write_json_file(os.path.join(staging_dir, "release_bundle_manifest.json"), bundle_manifest)
+        write_json_file(os.path.join(staging_dir, "release_bundle_manifest.json"), bundle_plan)
 
         with tarfile.open(absolute_out_path, "w:gz") as archive:
             for current_root, dirnames, filenames in os.walk(staging_dir):

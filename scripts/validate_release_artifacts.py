@@ -33,6 +33,8 @@ PROCESSED_MANIFEST_FIELDS = (
     "dataset_fingerprints",
 )
 
+BUNDLE_MANIFEST_PATH = "release_bundle_manifest.json"
+
 
 def _absolute(path: str) -> str:
     return os.path.abspath(path)
@@ -55,6 +57,26 @@ def _read_json_object(path: str, label: str, errors: list[str]) -> dict | None:
     return payload
 
 
+def _load_bundle_relocation(errors: list[str]) -> dict | None:
+    bundle_manifest_path = _absolute(BUNDLE_MANIFEST_PATH)
+    if not os.path.isfile(bundle_manifest_path):
+        return None
+
+    payload = _read_json_object(bundle_manifest_path, "Release bundle manifest", errors)
+    if payload is None:
+        return None
+
+    repo_root = payload.get("repo_root")
+    if not isinstance(repo_root, str) or not repo_root.strip():
+        errors.append("release_bundle_manifest.repo_root must be a non-empty absolute path")
+        return None
+
+    return {
+        "source_repo_root": _absolute(repo_root),
+        "current_repo_root": os.getcwd(),
+    }
+
+
 def _expect_mapping(value: object, label: str, errors: list[str]) -> dict | None:
     if not isinstance(value, dict):
         errors.append(f"{label} must be a JSON object")
@@ -62,20 +84,51 @@ def _expect_mapping(value: object, label: str, errors: list[str]) -> dict | None
     return value
 
 
-def _expect_file(path: str | None, label: str, errors: list[str]) -> None:
+def _relocated_path(path: str, relocation: dict | None) -> str:
+    absolute_path = _absolute(path)
+    if relocation is None:
+        return absolute_path
+
+    source_repo_root = relocation["source_repo_root"]
+    current_repo_root = relocation["current_repo_root"]
+    if absolute_path == source_repo_root:
+        return current_repo_root
+
+    source_prefix = f"{source_repo_root}{os.sep}"
+    if absolute_path.startswith(source_prefix):
+        relative_path = os.path.relpath(absolute_path, source_repo_root)
+        return os.path.abspath(os.path.join(current_repo_root, relative_path))
+
+    return absolute_path
+
+
+def _paths_match(actual: object, expected: str, relocation: dict | None) -> bool:
+    if not isinstance(actual, str) or not actual.strip():
+        return False
+    return _relocated_path(actual, relocation) == _absolute(expected)
+
+
+def _expect_file(path: str | None, label: str, errors: list[str], relocation: dict | None) -> None:
     if not isinstance(path, str) or not path.strip():
         errors.append(f"{label} must be a non-empty file path")
         return
-    if not os.path.isfile(path):
-        errors.append(f"{label} not found: {path}")
+    resolved_path = _relocated_path(path, relocation)
+    if not os.path.isfile(resolved_path):
+        errors.append(f"{label} not found: {resolved_path}")
 
 
-def _expect_directory(path: str | None, label: str, errors: list[str]) -> None:
+def _expect_directory(
+    path: str | None,
+    label: str,
+    errors: list[str],
+    relocation: dict | None,
+) -> None:
     if not isinstance(path, str) or not path.strip():
         errors.append(f"{label} must be a non-empty directory path")
         return
-    if not os.path.isdir(path):
-        errors.append(f"{label} not found: {path}")
+    resolved_path = _relocated_path(path, relocation)
+    if not os.path.isdir(resolved_path):
+        errors.append(f"{label} not found: {resolved_path}")
 
 
 def _parse_timestamp(value: object, label: str, errors: list[str]) -> datetime | None:
@@ -181,6 +234,7 @@ def _check_release_gate_coverage(results: dict, release_cfg: dict, errors: list[
 
 def validate_release_artifacts(cfg: dict, config_path: str) -> list[str]:
     errors: list[str] = []
+    relocation = _load_bundle_relocation(errors)
 
     processed_dir = cfg["data"]["processed_dir"]
     adapter_dir = cfg["training"]["output_dir"]
@@ -209,15 +263,21 @@ def validate_release_artifacts(cfg: dict, config_path: str) -> list[str]:
             processed_manifest.get("counts"), "processed_manifest.counts", errors
         )
         if outputs is not None:
-            if outputs.get("processed_dir") != _absolute(processed_dir):
+            if not _paths_match(outputs.get("processed_dir"), processed_dir, relocation):
                 errors.append(
                     "processed_manifest.outputs.processed_dir does not match config.data.processed_dir"
                 )
             _expect_directory(
-                outputs.get("train_path"), "processed_manifest.outputs.train_path", errors
+                outputs.get("train_path"),
+                "processed_manifest.outputs.train_path",
+                errors,
+                relocation,
             )
             _expect_directory(
-                outputs.get("valid_path"), "processed_manifest.outputs.valid_path", errors
+                outputs.get("valid_path"),
+                "processed_manifest.outputs.valid_path",
+                errors,
+                relocation,
             )
         if counts is not None:
             train_rows = counts.get("train_rows")
@@ -236,12 +296,12 @@ def validate_release_artifacts(cfg: dict, config_path: str) -> list[str]:
             "train_manifest.generated_at",
             errors,
         )
-        if train_manifest.get("config_path") != _absolute(config_path):
+        if not _paths_match(train_manifest.get("config_path"), config_path, relocation):
             errors.append("train_manifest.config_path does not match the selected config")
         data_block = _expect_mapping(train_manifest.get("data"), "train_manifest.data", errors)
         outputs = _expect_mapping(train_manifest.get("outputs"), "train_manifest.outputs", errors)
         if data_block is not None:
-            if data_block.get("processed_dir") != _absolute(processed_dir):
+            if not _paths_match(data_block.get("processed_dir"), processed_dir, relocation):
                 errors.append(
                     "train_manifest.data.processed_dir does not match config.data.processed_dir"
                 )
@@ -253,7 +313,7 @@ def validate_release_artifacts(cfg: dict, config_path: str) -> list[str]:
                     errors,
                 )
         if outputs is not None:
-            if outputs.get("adapter_dir") != _absolute(adapter_dir):
+            if not _paths_match(outputs.get("adapter_dir"), adapter_dir, relocation):
                 errors.append(
                     "train_manifest.outputs.adapter_dir does not match config.training.output_dir"
                 )
@@ -261,6 +321,7 @@ def validate_release_artifacts(cfg: dict, config_path: str) -> list[str]:
                 outputs.get("trainer_state_path"),
                 "train_manifest.outputs.trainer_state_path",
                 errors,
+                relocation,
             )
 
     export_manifest_path = os.path.join(merged_dir, "export_manifest.json")
@@ -272,7 +333,7 @@ def validate_release_artifacts(cfg: dict, config_path: str) -> list[str]:
             "export_manifest.generated_at",
             errors,
         )
-        if export_manifest.get("config_path") != _absolute(config_path):
+        if not _paths_match(export_manifest.get("config_path"), config_path, relocation):
             errors.append("export_manifest.config_path does not match the selected config")
         outputs = _expect_mapping(export_manifest.get("outputs"), "export_manifest.outputs", errors)
         smoke_tests = _expect_mapping(
@@ -284,22 +345,40 @@ def validate_release_artifacts(cfg: dict, config_path: str) -> list[str]:
             errors,
         )
         if outputs is not None:
-            if outputs.get("merged_dir") != _absolute(merged_dir):
+            if not _paths_match(outputs.get("merged_dir"), merged_dir, relocation):
                 errors.append(
                     "export_manifest.outputs.merged_dir does not match config.export.merged_16bit_dir"
                 )
-            if outputs.get("gguf_dir") != _absolute(gguf_dir):
+            if not _paths_match(outputs.get("gguf_dir"), gguf_dir, relocation):
                 errors.append(
                     "export_manifest.outputs.gguf_dir does not match config.export.gguf_dir"
                 )
             _expect_directory(
-                outputs.get("merged_dir"), "export_manifest.outputs.merged_dir", errors
+                outputs.get("merged_dir"),
+                "export_manifest.outputs.merged_dir",
+                errors,
+                relocation,
             )
-            _expect_directory(outputs.get("gguf_dir"), "export_manifest.outputs.gguf_dir", errors)
+            _expect_directory(
+                outputs.get("gguf_dir"),
+                "export_manifest.outputs.gguf_dir",
+                errors,
+                relocation,
+            )
             gguf_path = outputs.get("gguf_path")
             if gguf_path is not None:
-                _expect_file(gguf_path, "export_manifest.outputs.gguf_path", errors)
-        _expect_file(_absolute(modelfile_path), "config.export.ollama_modelfile", errors)
+                _expect_file(
+                    gguf_path,
+                    "export_manifest.outputs.gguf_path",
+                    errors,
+                    relocation,
+                )
+        _expect_file(
+            _absolute(modelfile_path),
+            "config.export.ollama_modelfile",
+            errors,
+            None,
+        )
 
         if embedded_training_manifest is not None:
             embedded_data = _expect_mapping(
@@ -362,7 +441,7 @@ def validate_release_artifacts(cfg: dict, config_path: str) -> list[str]:
             results.get("data_manifest"), "results.data_manifest", errors
         )
         if data_manifest is not None and processed_manifest is not None:
-            if data_manifest.get("path") != _absolute(processed_manifest_path):
+            if not _paths_match(data_manifest.get("path"), processed_manifest_path, relocation):
                 errors.append(
                     "results.data_manifest.path does not point at the current processed manifest"
                 )
@@ -378,7 +457,7 @@ def validate_release_artifacts(cfg: dict, config_path: str) -> list[str]:
                 errors.append(
                     "results.evaluation_source.kind must be 'golden_benchmark' when a benchmark is configured"
                 )
-            if evaluation_source.get("path") != _absolute(benchmark_path):
+            if not _paths_match(evaluation_source.get("path"), benchmark_path, relocation):
                 errors.append(
                     "results.evaluation_source.path does not match config.evaluation.golden_benchmark_path"
                 )

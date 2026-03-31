@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+import shutil
 
 from validate_release_artifacts import validate_release_artifacts
 
@@ -19,6 +21,7 @@ def _base_config(tmp_path) -> tuple[dict, dict, str]:
     gguf_dir = tmp_path / "models" / "gguf"
     modelfile_path = gguf_dir / "Modelfile"
     gguf_path = gguf_dir / "model-Q4_K_M.gguf"
+    benchmark_path = tmp_path / "evals" / "golden.jsonl"
     results_path = tmp_path / "evals" / "results.json"
 
     train_dir.mkdir(parents=True)
@@ -34,6 +37,7 @@ def _base_config(tmp_path) -> tuple[dict, dict, str]:
     (merged_dir / "config.json").write_text("{}\n", encoding="utf-8")
     modelfile_path.write_text("FROM ./model-Q4_K_M.gguf\n", encoding="utf-8")
     gguf_path.write_text("gguf\n", encoding="utf-8")
+    benchmark_path.write_text('{"prompt":"q","response":"a"}\n', encoding="utf-8")
 
     config_path = tmp_path / "config.test.yaml"
     config = {
@@ -81,6 +85,7 @@ def _base_config(tmp_path) -> tuple[dict, dict, str]:
         },
         "evaluation": {
             "results_path": str(results_path),
+            "golden_benchmark_path": str(benchmark_path),
             "judge_model": "simcoe",
             "num_examples": 10,
             "quick_num_examples": 2,
@@ -205,14 +210,95 @@ def _base_config(tmp_path) -> tuple[dict, dict, str]:
             ],
         },
         "evaluation_source": {
-            "kind": "processed_validation",
-            "path": str(valid_dir.resolve()),
+            "kind": "golden_benchmark",
+            "path": str(benchmark_path.resolve()),
         },
     }
     _write_json(results_path, results)
 
     config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return config, processed_manifest, str(config_path)
+
+
+def _copy_tree(source_root: Path, destination_root: Path, relative_path: str) -> None:
+    source_path = source_root / relative_path
+    destination_path = destination_root / relative_path
+    if source_path.is_dir():
+        shutil.copytree(source_path, destination_path, dirs_exist_ok=True)
+        return
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_path, destination_path)
+
+
+def _relocated_config(relocated_root: Path) -> tuple[dict, str]:
+    config_path = relocated_root / "config.test.yaml"
+    config = {
+        "model": {
+            "name": "test-model",
+            "max_seq_length": 2048,
+            "load_in_4bit": True,
+            "dtype": None,
+        },
+        "lora": {
+            "r": 16,
+            "lora_alpha": 16,
+            "lora_dropout": 0,
+            "bias": "none",
+            "target_modules": ["q_proj"],
+            "use_dora": False,
+            "use_rslora": True,
+        },
+        "training": {
+            "output_dir": str((relocated_root / "models" / "adapters").resolve()),
+            "per_device_train_batch_size": 1,
+            "gradient_accumulation_steps": 1,
+            "num_train_epochs": 1,
+            "learning_rate": 0.0002,
+            "lr_scheduler_type": "cosine",
+            "warmup_steps": 1,
+            "bf16": True,
+            "fp16": False,
+            "logging_steps": 1,
+            "save_steps": 1,
+            "save_total_limit": 1,
+            "seed": 3407,
+        },
+        "data": {
+            "raw_path": str((relocated_root / "data" / "raw.jsonl").resolve()),
+            "processed_dir": str((relocated_root / "data" / "processed").resolve()),
+            "validation_split": 0.1,
+            "random_state": 3407,
+        },
+        "export": {
+            "merged_16bit_dir": str((relocated_root / "models" / "merged_16bit").resolve()),
+            "gguf_dir": str((relocated_root / "models" / "gguf").resolve()),
+            "gguf_quantisation": "q4_k_m",
+            "ollama_modelfile": str((relocated_root / "models" / "gguf" / "Modelfile").resolve()),
+        },
+        "evaluation": {
+            "results_path": str((relocated_root / "evals" / "results.json").resolve()),
+            "golden_benchmark_path": str((relocated_root / "evals" / "golden.jsonl").resolve()),
+            "judge_model": "simcoe",
+            "num_examples": 10,
+            "quick_num_examples": 2,
+            "max_new_tokens": 32,
+            "quick_max_new_tokens": 16,
+            "inference_batch_size": 1,
+            "judge_concurrency": 1,
+        },
+        "release": {
+            "fail_on_threshold_breach": False,
+            "require_merged_smoke_test": True,
+            "require_gguf_smoke_test": True,
+            "full_min_rouge1": 0.2,
+            "full_min_rouge2": 0.1,
+            "full_min_rougeL": 0.1,
+            "full_min_exact_match": 0.0,
+            "min_avg_judge_score": 3.5,
+        },
+    }
+    config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return config, str(config_path)
 
 
 def test_validate_release_artifacts_passes_for_consistent_lineage(tmp_path) -> None:
@@ -233,3 +319,38 @@ def test_validate_release_artifacts_fails_for_stale_results(tmp_path) -> None:
     errors = validate_release_artifacts(config, config_path)
 
     assert "release results are older than the export manifest" in errors
+
+
+def test_validate_release_artifacts_accepts_relocated_bundle_paths(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    original_root = tmp_path / "original"
+    original_root.mkdir()
+    _base_config(original_root)
+
+    relocated_root = tmp_path / "relocated"
+    relocated_root.mkdir()
+    for relative_path in (
+        "data/raw.jsonl",
+        "data/processed",
+        "models/adapters",
+        "models/merged_16bit",
+        "models/gguf",
+        "evals/results.json",
+        "evals/golden.jsonl",
+    ):
+        _copy_tree(original_root, relocated_root, relative_path)
+
+    bundle_manifest = {
+        "schema_version": 1,
+        "repo_root": str(original_root.resolve()),
+    }
+    _write_json(relocated_root / "release_bundle_manifest.json", bundle_manifest)
+
+    relocated_config, relocated_config_path = _relocated_config(relocated_root)
+
+    monkeypatch.chdir(relocated_root)
+    errors = validate_release_artifacts(relocated_config, relocated_config_path)
+
+    assert errors == []

@@ -238,6 +238,7 @@ def test_build_release_bundle_creates_expected_archive_entries(tmp_path) -> None
         assert "evals/results.json" in names
 
         bundle_manifest = json.load(archive.extractfile("release_bundle_manifest.json"))
+        assert bundle_manifest["repo_root"] == str(tmp_path.resolve())
         gguf_entries = [
             entry
             for entry in bundle_manifest["files"]
