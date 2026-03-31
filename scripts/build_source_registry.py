@@ -5,6 +5,7 @@ Build a machine-readable source registry from the configured external root.
 from __future__ import annotations
 
 import argparse
+import os
 from collections import Counter
 from pathlib import Path
 
@@ -63,42 +64,47 @@ def main() -> int:
     asset_kind_counts = Counter()
     extension_counts = Counter()
     total_bytes = 0
+    relative_base_str = os.fspath(relative_base)
+    scan_root_str = os.fspath(scan_root)
 
-    for path in sorted(scan_root.rglob("*")):
-        if not path.is_file():
-            continue
+    for current_root, dirnames, filenames in os.walk(scan_root_str):
+        dirnames.sort()
+        filenames.sort()
 
-        relative_path = path.resolve().relative_to(relative_base)
-        asset_kind = infer_asset_kind(str(path))
-        suggested = suggested_ingestion_contract(asset_kind)
-        metadata = file_metadata(str(path), include_sha256=not args.skip_sha256)
-        total_bytes += metadata["size_bytes"]
-        asset_kind_counts[asset_kind] += 1
-        extension_counts[path.suffix.lower() or "<none>"] += 1
+        for filename in filenames:
+            path_str = os.path.join(current_root, filename)
+            relative_path = os.path.relpath(path_str, relative_base_str)
+            asset_kind = infer_asset_kind(path_str)
+            path = Path(path_str)
+            suggested = suggested_ingestion_contract(asset_kind)
+            metadata = file_metadata(path_str, include_sha256=not args.skip_sha256)
+            total_bytes += metadata["size_bytes"]
+            asset_kind_counts[asset_kind] += 1
+            extension_counts[path.suffix.lower() or "<none>"] += 1
 
-        assets.append(
-            {
-                "registry_id": stable_identifier("source_asset", str(relative_path)),
-                "relative_path": str(relative_path),
-                "file_name": path.name,
-                "extension": path.suffix.lower() or None,
-                "asset_kind": asset_kind,
-                "default_review_state": registry_cfg["default_review_state"],
-                "default_data_family": registry_cfg["default_data_family"],
-                "default_sft_candidate": False,
-                "suggested_ingestion": suggested,
-                "repo_managed_path": str(
-                    Path(repo_sync_root)
-                    / managed_relative_path(
-                        str(relative_path),
-                        asset_kind,
-                        suggested.get("runtime_owner"),
-                        namespace,
-                    )
-                ),
-                **metadata,
-            }
-        )
+            assets.append(
+                {
+                    "registry_id": stable_identifier("source_asset", relative_path),
+                    "relative_path": relative_path,
+                    "file_name": path.name,
+                    "extension": path.suffix.lower() or None,
+                    "asset_kind": asset_kind,
+                    "default_review_state": registry_cfg["default_review_state"],
+                    "default_data_family": registry_cfg["default_data_family"],
+                    "default_sft_candidate": False,
+                    "suggested_ingestion": suggested,
+                    "repo_managed_path": str(
+                        Path(repo_sync_root)
+                        / managed_relative_path(
+                            relative_path,
+                            asset_kind,
+                            suggested.get("runtime_owner"),
+                            namespace,
+                        )
+                    ),
+                    **metadata,
+                }
+            )
 
     payload = {
         "schema_version": 1,

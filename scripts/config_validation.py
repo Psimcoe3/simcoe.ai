@@ -269,7 +269,11 @@ def validate_managed_sources_config(cfg: dict) -> None:
         "estimating_reference_root",
         "estimating_pdf",
         "estimating_har_dir",
+        "code_training_reference_root",
+        "drawings_reference_root",
+        "revit_reference_root",
         "revit_family_dir",
+        "structured_root",
     ):
         require_optional_string(managed_sources.get(key), f"managed_sources.{key}")
 

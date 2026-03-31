@@ -21,6 +21,10 @@ from source_registry_utils import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def normalize_materialized_permissions(path: Path) -> None:
+    path.chmod(0o644)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Copy selected external source assets into the repo-managed sources tree."
@@ -121,6 +125,22 @@ def selected_assets(assets: list[dict], args: argparse.Namespace) -> list[dict]:
     return sorted(selected, key=lambda item: str(item.get("relative_path") or ""))
 
 
+def _materialized_asset_key(asset: dict) -> str:
+    registry_id = asset.get("registry_id")
+    if isinstance(registry_id, str) and registry_id.strip():
+        return f"registry_id:{registry_id}"
+
+    repo_managed_path = asset.get("repo_managed_path")
+    if isinstance(repo_managed_path, str) and repo_managed_path.strip():
+        return f"repo_managed_path:{repo_managed_path}"
+
+    relative_path = asset.get("relative_path")
+    if isinstance(relative_path, str) and relative_path.strip():
+        return f"relative_path:{_normalize_path(relative_path)}"
+
+    return repr(sorted(asset.items()))
+
+
 def target_path_for_asset(asset: dict, repo_root: Path, repo_dir: str, namespace: str) -> Path:
     suggested = asset.get("suggested_ingestion") if isinstance(asset.get("suggested_ingestion"), dict) else {}
     relative_target = managed_relative_path(
@@ -165,9 +185,13 @@ def main() -> int:
     repo_dir = args.repo_dir or repo_sync_dir(source_registry)
     out_manifest = args.out_manifest or materialized_manifest_path(source_registry)
     namespace = source_registry_namespace(source_registry, str(registry_root))
+    out_manifest_path = Path(out_manifest)
 
     chosen_assets = selected_assets(assets, args)
     if not chosen_assets:
+        if args.copy_all and not assets:
+            print(f"Registry manifest {registry_path} contains no assets; nothing to materialize")
+            return 0
         raise SystemExit("No registry assets matched the provided selectors")
 
     copied = 0
@@ -190,6 +214,7 @@ def main() -> int:
         elif not args.dry_run:
             target_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source_path, target_path)
+            normalize_materialized_permissions(target_path)
             status = "copied"
             copied += 1
 
@@ -207,11 +232,46 @@ def main() -> int:
             }
         )
 
+    existing_assets_by_key = {}
+    registry_manifest_paths = []
+    if out_manifest_path.is_file():
+        existing_manifest = read_json_file(str(out_manifest_path))
+        existing_assets = existing_manifest.get("assets")
+        if isinstance(existing_assets, list):
+            for existing_asset in existing_assets:
+                if isinstance(existing_asset, dict):
+                    existing_assets_by_key[_materialized_asset_key(existing_asset)] = existing_asset
+
+        existing_registry_paths = existing_manifest.get("registry_manifest_paths")
+        if isinstance(existing_registry_paths, list):
+            registry_manifest_paths.extend(
+                str(Path(path).resolve())
+                for path in existing_registry_paths
+                if isinstance(path, str) and path.strip()
+            )
+        else:
+            existing_registry_path = existing_manifest.get("registry_manifest_path")
+            if isinstance(existing_registry_path, str) and existing_registry_path.strip():
+                registry_manifest_paths.append(str(Path(existing_registry_path).resolve()))
+
+    for materialized_asset in materialized_assets:
+        existing_assets_by_key[_materialized_asset_key(materialized_asset)] = materialized_asset
+
+    registry_manifest_paths.append(str(Path(registry_path).resolve()))
+    merged_assets = sorted(
+        existing_assets_by_key.values(),
+        key=lambda item: (
+            str(item.get("relative_path") or ""),
+            str(item.get("repo_managed_path") or ""),
+        ),
+    )
+
     manifest = {
         "schema_version": 1,
         "generated_at": current_utc_timestamp(),
         "config_path": str((REPO_ROOT / args.config).resolve()) if not Path(args.config).is_absolute() else str(Path(args.config).resolve()),
         "registry_manifest_path": str(Path(registry_path).resolve()),
+        "registry_manifest_paths": sorted(set(registry_manifest_paths)),
         "registry_root": str(registry_root.resolve()),
         "repo_sync": {
             "namespace": namespace,
@@ -229,12 +289,13 @@ def main() -> int:
             "dry_run": args.dry_run,
         },
         "summary": {
+            "tracked_asset_count": len(merged_assets),
             "selected_count": len(chosen_assets),
             "copied_count": copied,
             "already_present_count": already_present,
             "error_count": len(errors),
         },
-        "assets": materialized_assets,
+        "assets": merged_assets,
         "errors": errors,
     }
     write_json_file(out_manifest, manifest)

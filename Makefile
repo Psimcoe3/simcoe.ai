@@ -32,7 +32,14 @@ GGUF_F16      := $(GGUF_DIR)/model-f16.gguf
 GGUF_Q4       := $(GGUF_DIR)/model-Q4_K_M.gguf
 MODELFILE     := $(GGUF_DIR)/Modelfile
 OLLAMA        := $(HOME)/.local/bin/ollama
-RETRIEVAL_SOURCE   ?= data/raw/electrician_reference_examples.jsonl
+ESTIMATING_NOTES_OUT            ?= data/raw/estimator_ebook_methodology_notes.jsonl
+ESTIMATING_NOTES_EXAMPLES_OUT   ?= data/raw/estimator_ebook_methodology_examples.jsonl
+ESTIMATING_REFERENCE_OUT        ?= data/raw/estimating_reference.jsonl
+ESTIMATING_REFERENCE_EXAMPLES_OUT ?= data/raw/estimating_reference_examples.jsonl
+ESTIMATE_INDEX_OUT              ?= data/raw/estimate_index.jsonl
+ELECTRICIAN_CORPUS_OUT          ?= data/raw/electrician_reference_examples.jsonl
+ELECTRICIAN_CORPUS_SOURCES      ?= data/raw/nccer_examples.jsonl data/raw/njatc_examples.jsonl data/raw/bids_analytics_examples.jsonl $(ESTIMATING_NOTES_EXAMPLES_OUT)
+RETRIEVAL_SOURCE   ?= $(ELECTRICIAN_CORPUS_OUT)
 RETRIEVAL_OUT      ?= data/retrieval/electrician_reference_corpus.jsonl
 RETRIEVAL_MANIFEST ?= data/retrieval/electrician_reference_corpus.manifest.json
 GOLDEN_SOURCE      ?= $(RETRIEVAL_SOURCE)
@@ -41,7 +48,7 @@ GOLDEN_OUT         ?= evals/golden_electrician.jsonl
 GOLDEN_MANIFEST    ?= evals/golden_electrician.manifest.json
 ARGS               ?=
 
-.PHONY: all check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest estimate-index clean help
+.PHONY: all check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest estimate-index estimating-reference-examples estimating-canonical electrician-corpus clean help
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -135,6 +142,7 @@ pdf-notes: ## Extract short attributed reference notes from a local PDF or confi
 	$(PYTHON) scripts/extract_reference_pdf.py \
 		--config $(CONFIG) \
 		$(if $(SOURCE),--source $(SOURCE),) \
+		$(if $(MANAGED_KEY),--managed-key $(MANAGED_KEY),) \
 		$(if $(SOURCE_NAME),--source-name "$(SOURCE_NAME)",) \
 		$(if $(CHUNK_SIZE),--chunk-size $(CHUNK_SIZE),) \
 		$(if $(MIN_CHARS),--min-chars $(MIN_CHARS),) \
@@ -149,6 +157,7 @@ ingest-reference-folder: ## Extract mixed local manuals, notes, and code files i
 	$(PYTHON) scripts/ingest_reference_folder.py \
 		--config $(CONFIG) \
 		$(if $(ROOT),--root "$(ROOT)",) \
+		$(if $(MANAGED_KEY),--managed-key $(MANAGED_KEY),) \
 		$(if $(SOURCE_NAME),--source-name "$(SOURCE_NAME)",) \
 		$(if $(TEXT_CHUNK_LINES),--text-chunk-lines $(TEXT_CHUNK_LINES),) \
 		$(if $(PDF_CHUNK_SIZE),--pdf-chunk-size $(PDF_CHUNK_SIZE),) \
@@ -171,6 +180,7 @@ merge-examples: ## Merge multiple example JSONL files into one deduplicated corp
 revit-ingest: ## Normalize Revit exports or family directories into reference JSONL, using managed defaults when configured
 	$(PYTHON) scripts/revit_ingestion.py \
 		--config $(CONFIG) \
+		$(if $(MANAGED_KEY),--managed-key $(MANAGED_KEY),) \
 		$(if $(SOURCE),--source $(SOURCE),) \
 		$(if $(FAMILY_DIR),--family-dir $(FAMILY_DIR),) \
 		$(if $(INCLUDE_RVT),--include-rvt,) \
@@ -180,11 +190,30 @@ revit-ingest: ## Normalize Revit exports or family directories into reference JS
 estimate-index: ## Build estimate lookup records, preferring managed HAR defaults when available
 	$(PYTHON) scripts/build_estimate_index.py \
 		--config $(CONFIG) \
+		$(if $(MANAGED_KEY),--managed-key $(MANAGED_KEY),) \
 		$(if $(MAPPING),--mapping $(MAPPING),) \
 		$(if $(RSMEANS),--rsmeans $(RSMEANS),) \
 		$(if $(RSMEANS_HAR_DIR),--rsmeans-har-dir $(RSMEANS_HAR_DIR),) \
 		--out $(if $(OUT),$(OUT),data/raw/estimate_index.jsonl)
 	@echo "✅  Estimate index built for live lookup"
+
+estimating-reference-examples: ## Convert managed estimating reference records into examples only after explicit training approval
+	$(PYTHON) scripts/build_catalog_data.py --source $(ESTIMATING_REFERENCE_OUT) \
+		$(if $(ALLOW_CONTRACT_OVERRIDE),--allow_contract_override,) \
+		--out $(ESTIMATING_REFERENCE_EXAMPLES_OUT)
+	@echo "✅  Managed estimating reference examples built at $(ESTIMATING_REFERENCE_EXAMPLES_OUT)"
+
+estimating-canonical: ## Rebuild the managed estimating notes, examples, and estimate index with repo-managed defaults
+	$(MAKE) pdf-notes CONFIG=$(CONFIG) OUT=$(ESTIMATING_NOTES_OUT)
+	$(PYTHON) scripts/build_catalog_data.py --source $(ESTIMATING_NOTES_OUT) \
+		--out $(ESTIMATING_NOTES_EXAMPLES_OUT)
+	$(MAKE) ingest-reference-folder CONFIG=$(CONFIG) MANAGED_KEY=estimating_reference_root OUT=$(ESTIMATING_REFERENCE_OUT)
+	$(MAKE) estimate-index CONFIG=$(CONFIG) OUT=$(ESTIMATE_INDEX_OUT)
+	@echo "✅  Canonical managed estimating artifacts refreshed"
+
+electrician-corpus: estimating-canonical ## Rebuild the canonical electrician corpus with managed estimating examples
+	$(MAKE) merge-examples SOURCES="$(ELECTRICIAN_CORPUS_SOURCES)" OUT=$(ELECTRICIAN_CORPUS_OUT)
+	@echo "✅  Canonical electrician corpus refreshed at $(ELECTRICIAN_CORPUS_OUT)"
 
 clean: ## Remove all generated artifacts (data/processed, models, evals)
 	@echo "Removing generated artifacts …"

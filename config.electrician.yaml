@@ -24,6 +24,11 @@ managed_sources:
   estimating_reference_root: "sources/managed/electricalai_docs/retrieval/document/estimating"
   estimating_pdf: "sources/managed/electricalai_docs/retrieval/document/estimating/2026_national_electrical_estimator_ebook.pdf"
   estimating_har_dir: "sources/managed/electricalai_docs/manual_review/other/estimating/RSmeans"
+  code_training_reference_root: "sources/managed/electricalai_docs/retrieval/document/Electrical Code_Training"
+  drawings_reference_root: "sources/managed/electricalai_docs/retrieval/document/Drawings"
+  revit_reference_root: "sources/managed/electricalai_docs/retrieval/document/Revit"
+  revit_family_dir: "sources/managed/electricalai_docs/geometry_rules/cad_bim/Revit/Families"
+  structured_root: "sources/managed/electricalai_docs/manual_review/tabular"
 
 model:
   name: "unsloth/Meta-Llama-3.1-8B-bnb-4bit"

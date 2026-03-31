@@ -186,6 +186,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Ingest a local mixed reference folder into JSONL")
     parser.add_argument("--config", default="config.yaml", help="Config file with managed source defaults")
     parser.add_argument("--root", help="Root folder to scan recursively")
+    parser.add_argument(
+        "--managed-key",
+        help="Optional managed_sources config key to use when --root is omitted",
+    )
     parser.add_argument("--out", required=True, help="Output JSONL path")
     parser.add_argument("--source-name", help="Optional source label for all emitted records")
     parser.add_argument(
@@ -212,14 +216,18 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     managed_sources = load_managed_source_settings(args.config)
-    root_value = args.root or resolve_managed_source_path(
-        managed_sources,
-        "estimating_reference_root",
-        "reference_root",
-    )
+    root_value = args.root
+    if not root_value and args.managed_key:
+        root_value = resolve_managed_source_path(managed_sources, args.managed_key)
+    if not root_value:
+        root_value = resolve_managed_source_path(
+            managed_sources,
+            "estimating_reference_root",
+            "reference_root",
+        )
     if not root_value:
         raise SystemExit(
-            "Provide --root or configure managed_sources.estimating_reference_root/reference_root"
+            "Provide --root or configure the requested managed_sources folder in the selected config"
         )
 
     root = Path(root_value)

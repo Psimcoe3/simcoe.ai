@@ -423,6 +423,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Extract structured reference notes from a PDF")
     parser.add_argument("--config", default="config.yaml", help="Config file with managed source defaults")
     parser.add_argument("--source", help="Path to the local PDF")
+    parser.add_argument(
+        "--managed-key",
+        help="Optional managed_sources config key to use when --source is omitted (default: estimating_pdf)",
+    )
     parser.add_argument("--out", required=True, help="Output JSONL path")
     parser.add_argument(
         "--source-name",
@@ -457,10 +461,13 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     managed_sources = load_managed_source_settings(args.config)
-    source = args.source or resolve_managed_source_path(managed_sources, "estimating_pdf")
+    source = args.source or resolve_managed_source_path(
+        managed_sources,
+        args.managed_key or "estimating_pdf",
+    )
     if not source:
         raise SystemExit(
-            "Provide --source or configure managed_sources.estimating_pdf in the selected config"
+            "Provide --source or configure the requested managed_sources path in the selected config"
         )
 
     source_path = Path(source)

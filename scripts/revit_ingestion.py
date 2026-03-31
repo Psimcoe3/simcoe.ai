@@ -305,6 +305,10 @@ def _write_jsonl(records: list[dict], out_path: str) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Normalize Revit-derived reference data")
     parser.add_argument("--config", default="config.yaml", help="Config file with managed source defaults")
+    parser.add_argument(
+        "--managed-key",
+        help="Optional managed_sources config key to use when no explicit source or family dir is provided",
+    )
     parser.add_argument("--source", action="append", default=[], help="CSV or JSONL export to ingest")
     parser.add_argument(
         "--family-dir",
@@ -325,7 +329,10 @@ def main() -> int:
     args = parse_args()
     if not args.source and not args.family_dir:
         managed_sources = load_managed_source_settings(args.config)
-        default_family_dir = resolve_managed_source_path(managed_sources, "revit_family_dir")
+        default_family_dir = resolve_managed_source_path(
+            managed_sources,
+            args.managed_key or "revit_family_dir",
+        )
         if default_family_dir:
             args.family_dir = [default_family_dir]
             print(f"Using managed default Revit family directory from config: {default_family_dir}")

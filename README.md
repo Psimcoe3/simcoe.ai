@@ -444,7 +444,7 @@ Use a dedicated PDF-to-notes step for local manuals and estimator books:
 python scripts/extract_reference_pdf.py \
    --config config.electrician.yaml \
    --start-page 4 \
-   --out data/raw/estimator_ebook_notes.jsonl
+   --out data/raw/estimator_ebook_methodology_notes.jsonl
 ```
 
 Equivalent Make target:
@@ -453,10 +453,10 @@ Equivalent Make target:
 make pdf-notes \
    CONFIG=config.electrician.yaml \
    START_PAGE=4 \
-   OUT=data/raw/estimator_ebook_notes.jsonl
+   OUT=data/raw/estimator_ebook_methodology_notes.jsonl
 ```
 
-This step creates short, attributed reference-note records with page ranges and summaries. It is intended for retrieval context and reviewed methodology examples, not raw page dumping.
+This step creates short, attributed reference-note records with page ranges and summaries. It is intended for retrieval context and reviewed methodology examples, not raw page dumping. The canonical managed-estimating target writes to `data/raw/estimator_ebook_methodology_notes.jsonl`.
 
 ### 5. Ingest a local reference folder
 
@@ -476,7 +476,7 @@ make ingest-reference-folder \
    OUT=data/raw/electrical_material_reference.jsonl
 ```
 
-With the electrician config, that defaults to the repo-managed folder at `sources/managed/electricalai_docs/retrieval/document/estimating` unless you pass `ROOT=...` explicitly.
+With the electrician config, that defaults to the repo-managed folder at `sources/managed/electricalai_docs/retrieval/document/estimating` unless you pass `ROOT=...` explicitly. To ingest a different managed family, pass `MANAGED_KEY=drawings_reference_root`, `MANAGED_KEY=code_training_reference_root`, or another configured key.
 
 This step recursively scans the folder and emits:
 
@@ -484,7 +484,9 @@ This step recursively scans the folder and emits:
 - text reference notes for `.txt`, `.md`, `.yaml`, and `.json` files
 - code reference records for source files such as `.py`, `.cs`, `.js`, and `.ts`
 
-The output can be reviewed directly for retrieval use or passed into `scripts/build_catalog_data.py` to generate distilled examples.
+The output can be reviewed directly for retrieval use. If those records are explicitly approved for SFT, you can convert them with `make estimating-reference-examples ALLOW_CONTRACT_OVERRIDE=1`, but the default corpus build keeps them retrieval-only.
+
+Managed source mirrors under `sources/managed/` now use Git LFS for large binary and document formats so the repo stays pushable to GitHub. Run `git lfs install` on machines that will materialize or clone those assets.
 
 ### 6. Merge reviewed example sets
 
@@ -497,6 +499,26 @@ make merge-examples \
 ```
 
 This is the easiest path for building a larger electrician-focused dataset from multiple reviewed source families before running `scripts/prepare_data.py`.
+
+To rebuild the canonical electrician corpus from repo-managed estimating sources in one step:
+
+```bash
+make electrician-corpus CONFIG=config.electrician.yaml
+```
+
+That target refreshes:
+
+- `data/raw/estimator_ebook_methodology_notes.jsonl`
+- `data/raw/estimator_ebook_methodology_examples.jsonl`
+- `data/raw/estimating_reference.jsonl`
+- `data/raw/estimate_index.jsonl`
+- `data/raw/electrician_reference_examples.jsonl`
+
+The managed folder ingest stays retrieval-only by default because its `data_contract` metadata is not approved for SFT promotion. If you explicitly review and approve those records, run:
+
+```bash
+make estimating-reference-examples CONFIG=config.electrician.yaml ALLOW_CONTRACT_OVERRIDE=1
+```
 ```
 
 Edit `topics.yaml` to define your domains. The included topics cover:

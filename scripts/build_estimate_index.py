@@ -431,6 +431,10 @@ def _write_jsonl(records: list[dict], out_path: str) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build an estimate lookup index")
     parser.add_argument("--config", default="config.yaml", help="Config file with managed source defaults")
+    parser.add_argument(
+        "--managed-key",
+        help="Optional managed_sources config key to use when no explicit estimate source is provided",
+    )
     parser.add_argument("--mapping", action="append", default=[], help="Crosswalk CSV or JSONL input")
     parser.add_argument("--rsmeans", action="append", default=[], help="RSMeans CSV or JSONL input")
     parser.add_argument(
@@ -447,7 +451,10 @@ def main() -> int:
     args = parse_args()
     if not args.mapping and not args.rsmeans and not args.rsmeans_har_dir:
         managed_sources = load_managed_source_settings(args.config)
-        default_har_dir = resolve_managed_source_path(managed_sources, "estimating_har_dir")
+        default_har_dir = resolve_managed_source_path(
+            managed_sources,
+            args.managed_key or "estimating_har_dir",
+        )
         if default_har_dir:
             args.rsmeans_har_dir = [default_har_dir]
             print(f"Using managed default RSMeans HAR directory from config: {default_har_dir}")

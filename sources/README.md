@@ -13,6 +13,8 @@ This folder can hold both public source configuration and user-supplied local re
 - External files should not stay as ad hoc dependencies once they are selected for real use in this repo.
 - Use `scripts/build_source_registry.py` to inventory the external root, then `scripts/materialize_sources.py` to copy selected assets into `sources/managed/<namespace>/<runtime_owner>/<asset_kind>/...`.
 - Preserve downstream processing against the repo-managed copy so retrieval, training, and review workflows remain reproducible even if the original external folder changes.
+- The electrician config now exposes managed keys for the main source families, including `estimating_reference_root`, `code_training_reference_root`, `drawings_reference_root`, and `revit_family_dir`.
+- Install Git LFS before staging or cloning large managed-source mirrors; `.gitattributes` tracks heavyweight formats under `sources/managed/` through LFS so GitHub pushes remain valid.
 
 ## Current Estimating References
 
