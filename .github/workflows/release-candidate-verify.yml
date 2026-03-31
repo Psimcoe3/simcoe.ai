@@ -1,0 +1,152 @@
+name: release-candidate-verify
+
+"on":
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/release-candidate-verify.yml
+      - .github/release-bundles/**
+      - config.electrician.yaml
+      - Makefile
+      - README.md
+      - requirements-dev.txt
+      - scripts/package_release_bundle.py
+      - scripts/validate_release_artifacts.py
+      - tests/test_package_release_bundle.py
+      - tests/test_validate_release_artifacts.py
+  workflow_dispatch:
+    inputs:
+      config_path:
+        description: Config file to validate against
+        required: true
+        default: config.electrician.yaml
+        type: string
+      artifact_bundle_url:
+        description: URL to a release-verification bundle tar.gz produced by scripts/package_release_bundle.py
+        required: false
+        default: ""
+        type: string
+      artifact_bundle_path:
+        description: Repo-relative path to a checked-in release-verification bundle tar.gz
+        required: false
+        default: .github/release-bundles/electrician-release-verification-bundle.tar.gz
+        type: string
+      artifact_bundle_sha256:
+        description: Optional SHA256 checksum for the downloaded bundle
+        required: false
+        default: ""
+        type: string
+  workflow_call:
+    inputs:
+      config_path:
+        description: Config file to validate against
+        required: true
+        type: string
+      artifact_bundle_url:
+        description: URL to a release-verification bundle tar.gz produced by scripts/package_release_bundle.py
+        required: false
+        default: ""
+        type: string
+      artifact_bundle_path:
+        description: Repo-relative path to a checked-in release-verification bundle tar.gz
+        required: false
+        default: .github/release-bundles/electrician-release-verification-bundle.tar.gz
+        type: string
+      artifact_bundle_sha256:
+        description: Optional SHA256 checksum for the downloaded bundle
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  quality-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install developer tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Restore checked-in release verification bundle
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          set -euo pipefail
+          bundle_path=".github/release-bundles/electrician-release-verification-bundle.tar.gz"
+          checksum_path="${bundle_path}.sha256"
+
+          test -f "$bundle_path"
+
+          if [[ -f "$checksum_path" ]]; then
+            sha256sum --check --strict "$checksum_path"
+          fi
+
+          tar -xzf "$bundle_path"
+
+      - name: Restore dispatch bundle from repository
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
+        env:
+          ARTIFACT_BUNDLE_URL: ${{ inputs.artifact_bundle_url }}
+          ARTIFACT_BUNDLE_PATH: ${{ inputs.artifact_bundle_path }}
+          ARTIFACT_BUNDLE_SHA256: ${{ inputs.artifact_bundle_sha256 }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$ARTIFACT_BUNDLE_URL" ]]; then
+            exit 0
+          fi
+
+          bundle_path="$ARTIFACT_BUNDLE_PATH"
+          checksum_path="${bundle_path}.sha256"
+
+          test -f "$bundle_path"
+
+          if [[ -f "$checksum_path" ]]; then
+            sha256sum --check --strict "$checksum_path"
+          fi
+
+          tar -xzf "$bundle_path"
+
+      - name: Download release verification bundle
+        if: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && inputs.artifact_bundle_url != '' }}
+        env:
+          ARTIFACT_BUNDLE_URL: ${{ inputs.artifact_bundle_url }}
+          ARTIFACT_BUNDLE_SHA256: ${{ inputs.artifact_bundle_sha256 }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          bundle_path="$RUNNER_TEMP/release-verification-bundle.tar.gz"
+          curl_args=(--fail --location --output "$bundle_path")
+
+          if [[ "$ARTIFACT_BUNDLE_URL" == https://github.com/* || "$ARTIFACT_BUNDLE_URL" == https://api.github.com/* ]]; then
+            curl_args+=(--header "Authorization: Bearer $GITHUB_TOKEN")
+          fi
+
+          curl "${curl_args[@]}" "$ARTIFACT_BUNDLE_URL"
+
+          if [[ -n "$ARTIFACT_BUNDLE_SHA256" ]]; then
+            echo "$ARTIFACT_BUNDLE_SHA256  $bundle_path" | sha256sum --check --strict
+          fi
+
+          tar -xzf "$bundle_path"
+
+      - name: Run quality-release gate for push candidate
+        if: ${{ github.event_name == 'push' }}
+        run: make quality-release CONFIG=config.electrician.yaml
+
+      - name: Run quality-release gate for dispatched candidate
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
+        run: make quality-release CONFIG=${{ inputs.config_path }}

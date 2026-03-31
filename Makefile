@@ -3,6 +3,7 @@
 # Usage:
 #   make all          # run the full pipeline: check → prepare → train → export → evaluate
 #   make quality      # run the CPU-safe quality gate: lint → test
+#   make quality-release # quality + lightweight release artifact validation
 #   make lint         # run Ruff lint + format checks on core modules
 #   make test         # run pure-Python unit tests
 #   make check        # validate environment only
@@ -11,6 +12,8 @@
 #   make train-manifest # backfill a train manifest from existing checkpoints
 #   make export       # export only (requires trained adapters)
 #   make export-verify # verify existing export artifacts + smoke tests
+#   make release-bundle # build a lightweight release-verification bundle from current artifacts
+#   make release-verify # validate release manifests/results without rerunning evaluation
 #   make gguf         # convert merged model to GGUF and register with Ollama
 #   make evaluate     # evaluate only (requires exported model)
 #   make source-registry # snapshot the configured external source root into a registry manifest
@@ -49,11 +52,11 @@ GOLDEN_SOURCE      ?= $(RETRIEVAL_SOURCE)
 GOLDEN_SPEC        ?= evals/golden_electrician_spec.json
 GOLDEN_OUT         ?= evals/golden_electrician.jsonl
 GOLDEN_MANIFEST    ?= evals/golden_electrician.manifest.json
-QUALITY_PATHS      ?= scripts/check_env.py scripts/deterministic_tool_utils.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/train.py tests
+QUALITY_PATHS      ?= scripts/check_env.py scripts/deterministic_tool_utils.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/train.py scripts/validate_release_artifacts.py scripts/package_release_bundle.py tests
 TEST_PATHS         ?= tests
 ARGS               ?=
 
-.PHONY: all quality lint test check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest revit-lookup estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
+.PHONY: all quality quality-release release-bundle release-verify lint test check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest revit-lookup estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -62,6 +65,8 @@ help: ## Show this help message
 all: check prepare train export gguf evaluate ## Run the full pipeline end-to-end
 
 quality: lint test ## Run the core CPU-safe quality gate
+
+quality-release: quality release-verify ## Run CPU-safe quality checks plus release artifact validation
 
 lint: ## Run Ruff lint and format checks on core modules and tests
 	$(PYTHON) -m ruff check --select F $(QUALITY_PATHS)
@@ -87,6 +92,15 @@ export: ## Merge adapters → 16-bit model
 
 export-verify: ## Verify existing merged/GGUF artifacts, smoke tests, and export manifest
 	$(PYTHON) scripts/export.py --config $(CONFIG) --verify_existing
+
+release-bundle: ## Build a lightweight release-verification bundle from current artifacts
+	$(PYTHON) scripts/package_release_bundle.py \
+		--config $(CONFIG) \
+		--out $(if $(OUT),$(OUT),dist/release-verification-bundle.tar.gz) \
+		$(if $(INCLUDE_GGUF),--include-gguf,)
+
+release-verify: ## Validate existing release manifests and results without rerunning evaluation
+	$(PYTHON) scripts/validate_release_artifacts.py --config $(CONFIG)
 
 gguf: $(GGUF_Q4) ## Convert to GGUF Q4_K_M and register with Ollama
 	@echo "Registering model with Ollama …"

@@ -287,6 +287,7 @@ The Makefile orchestrates the pipeline in the correct order:
 ```bash
 make all          # check → prepare → train → export → evaluate
 make quality      # lint + tests for the core CPU-safe modules
+make quality-release # quality + lightweight release artifact verification
 make lint         # Ruff lint + format check on core modules and tests
 make test         # pure-Python unit tests
 make check        # validate environment only
@@ -295,6 +296,8 @@ make train        # fine-tune (requires prepared data)
 make train-manifest # backfill train lineage from existing checkpoints
 make export       # export (requires trained adapters)
 make export-verify # verify existing exports and smoke tests
+make release-bundle # package a lightweight release-verification bundle
+make release-verify # validate release manifests/results without rerunning evaluation
 make evaluate     # evaluate (requires exported model)
 make evaluate-quick # faster metrics-only evaluation
 make evaluate-release # fail if configured release thresholds are missed
@@ -325,9 +328,34 @@ make golden-benchmark
 make train-manifest CONFIG=config.electrician.yaml
 make export-verify CONFIG=config.electrician.yaml
 make evaluate-release CONFIG=config.electrician.yaml
+make release-bundle CONFIG=config.electrician.yaml OUT=.github/release-bundles/electrician-release-verification-bundle.tar.gz
+make release-verify CONFIG=config.electrician.yaml
 ```
 
 `make evaluate-release` now runs an explicit release profile. That profile fails closed when judge thresholds are configured but no judge scores are available, and it can enforce retrieval usage for grounded benchmark rows when `release.require_retrieval_for_grounded_benchmark: true` is set.
+
+`make release-verify` is the lightweight follow-up check. It only reads the processed data manifest, training manifest, export manifest, and saved release results to confirm the lineage chain is coherent and the last saved release gate passed. It does not rerun training, export, smoke tests, or model evaluation.
+
+`make release-bundle` packages the minimal artifact set needed for that lightweight verification on another machine. By default it keeps the bundle small by replacing the GGUF binary with a placeholder file at the same repo-relative path; pass `INCLUDE_GGUF=1` if you want the real GGUF copied into the bundle. `dist/` is ignored, so write the bundle under `.github/release-bundles/` when you want the release-candidate workflow to run from a pushed commit.
+
+The repo now also includes a GitHub Actions workflow, [.github/workflows/release-candidate-verify.yml](.github/workflows/release-candidate-verify.yml), which restores a checked-in bundle or downloads one from a URL and then runs `make quality-release` against it. The repo-backed flow is:
+
+```bash
+make release-bundle CONFIG=config.electrician.yaml OUT=.github/release-bundles/electrician-release-verification-bundle.tar.gz
+sha256sum .github/release-bundles/electrician-release-verification-bundle.tar.gz > .github/release-bundles/electrician-release-verification-bundle.tar.gz.sha256
+git add .github/release-bundles/electrician-release-verification-bundle.tar.gz .github/release-bundles/electrician-release-verification-bundle.tar.gz.sha256
+git commit -m "Refresh electrician release candidate bundle"
+git push origin main
+```
+
+Pushing that bundle to `main` triggers `release-candidate-verify` automatically.
+
+If you do not want the bundle in git, the workflow also supports an external tarball URL. Upload the bundle somewhere GitHub Actions can fetch, then run `release-candidate-verify` manually with:
+
+- `config_path=config.electrician.yaml`
+- `artifact_bundle_url=<https URL to the tar.gz>` or leave it empty to use `artifact_bundle_path`
+- `artifact_bundle_path=.github/release-bundles/electrician-release-verification-bundle.tar.gz`
+- `artifact_bundle_sha256=<optional checksum>`
 
 ---
 
@@ -385,6 +413,8 @@ make quality
 ```
 
 The quality gate intentionally stays off the GPU-heavy training stack. It covers the deterministic lookup and retrieval core with Ruff plus pytest, while full training/export/evaluation remain manual or release-job workflows.
+
+If a machine already has release artifacts on disk, use `make quality-release CONFIG=config.electrician.yaml` to combine the CPU-safe quality gate with lightweight release artifact validation.
 
 ---
 
