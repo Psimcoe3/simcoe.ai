@@ -140,7 +140,18 @@ def _tokenize(*values: str | None) -> list[str]:
 
 def _build_lookup_key(record: dict) -> str:
     parts = []
-    for key in ("category", "family_name", "type_name", "manufacturer", "part_number"):
+    for key in (
+        "category",
+        "subcategory",
+        "family_name",
+        "type_name",
+        "manufacturer",
+        "part_number",
+        "description",
+        "nominal_diameter",
+        "overall_length",
+        "size",
+    ):
         value = record.get(key)
         if value:
             parts.append(value.lower())
@@ -156,7 +167,12 @@ def _build_lookup_key(record: dict) -> str:
 def _attach_spatial_contract(record: dict) -> dict:
     record["record_id"] = stable_identifier(
         "revit_family_reference",
-        record.get("lookup_key") or record.get("family_and_type") or record.get("family_name"),
+        (
+            record.get("lookup_key")
+            or record.get("family_and_type")
+            or record.get("description")
+            or record.get("family_name")
+        ),
         record.get("source_path") or record.get("source_name"),
     )
     record["data_contract"] = build_data_contract(
@@ -192,7 +208,19 @@ def _normalize_export_record(record: dict, source_name: str) -> dict | None:
         ],
         "type_name": ["type_name", "type", "type name", "subcategory"],
         "family_and_type": ["family and type", "family_and_type"],
-        "category": ["category", "family category", "product category", "cadType"],
+        "category": [
+            "category",
+            "family category",
+            "product category",
+            "cadType",
+            "eVolve_CategoryId",
+        ],
+        "subcategory": [
+            "subcategory",
+            "sub category",
+            "family subcategory",
+            "eVolve_SubCategoryId",
+        ],
         "manufacturer": ["manufacturer", "manufacturer name", "brand", "vendor"],
         "model": ["model", "model number", "catalog number"],
         "part_number": ["part_number", "part number", "item number", "stratus item number"],
@@ -206,7 +234,9 @@ def _normalize_export_record(record: dict, source_name: str) -> dict | None:
         "material": ["material", "material main", "body material"],
         "finish": ["finish", "coating"],
         "size": ["size", "trade size", "nominal diameter"],
-        "unit": ["unit", "unitofmeasure", "pricing_unit"],
+        "nominal_diameter": ["nominal diameter", "trade size", "diameter"],
+        "overall_length": ["overall length", "length"],
+        "unit": ["unit", "unitofmeasure", "pricing_unit", "UM"],
         "cost": ["cost", "total cost", "replacementcost"],
         "labor_hours": ["labor hours", "installation hours", "time to install"],
         "estimate_id": ["evolve_estimateid", "estimateid", "estimate_id"],
@@ -240,11 +270,17 @@ def _normalize_export_record(record: dict, source_name: str) -> dict | None:
 
     normalized["lookup_tokens"] = _tokenize(
         normalized.get("category"),
+        normalized.get("subcategory"),
         normalized.get("family_name"),
         normalized.get("type_name"),
         normalized.get("manufacturer"),
         normalized.get("part_number"),
         normalized.get("description"),
+        normalized.get("nominal_diameter"),
+        normalized.get("overall_length"),
+        normalized.get("size"),
+        normalized.get("material"),
+        normalized.get("finish"),
     )
     normalized["lookup_key"] = _build_lookup_key(normalized)
     extras = _collect_extra_fields(record, consumed_aliases)

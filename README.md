@@ -3,9 +3,10 @@
 A production-ready 4-bit QLoRA fine-tuning pipeline for 7B/8B language models,
 designed to run on a single NVIDIA GPU (16 GB VRAM) inside WSL2 on Windows.
 
-Built on **2026 best practices**: Unsloth optimised kernels, DoRA + rsLoRA
-adapters, Weights & Biases experiment tracking, GGUF export for Ollama inference,
-and fully automated evaluation.
+Built on a **March 2026 validated stack**: Unsloth optimised kernels, rsLoRA
+adapters with optional DoRA support, local TensorBoard tracking by default,
+GGUF export for Ollama inference, deterministic lookup runtimes, and
+release-gated evaluation.
 
 ---
 
@@ -13,11 +14,13 @@ and fully automated evaluation.
 
 1. [Quickstart](#quickstart)
 2. [Project Structure](#project-structure)
-3. [Environment Setup — WSL2 & CUDA 12.x](#environment-setup--wsl2--cuda-12x)
+3. [Environment Setup — WSL2 & CUDA 12.4](#environment-setup--wsl2--cuda-124)
 4. [Configuration](#configuration)
 5. [Pipeline Walkthrough](#pipeline-walkthrough)
-6. [What Else Would I Do Next?](#what-else-would-i-do-next)
-7. [LoRA vs QLoRA vs Full Fine-Tuning](#lora-vs-qlora-vs-full-fine-tuning)
+6. [Inference Workflows](#inference-workflows)
+7. [Developer Workflow](#developer-workflow)
+8. [What Else Would I Do Next?](#what-else-would-i-do-next)
+9. [LoRA vs QLoRA vs Full Fine-Tuning](#lora-vs-qlora-vs-full-fine-tuning)
 
 ---
 
@@ -28,16 +31,19 @@ and fully automated evaluation.
 git clone https://github.com/Psimcoe3/simcoe.ai.git
 cd simcoe.ai
 
-# 2. Create a virtual environment (Python 3.11+)
-python3.11 -m venv .venv
+# 2. Create a virtual environment (Python 3.11+; 3.12.3 validated)
+python3 -m venv .venv
 source .venv/bin/activate
 
-# 3. Install dependencies (GPU-specific Unsloth wheel — see Environment Setup)
+# 3. Install the validated CUDA 12.4 dependency stack
 pip install -r requirements.txt
 
-# 4. Configure secrets
+# 4. Optional integrations (.env is only needed for external services)
 cp .env.example .env
-# Edit .env and add HF_TOKEN, WANDB_API_KEY, WANDB_PROJECT, OPENAI_API_KEY
+# Fill only the keys you plan to use:
+# - HF_TOKEN for gated model downloads
+# - WANDB_* if you switch privacy.tracking to wandb
+# - OPENAI_API_KEY for openai/* judging or generation
 
 # 5. Validate the environment
 python scripts/check_env.py
@@ -69,9 +75,15 @@ make all
 simcoe.ai/
 ├── config.yaml            # All hyperparameters — nothing hardcoded in scripts
 ├── Makefile               # Pipeline orchestration (make all, make train, etc.)
+├── pyproject.toml         # Ruff + pytest configuration
+├── requirements-dev.txt   # CPU-safe dev/test tooling
+├── .pre-commit-config.yaml # Local quality hooks
 ├── topics.yaml            # Topic definitions for synthetic data generation
 ├── .env.example           # Secret template (copy to .env, never commit .env)
-├── requirements.txt       # Pinned dependency versions for CUDA 12.x
+├── requirements.txt       # Pinned working versions for Python 3.12 / CUDA 12.4
+├── .github/
+│   └── workflows/
+│       └── quality.yml    # CI quality gate for lint + tests
 │
 ├── data/
 │   ├── raw/               # Place your dataset.jsonl here (seed dataset included)
@@ -90,9 +102,11 @@ simcoe.ai/
 │   ├── build_source_registry.py # Snapshot external source roots into a review-safe registry manifest
 │   ├── config_validation.py # Shared config/prerequisite validation
 │   ├── data_contracts.py  # Stable IDs and review-safe data-family metadata
-│   ├── generate_data.py   # Synthetic data generation via OpenAI API
+│   ├── deterministic_tool_utils.py # Stable request/response envelopes for lookup runtimes
+│   ├── generate_data.py   # Synthetic data generation via Ollama or OpenAI-compatible APIs
 │   ├── prepare_data.py    # JSONL → formatted + split dataset
-│   ├── revit_ingestion.py # Normalize Revit exports or family files for retrieval
+│   ├── revit_entity_lookup.py # Deterministic Revit/entity lookup runtime
+│   ├── revit_ingestion.py # Normalize Revit exports or family files for retrieval and lookup
 │   ├── train.py           # QLoRA training with Unsloth + SFTTrainer
 │   ├── export.py          # Merge adapters → 16-bit + GGUF
 │   └── evaluate.py        # ROUGE / exact match / LLM-as-judge
@@ -100,19 +114,21 @@ simcoe.ai/
 ├── evals/
 │   └── results.json       # Evaluation output (auto-generated)
 │
+├── tests/                 # Pure-Python unit tests for retrieval and deterministic tools
+│
 └── logs/                  # W&B local artefacts (gitignored)
 ```
 
 ---
 
-## Environment Setup — WSL2 & CUDA 12.x
+## Environment Setup — WSL2 & CUDA 12.4
 
 ### Prerequisites
 
 - Windows 11 with WSL2 enabled
 - Ubuntu 22.04 LTS (recommended) in WSL2
 - NVIDIA GPU with 16 GB VRAM (RTX 3090 / 4080 / 4090 / A4000 or better)
-- NVIDIA drivers ≥ 535 on the Windows host (CUDA 12.x is surfaced into WSL2 automatically)
+- NVIDIA drivers ≥ 550 on the Windows host (CUDA 12.4 is surfaced into WSL2 automatically)
 
 ### Step 1 — Verify CUDA in WSL2
 
@@ -129,47 +145,38 @@ echo 'export PATH=/usr/local/cuda-12.4/bin:$PATH' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### Step 2 — Python 3.11
+### Step 2 — Python 3.12 (3.11+ supported)
 
 ```bash
-sudo apt-get install -y python3.11 python3.11-venv python3.11-dev
+sudo apt-get install -y python3.12 python3.12-venv python3.12-dev
+python3.12 -m venv .venv
+source .venv/bin/activate
 ```
 
-### Step 3 — PyTorch with CUDA 12
+### Step 3 — Install the validated stack
 
 ```bash
-pip install torch==2.5.1 torchvision==0.20.1 torchaudio==0.20.1 \
-    --index-url https://download.pytorch.org/whl/cu124
-```
-
-### Step 4 — Unsloth (GPU-specific wheel)
-
-Unsloth publishes pre-built wheels for each CUDA/Torch combination.
-Replace `cu124` with your actual CUDA version (e.g. `cu121`, `cu124`).
-
-```bash
-pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
-# OR use the PyPI wheel:
-pip install unsloth==2024.12.4
-```
-
-> **Tip:** If you get a `bitsandbytes` CUDA error on WSL2, reinstall with:
-> `pip install bitsandbytes==0.45.0 --prefer-binary`
-
-### Step 5 — Remaining dependencies
-
-```bash
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### Step 6 — Configure secrets
+`requirements.txt` already pins the working `cu124` PyTorch wheels, `unsloth==2026.3.17`, and the verified compatibility fix `torchao==0.12.0`.
+
+If you need a different CUDA build, update the three `cu124` PyTorch pins in `requirements.txt` to the matching wheel set before installing.
+
+### Step 4 — Optional integrations
 
 ```bash
 cp .env.example .env
-# Open .env and fill in HF_TOKEN, WANDB_API_KEY, WANDB_PROJECT
+# Fill only the integrations you need:
+# - HF_TOKEN for gated model downloads
+# - WANDB_* if privacy.tracking=wandb
+# - OPENAI_API_KEY for openai/* judging or generation
 ```
 
-### Step 7 — Validate
+For the fully local path in this repo, `.env` is optional: TensorBoard tracking, local Ollama judging, and local Ollama generation all work without external credentials.
+
+### Step 5 — Validate
 
 ```bash
 python scripts/check_env.py
@@ -215,10 +222,11 @@ Key sections:
 
 ### 2. Train (`scripts/train.py`)
 
-- Fails early if processed datasets are missing, required config fields are invalid, or `HF_TOKEN` / `WANDB_API_KEY` / `WANDB_PROJECT` are unset.
+- Fails early if processed datasets are missing or required config fields are invalid.
+- Treats `.env` as optional. External credentials are only needed when you deliberately opt into gated model downloads, W&B tracking, or OpenAI-backed workflows.
 - Loads the base model in 4-bit NF4 via Unsloth's `FastLanguageModel`.
-- Applies a DoRA + rsLoRA adapter with `r=16, lora_alpha=16` targeting all linear layers.
-- Initialises Weights & Biases for loss, learning rate, and gradient norm tracking.
+- Applies the configured adapter strategy. The checked-in configs currently enable rsLoRA and keep DoRA off because merged export remains more reliable without the magnitude-vector path.
+- Initialises local TensorBoard tracking by default and only switches to Weights & Biases when `privacy.tracking: wandb` is configured.
 - Trains with `SFTTrainer` (cosine LR schedule, warmup 5 %, bfloat16).
 - Saves LoRA adapters to `models/adapters/`.
 - Writes `train_manifest.json` with config, runtime, processed-data lineage, trainer state, and adapter checksums.
@@ -240,9 +248,11 @@ Key sections:
 - Fails early if the merged model, processed validation set, configured benchmark, or evaluation config is missing.
 - Loads the merged model and runs batched inference with timing and progress output.
 - Scores outputs with ROUGE-1/2/L and exact match.
-- LLM-as-judge scoring via OpenAI API (set `evaluation.judge_model` in `config.yaml`; requires `OPENAI_API_KEY`).
-  Rates each response 1–5 with a structured rationale.
-  Set `judge_model: null` to disable.
+- Supports LLM-as-judge scoring via a local Ollama model or an OpenAI-compatible backend.
+   Set `evaluation.judge_model: simcoe` for local Ollama or `evaluation.judge_model: openai/<model>` for the remote path.
+   `OPENAI_API_KEY` is only needed for the remote path.
+- Auto-starts a local Ollama daemon for judge requests when needed and shuts it down afterward if evaluation launched it.
+- Rates each response 1–5 with a structured rationale. Set `judge_model: null` to disable.
 - Supports quick and full evaluation profiles via config plus CLI overrides for example count, batch size, and generation length.
 - Uses `evaluation.golden_benchmark_path` for full-mode benchmark runs when configured.
 - Can inject retrieved context from a local corpus when `retrieval.enabled` and `retrieval.use_in_full_evaluation` are set.
@@ -276,6 +286,9 @@ The Makefile orchestrates the pipeline in the correct order:
 
 ```bash
 make all          # check → prepare → train → export → evaluate
+make quality      # lint + tests for the core CPU-safe modules
+make lint         # Ruff lint + format check on core modules and tests
+make test         # pure-Python unit tests
 make check        # validate environment only
 make prepare      # prepare dataset only
 make train        # fine-tune (requires prepared data)
@@ -293,6 +306,7 @@ make pdf-notes    # extract short attributed notes from a local PDF
 make ingest-reference-folder # ingest a mixed local docs/code folder into JSONL
 make merge-examples # merge reviewed example JSONLs into one corpus
 make revit-ingest # normalize Revit exports or family files into retrieval data
+make revit-lookup # query the deterministic Revit/entity lookup runtime
 make estimate-index # build RSMeans-based price/labor lookup data
 make estimate-lookup # query the deterministic estimate lookup runtime
 make clean        # remove all generated artifacts
@@ -314,6 +328,63 @@ make evaluate-release CONFIG=config.electrician.yaml
 ```
 
 `make evaluate-release` now runs an explicit release profile. That profile fails closed when judge thresholds are configured but no judge scores are available, and it can enforce retrieval usage for grounded benchmark rows when `release.require_retrieval_for_grounded_benchmark: true` is set.
+
+---
+
+## Inference Workflows
+
+### 1. Use the merged 16-bit export directly with Transformers
+
+This path uses the existing runtime dependencies already pinned in `requirements.txt`:
+
+```bash
+PYTHONPATH=scripts python - <<'PY'
+from tokenizer_utils import load_tokenizer_with_compat
+from transformers import AutoModelForCausalLM, pipeline
+
+model_dir = "models/merged_16bit"
+tokenizer = load_tokenizer_with_compat(model_dir)
+if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
+   tokenizer.pad_token_id = tokenizer.eos_token_id
+
+model = AutoModelForCausalLM.from_pretrained(
+   model_dir,
+   device_map="auto",
+   torch_dtype="auto",
+   trust_remote_code=True,
+)
+pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+prompt = "### Instruction:\nExplain why grounding and bonding matter in electrical work.\n\n### Response:"
+result = pipe(prompt, max_new_tokens=128, do_sample=False)[0]["generated_text"]
+print(result.split("### Response:", 1)[-1].strip())
+PY
+```
+
+The same `models/merged_16bit` directory is also suitable for a separate vLLM serving stack if that runtime is part of your deployment environment.
+
+### 2. Register the GGUF export with Ollama
+
+```bash
+ollama serve
+ollama create simcoe -f models/gguf/Modelfile
+ollama run simcoe
+```
+
+`scripts/export.py` writes the `Modelfile` automatically and prints the same registration commands after export. If you only want to re-run smoke tests against existing artifacts, use `make export-verify`.
+
+---
+
+## Developer Workflow
+
+Install the lightweight developer toolchain, enable pre-commit hooks, and run the same CPU-safe quality gate used in CI:
+
+```bash
+pip install -r requirements-dev.txt
+pre-commit install
+make quality
+```
+
+The quality gate intentionally stays off the GPU-heavy training stack. It covers the deterministic lookup and retrieval core with Ruff plus pytest, while full training/export/evaluation remain manual or release-job workflows.
 
 ---
 
@@ -348,6 +419,35 @@ Equivalent Make target:
 ```bash
 make revit-ingest FAMILY_DIR=/mnt/c/Users/Paul/Revit/Families OUT=data/raw/revit_family_index.jsonl
 ```
+
+You can also build a deterministic lookup index from a structured managed export, which is the recommended path for benchmark-quality entity resolution:
+
+```bash
+make revit-ingest \
+   CONFIG=config.electrician.yaml \
+   SOURCE="sources/managed/electricalai_docs/manual_review/tabular/csv model info/eV_FamilyInstanceList(2).xlsx - Itemized List - Final Export.csv" \
+   OUT=data/raw/revit_family_index.jsonl
+```
+
+Once the index exists, query it through the deterministic Revit/entity runtime:
+
+```bash
+python scripts/revit_entity_lookup.py \
+   --config config.electrician.yaml \
+   --query "Nema 1 Galvanized Screw Cover" \
+   --top-k 3
+```
+
+Equivalent Make target:
+
+```bash
+make revit-lookup \
+   CONFIG=config.electrician.yaml \
+   QUERY="Nema 1 Galvanized Screw Cover" \
+   TOP_K=3
+```
+
+This returns a deterministic JSON envelope with normalized Revit family/type metadata, source provenance, and retained source fields from the structured export when available.
 
 ### 2. Build the estimate index
 
@@ -432,15 +532,19 @@ When records carry a `data_contract` block, `build_catalog_data.py` will block a
 
 ## Synthetic Data Generation
 
-`scripts/generate_data.py` uses an OpenAI-compatible API to generate training
-examples from topic descriptions.
+`scripts/generate_data.py` uses a local Ollama model by default and can switch
+to an OpenAI-compatible backend when you pass an `openai/<model>` name.
 
 ```bash
-# Generate 20 examples per topic
+# Generate 20 examples per topic with the local Ollama model named "simcoe"
 python scripts/generate_data.py --topics topics.yaml --out data/raw/generated.jsonl --count 20
+
+# Use a remote OpenAI-compatible model instead
+python scripts/generate_data.py --topics topics.yaml --out data/raw/generated.jsonl --count 20 --model openai/gpt-4o
 
 # Merge into the main dataset
 cat data/raw/generated.jsonl >> data/raw/dataset.jsonl
+```
 
 ## Public Source Ingestion
 
@@ -465,7 +569,7 @@ electrical estimating workflow references from Bids Analytics.
 
 Local manuals or ebooks placed in [sources/README.md](sources/README.md) should stay reference-only unless their licensing has been reviewed for broader dataset use.
 
-### 4. Extract reference notes from local PDFs
+### Extract reference notes from local PDFs
 
 Use a dedicated PDF-to-notes step for local manuals and estimator books:
 
@@ -487,7 +591,7 @@ make pdf-notes \
 
 This step creates short, attributed reference-note records with page ranges and summaries. It is intended for retrieval context and reviewed methodology examples, not raw page dumping. The canonical managed-estimating target writes to `data/raw/estimator_ebook_methodology_notes.jsonl`.
 
-### 5. Ingest a local reference folder
+### Ingest a local reference folder
 
 Use a mixed-folder ingestion step when a local tree contains manuals, notes, and code-like files:
 
@@ -517,7 +621,7 @@ The output can be reviewed directly for retrieval use. If those records are expl
 
 Managed source mirrors under `sources/managed/` now use Git LFS for large binary and document formats so the repo stays pushable to GitHub. Run `git lfs install` on machines that will materialize or clone those assets.
 
-### 6. Merge reviewed example sets
+### Merge reviewed example sets
 
 When you have multiple approved example files, merge and deduplicate them into a single corpus:
 
@@ -570,15 +674,15 @@ with `generate_data.py`.
 If I were taking this project beyond the initial pipeline, the next high-leverage
 improvements would be:
 
-1. **Add CI smoke checks** so every PR validates YAML parsing, script imports,
-   and basic CLI help output before changes are merged.
+1. ~~**Add CI smoke checks**~~ ✅ Done — PRs now run a CPU-safe quality gate with Ruff and pytest.
 2. ~~**Ship a tiny example dataset**~~ ✅ Done — 32-example seed dataset at `data/raw/dataset.jsonl`.
 3. ~~**Replace the LLM-as-judge stub**~~ ✅ Done — real OpenAI-based judge in `scripts/evaluate.py`.
 4. ~~**Add config validation**~~ ✅ Done — shared `scripts/config_validation.py` used by all pipeline scripts.
-5. **Document inference workflows** for both Hugging Face/vLLM and Ollama so
-   users can move from export to local serving without guessing the next step.
-6. **Scale the dataset** using `scripts/generate_data.py` to reach 500–2000+
-   examples before production fine-tuning.
+5. ~~**Document inference workflows**~~ ✅ Done — merged-model and Ollama serving paths are documented above.
+6. **Add a nightly GPU-backed release job** that runs `make evaluate-release CONFIG=config.electrician.yaml` against current artifacts.
+7. **Check in a tiny retrieval fixture set** so corpus builders and benchmark builders can be tested end to end on CPU.
+8. **Scale the dataset** using `scripts/generate_data.py` to reach 500–2000+
+   reviewed examples before production fine-tuning.
 
 ---
 
@@ -592,7 +696,7 @@ improvements would be:
 
 **Rule of thumb for this project (16 GB VRAM):**
 
-- Default to **QLoRA** (4-bit NF4 + DoRA + rsLoRA as configured).
+- Default to **QLoRA** (4-bit NF4 + rsLoRA as configured).
 - If quality is insufficient after 3 epochs and your dataset is large (>50 K examples), consider renting a 24 GB GPU and switching to plain **LoRA** by setting `load_in_4bit: false` in `config.yaml`.
 - **Full fine-tuning** is out of scope for single-GPU consumer hardware unless you use a very small model (≤ 3B parameters).
 
@@ -602,6 +706,9 @@ DoRA (Weight-Decomposed Low-Rank Adaptation) decomposes the weight update into
 magnitude and direction components.  It has been shown to improve average
 accuracy by **~3.7 %** over standard LoRA on commonsense reasoning benchmarks
 with **no additional inference cost** — the adapter is merged before deployment.
+The checked-in configs currently leave `use_dora: false` because merged export
+is still more reliable on the validated live stack without the magnitude-vector
+path.
 
 ### Why rsLoRA?
 

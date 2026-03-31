@@ -14,22 +14,26 @@
     "ebook-corrections",
     "estimate-emt-adapter-3-4",
     "estimate-emt-adapter-1-inch",
-    "estimate-main-office-expense-over-10m"
+    "estimate-main-office-expense-over-10m",
+    "revit-aluminum-rack-assembly",
+    "revit-pullbox-nema-1-galvanized",
+    "revit-emt-nipple-description-only"
   ],
   "categories": {
     "blueprint_reading": 2,
     "contractor_guidance": 2,
     "estimate_lookup": 3,
     "estimating_methodology": 4,
-    "nccer_reference_summary": 4
+    "nccer_reference_summary": 4,
+    "revit_entity_lookup": 3
   },
-  "generated_at": "2026-03-31T01:31:56.040994+00:00",
+  "generated_at": "2026-03-31T06:02:34.932174+00:00",
   "output": {
-    "count": 15,
+    "count": 18,
     "path": "/home/paul/src/simcoe.ai/evals/golden_electrician.jsonl"
   },
   "routes": {
-    "deterministic_tool": 3,
+    "deterministic_tool": 6,
     "text": 12
   },
   "schema_version": 2,
@@ -39,6 +43,6 @@
   },
   "spec": {
     "path": "/home/paul/src/simcoe.ai/evals/golden_electrician_spec.json",
-    "sha256": "64c0ccdf4ec9ed2d3b5188bdadcfd47ffd53f68279cc4a252d0eb8675e5ba9e1"
+    "sha256": "7a9f1538ace496a6b6317debf5b5cfc789ada8b1ef48585c32f1010b2317afbe"
   }
 }

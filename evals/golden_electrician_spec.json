@@ -165,5 +165,86 @@
         }
       }
     }
+  },
+  {
+    "benchmark_id": "revit-aluminum-rack-assembly",
+    "category": "revit_entity_lookup",
+    "route": "deterministic_tool",
+    "runtime_owner": "geometry_rules",
+    "tool_name": "revit_entity_lookup",
+    "source": "Revit structured export",
+    "section": "Aluminum Rack Assembly",
+    "instruction": "Find the Revit entity lookup for Aluminum Rack Assembly.",
+    "tool_request": {
+      "query": "Aluminum Rack Assembly",
+      "top_k": 1
+    },
+    "tool_expectation": {
+      "result_count_at_least": 1,
+      "top_result": {
+        "record_id": "revit_family_reference:6f1afdb2557532cd",
+        "lookup_key": "assemblies-aluminum-rack-ee-asm-aluminum-rack-ee-asm-aluminum-rack-aluminum-rack-assembly",
+        "category": "Assemblies",
+        "subcategory": "Aluminum Rack",
+        "family_name": "eE_ASM_Aluminum_Rack",
+        "type_name": "eE_ASM_Aluminum_Rack",
+        "description": "Aluminum Rack Assembly",
+        "unit": "ASM"
+      }
+    }
+  },
+  {
+    "benchmark_id": "revit-pullbox-nema-1-galvanized",
+    "category": "revit_entity_lookup",
+    "route": "deterministic_tool",
+    "runtime_owner": "geometry_rules",
+    "tool_name": "revit_entity_lookup",
+    "source": "Revit structured export",
+    "section": "12in x 48in x 48in Nema 1 Galvanized Screw Cover",
+    "instruction": "Find the Revit entity lookup for 12in x 48in x 48in Nema 1 Galvanized Screw Cover.",
+    "tool_request": {
+      "query": "12in x 48in x 48in Nema 1 Galvanized Screw Cover",
+      "top_k": 1
+    },
+    "tool_expectation": {
+      "result_count_at_least": 1,
+      "top_result": {
+        "record_id": "revit_family_reference:cd6997f046c7197d",
+        "lookup_key": "assemblies-junction-box-ee-asm-pullbox-supported-v3-nema-1-galvanized-12in-x-48in-x-48in-nema-1-galvanized-screw-cover",
+        "category": "Assemblies",
+        "subcategory": "Junction Box",
+        "family_name": "eE_ASM_Pullbox_Supported_v3",
+        "type_name": "Nema 1 Galvanized",
+        "description": "12in x 48in x 48in Nema 1 Galvanized Screw Cover",
+        "unit": "ASM"
+      }
+    }
+  },
+  {
+    "benchmark_id": "revit-emt-nipple-description-only",
+    "category": "revit_entity_lookup",
+    "route": "deterministic_tool",
+    "runtime_owner": "geometry_rules",
+    "tool_name": "revit_entity_lookup",
+    "source": "Revit structured export",
+    "section": "1-1/2in EMT Nipple",
+    "instruction": "Find the Revit entity lookup for 1-1/2in EMT Nipple.",
+    "tool_request": {
+      "query": "1-1/2in EMT Nipple",
+      "top_k": 1
+    },
+    "tool_expectation": {
+      "result_count_at_least": 1,
+      "top_result": {
+        "record_id": "revit_family_reference:8eb95d38f199a2c8",
+        "lookup_key": "assemblies-emt-nipple-1-1-2in-emt-nipple",
+        "category": "Assemblies",
+        "subcategory": "EMT Nipple",
+        "family_name": null,
+        "type_name": null,
+        "description": "1-1/2in EMT Nipple",
+        "unit": "ASM"
+      }
+    }
   }
 ]

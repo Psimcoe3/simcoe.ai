@@ -14,7 +14,8 @@ Usage:
 Prerequisites:
     • Run scripts/check_env.py first to validate the environment.
     • Processed datasets must exist (run scripts/prepare_data.py first).
-    • .env must contain HF_TOKEN, WANDB_API_KEY, WANDB_PROJECT.
+        • .env is optional and only needed for external services such as gated
+            downloads, W&B tracking, or OpenAI-backed workflows.
 """
 
 import argparse
@@ -22,6 +23,7 @@ import math
 import os
 import re
 import shutil
+from typing import TYPE_CHECKING
 
 from datasets import load_from_disk
 from config_validation import load_config, validate_train_config
@@ -35,13 +37,17 @@ from manifest_utils import (
     write_json_file,
 )
 
+if TYPE_CHECKING:
+    from trl import SFTTrainer
+
 
 # ── Model + adapter setup ──────────────────────────────────────────────────────
 
+
 def build_model(cfg: dict):
     """
-    Load the base model in 4-bit NF4 precision via Unsloth and attach a
-    DoRA + rsLoRA adapter.
+    Load the base model in 4-bit NF4 precision via Unsloth and attach the
+    configured adapter strategy.
     """
     m = cfg["model"]
     l = cfg["lora"]
@@ -72,7 +78,7 @@ def build_model(cfg: dict):
         lora_alpha=l["lora_alpha"],
         # Target ALL linear layers in attention AND MLP (not just q/v).
         # Unsloth's own benchmarks show this improves downstream accuracy
-        # without meaningful VRAM overhead when using DoRA.
+        # without meaningful VRAM overhead.
         target_modules=l["target_modules"],
         # lora_dropout=0 is required to enable Unsloth's fused kernel path,
         # which gives the 2× speed-up.  Non-zero dropout falls back to
@@ -80,9 +86,9 @@ def build_model(cfg: dict):
         lora_dropout=l["lora_dropout"],
         # bias="none" similarly enables the optimised code path.
         bias=l["bias"],
-        # DoRA decomposes the LoRA weight update into magnitude + direction
-        # components, empirically improving accuracy by ~3.7 % over standard
-        # LoRA on commonsense reasoning benchmarks at no inference cost.
+        # DoRA remains available behind config.use_dora, but the checked-in
+        # configs keep it off because merged export is currently more reliable
+        # without the magnitude-vector path.
         use_dora=l["use_dora"],
         # rsLoRA re-scales the adapter output by 1/√r rather than 1/r,
         # stabilising gradients when experimenting with higher ranks.
@@ -99,6 +105,7 @@ def build_model(cfg: dict):
 
 # ── Tracking initialisation ───────────────────────────────────────────────────────
 
+
 def _get_tracker(cfg: dict) -> str:
     """
     Return the tracking backend from config.  Defaults to 'tensorboard' for
@@ -110,6 +117,7 @@ def _get_tracker(cfg: dict) -> str:
     if tracker == "wandb":
         try:
             import wandb
+
             wandb.init(
                 project=os.environ.get("WANDB_PROJECT", "simcoe-finetune"),
                 config={
@@ -131,6 +139,7 @@ def _get_tracker(cfg: dict) -> str:
 
 # ── Trainer ────────────────────────────────────────────────────────────────────
 
+
 def build_trainer(
     model,
     tokenizer,
@@ -144,9 +153,7 @@ def build_trainer(
     t = cfg["training"]
     m = cfg["model"]
 
-    examples_per_step = (
-        t["per_device_train_batch_size"] * t["gradient_accumulation_steps"]
-    )
+    examples_per_step = t["per_device_train_batch_size"] * t["gradient_accumulation_steps"]
     steps_per_epoch = max(1, math.ceil(len(train_dataset) / examples_per_step))
     total_training_steps = max(1, math.ceil(steps_per_epoch * t["num_train_epochs"]))
 
@@ -440,6 +447,7 @@ def backfill_training_manifest(cfg: dict, config_path: str, tracker: str) -> str
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
+
 def main() -> None:
     # Load .env if present (optional — no external secrets required)
     load_dotenv()
@@ -512,6 +520,7 @@ def main() -> None:
     if tracker == "wandb":
         try:
             import wandb
+
             wandb.finish()
         except Exception:
             pass

@@ -2,6 +2,9 @@
 #
 # Usage:
 #   make all          # run the full pipeline: check → prepare → train → export → evaluate
+#   make quality      # run the CPU-safe quality gate: lint → test
+#   make lint         # run Ruff lint + format checks on core modules
+#   make test         # run pure-Python unit tests
 #   make check        # validate environment only
 #   make prepare      # prepare dataset only
 #   make train        # train only (requires prepared data)
@@ -21,7 +24,7 @@
 #   make all CONFIG=my_config.yaml
 
 SHELL  := /bin/bash
-PYTHON := python
+PYTHON ?= $(if $(wildcard .venv/bin/python),$(CURDIR)/.venv/bin/python,python3)
 CONFIG := config.yaml
 
 # Paths
@@ -46,15 +49,26 @@ GOLDEN_SOURCE      ?= $(RETRIEVAL_SOURCE)
 GOLDEN_SPEC        ?= evals/golden_electrician_spec.json
 GOLDEN_OUT         ?= evals/golden_electrician.jsonl
 GOLDEN_MANIFEST    ?= evals/golden_electrician.manifest.json
+QUALITY_PATHS      ?= scripts/check_env.py scripts/deterministic_tool_utils.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/train.py tests
+TEST_PATHS         ?= tests
 ARGS               ?=
 
-.PHONY: all check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
+.PHONY: all quality lint test check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest revit-lookup estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
 all: check prepare train export gguf evaluate ## Run the full pipeline end-to-end
+
+quality: lint test ## Run the core CPU-safe quality gate
+
+lint: ## Run Ruff lint and format checks on core modules and tests
+	$(PYTHON) -m ruff check --select F $(QUALITY_PATHS)
+	$(PYTHON) -m ruff format --check $(QUALITY_PATHS)
+
+test: ## Run pure-Python unit tests
+	PYTHONPATH=$(CURDIR)/scripts $(PYTHON) -m pytest $(TEST_PATHS)
 
 check: ## Validate environment (Python, CUDA, packages, secrets)
 	$(PYTHON) scripts/check_env.py
@@ -181,11 +195,30 @@ revit-ingest: ## Normalize Revit exports or family directories into reference JS
 	$(PYTHON) scripts/revit_ingestion.py \
 		--config $(CONFIG) \
 		$(if $(MANAGED_KEY),--managed-key $(MANAGED_KEY),) \
-		$(if $(SOURCE),--source $(SOURCE),) \
-		$(if $(FAMILY_DIR),--family-dir $(FAMILY_DIR),) \
+		$(if $(SOURCE),--source "$(SOURCE)",) \
+		$(if $(FAMILY_DIR),--family-dir "$(FAMILY_DIR)",) \
 		$(if $(INCLUDE_RVT),--include-rvt,) \
 		--out $(if $(OUT),$(OUT),data/raw/revit_family_index.jsonl)
-	@echo "✅  Revit reference data built for retrieval workflows"
+	@echo "✅  Revit reference data built for retrieval and deterministic lookup workflows"
+
+revit-lookup: ## Query the deterministic Revit/entity lookup runtime
+	$(PYTHON) scripts/revit_entity_lookup.py \
+		--config $(CONFIG) \
+		$(if $(INDEX),--index $(INDEX),) \
+		$(if $(QUERY),--query "$(QUERY)",) \
+		$(if $(RECORD_ID),--record-id $(RECORD_ID),) \
+		$(if $(LOOKUP_KEY),--lookup-key $(LOOKUP_KEY),) \
+		$(if $(FAMILY_NAME),--family-name "$(FAMILY_NAME)",) \
+		$(if $(TYPE_NAME),--type-name "$(TYPE_NAME)",) \
+		$(if $(FAMILY_AND_TYPE),--family-and-type "$(FAMILY_AND_TYPE)",) \
+		$(if $(CATEGORY),--category "$(CATEGORY)",) \
+		$(if $(SUBCATEGORY),--subcategory "$(SUBCATEGORY)",) \
+		$(if $(MANUFACTURER),--manufacturer "$(MANUFACTURER)",) \
+		$(if $(UNIT),--unit "$(UNIT)",) \
+		$(if $(SOURCE_NAME),--source-name "$(SOURCE_NAME)",) \
+		$(if $(TOP_K),--top-k $(TOP_K),) \
+		$(if $(MIN_SCORE),--min-score $(MIN_SCORE),) \
+		$(if $(OUT),--out $(OUT),)
 
 estimate-index: ## Build estimate lookup records, preferring managed HAR defaults when available
 	$(PYTHON) scripts/build_estimate_index.py \
@@ -237,4 +270,5 @@ clean: ## Remove all generated artifacts (data/processed, models, evals)
 	rm -rf data/processed
 	rm -rf models/adapters models/merged_16bit models/gguf
 	rm -rf evals/results.json
+	rm -rf .pytest_cache .ruff_cache
 	@echo "Done."

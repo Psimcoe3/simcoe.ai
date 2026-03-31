@@ -25,6 +25,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 import re
+import shutil
+import subprocess
 import string
 import time
 
@@ -38,6 +40,8 @@ from datasets import load_from_disk
 from deterministic_tool_utils import build_tool_request
 from estimate_lookup import TOOL_NAME as ESTIMATE_LOOKUP_TOOL_NAME, run_estimate_lookup_request
 from manifest_utils import current_utc_timestamp, read_json_file, write_json_file
+import requests
+from revit_entity_lookup import TOOL_NAME as REVIT_ENTITY_LOOKUP_TOOL_NAME, run_revit_entity_lookup_request
 from retrieval_utils import (
     build_retrieval_augmented_prompt,
     extract_instruction_text,
@@ -759,28 +763,8 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
         example.get("tool_expectation") if isinstance(example.get("tool_expectation"), dict) else {}
     )
 
-    if tool_name != ESTIMATE_LOOKUP_TOOL_NAME:
-        return {
-            "route": _route_name(example),
-            "tool_name": tool_name,
-            "passed": False,
-            "match_score": 0.0,
-            "passed_checks": 0,
-            "total_checks": 1,
-            "checks": [
-                {
-                    "path": "tool_name",
-                    "expected": ESTIMATE_LOOKUP_TOOL_NAME,
-                    "actual": tool_name,
-                    "passed": False,
-                }
-            ],
-            "error": f"Unsupported deterministic tool: {tool_name}",
-            "response": None,
-        }
-
     request = build_tool_request(
-        ESTIMATE_LOOKUP_TOOL_NAME,
+        str(tool_name),
         query=tool_request.get("query"),
         record_id=tool_request.get("record_id"),
         lookup_key=tool_request.get("lookup_key"),
@@ -791,12 +775,40 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
 
     checks: list[dict] = []
     try:
-        response = run_estimate_lookup_request(
-            cfg,
-            request,
-            index_path=tool_request.get("index_path"),
-            min_score=tool_request.get("min_score"),
-        )
+        if tool_name == ESTIMATE_LOOKUP_TOOL_NAME:
+            response = run_estimate_lookup_request(
+                cfg,
+                request,
+                index_path=tool_request.get("index_path"),
+                min_score=tool_request.get("min_score"),
+            )
+        elif tool_name == REVIT_ENTITY_LOOKUP_TOOL_NAME:
+            response = run_revit_entity_lookup_request(
+                cfg,
+                request,
+                index_path=tool_request.get("index_path"),
+                min_score=tool_request.get("min_score"),
+            )
+        else:
+            return {
+                "route": _route_name(example),
+                "tool_name": tool_name,
+                "passed": False,
+                "match_score": 0.0,
+                "passed_checks": 0,
+                "total_checks": 1,
+                "checks": [
+                    {
+                        "path": "tool_name",
+                        "expected": [ESTIMATE_LOOKUP_TOOL_NAME, REVIT_ENTITY_LOOKUP_TOOL_NAME],
+                        "actual": tool_name,
+                        "passed": False,
+                    }
+                ],
+                "error": f"Unsupported deterministic tool: {tool_name}",
+                "response": None,
+            }
+
         minimum_results = tool_expectation.get("result_count_at_least")
         if minimum_results is not None:
             actual_result_count = int(response.get("result_count", 0))
@@ -932,6 +944,70 @@ def _build_judge_message(prompt: str, prediction: str, reference: str) -> str:
     )
 
 
+def _ollama_binary() -> str | None:
+    return shutil.which("ollama") or os.path.expanduser("~/.local/bin/ollama")
+
+
+def _wait_for_ollama_server(timeout_sec: float = 30.0) -> None:
+    deadline = time.time() + timeout_sec
+    last_error: Exception | None = None
+
+    while time.time() < deadline:
+        try:
+            response = requests.get("http://127.0.0.1:11434/api/tags", timeout=5)
+            response.raise_for_status()
+            return
+        except requests.RequestException as exc:
+            last_error = exc
+            time.sleep(0.5)
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Timed out waiting for Ollama server")
+
+
+def _ensure_ollama_server() -> subprocess.Popen | None:
+    try:
+        _wait_for_ollama_server(timeout_sec=1.0)
+        return None
+    except requests.RequestException:
+        pass
+
+    ollama = _ollama_binary()
+    if not ollama or not os.path.exists(ollama):
+        raise FileNotFoundError("Ollama binary not found")
+
+    server_process = subprocess.Popen(
+        [ollama, "serve"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        _wait_for_ollama_server(timeout_sec=30.0)
+    except Exception:
+        server_process.terminate()
+        try:
+            server_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            server_process.kill()
+            server_process.wait(timeout=10)
+        raise
+
+    return server_process
+
+
+def _stop_server_process(server_process: subprocess.Popen | None) -> None:
+    if server_process is None:
+        return
+
+    server_process.terminate()
+    try:
+        server_process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        server_process.kill()
+        server_process.wait(timeout=10)
+
+
 def _get_judge_client_factory(judge_model: str):
     try:
         from openai import OpenAI
@@ -1012,48 +1088,61 @@ def llm_judge(
             for _ in predictions
         ]
 
-    create_client, model_name = _get_judge_client_factory(judge_model)
-    if create_client is None:
-        return [
-            {"score": None, "rationale": "judge backend unavailable"}
-            for _ in predictions
-        ]
+    server_process = None
+    if not judge_model.startswith("openai/"):
+        try:
+            server_process = _ensure_ollama_server()
+        except Exception as exc:
+            return [
+                {"score": None, "rationale": f"judge backend unavailable: {exc}"}
+                for _ in predictions
+            ]
 
-    results: list[dict] = []
-    total = len(predictions)
-    if concurrency <= 1 or total <= 1:
-        for i, (prompt, pred, ref) in enumerate(zip(prompts, predictions, references)):
-            results.append(_score_single_judgement(create_client, model_name, prompt, pred, ref))
-            if (i + 1) % 10 == 0 or (i + 1) == total:
-                print(f"    Judged {i + 1}/{total} examples …")
+    try:
+        create_client, model_name = _get_judge_client_factory(judge_model)
+        if create_client is None:
+            return [
+                {"score": None, "rationale": "judge backend unavailable"}
+                for _ in predictions
+            ]
+
+        results: list[dict] = []
+        total = len(predictions)
+        if concurrency <= 1 or total <= 1:
+            for i, (prompt, pred, ref) in enumerate(zip(prompts, predictions, references)):
+                results.append(_score_single_judgement(create_client, model_name, prompt, pred, ref))
+                if (i + 1) % 10 == 0 or (i + 1) == total:
+                    print(f"    Judged {i + 1}/{total} examples …")
+            return results
+
+        results = [None] * total
+        max_workers = min(concurrency, total)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_index = {
+                executor.submit(
+                    _score_single_judgement,
+                    create_client,
+                    model_name,
+                    prompts[i],
+                    predictions[i],
+                    references[i],
+                ): i
+                for i in range(total)
+            }
+            completed = 0
+            for future in as_completed(future_to_index):
+                index = future_to_index[future]
+                try:
+                    results[index] = future.result()
+                except Exception as exc:
+                    results[index] = {"score": None, "rationale": f"judge error: {exc}"}
+                completed += 1
+                if completed % 10 == 0 or completed == total:
+                    print(f"    Judged {completed}/{total} examples …")
+
         return results
-
-    results = [None] * total
-    max_workers = min(concurrency, total)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_index = {
-            executor.submit(
-                _score_single_judgement,
-                create_client,
-                model_name,
-                prompts[i],
-                predictions[i],
-                references[i],
-            ): i
-            for i in range(total)
-        }
-        completed = 0
-        for future in as_completed(future_to_index):
-            index = future_to_index[future]
-            try:
-                results[index] = future.result()
-            except Exception as exc:
-                results[index] = {"score": None, "rationale": f"judge error: {exc}"}
-            completed += 1
-            if completed % 10 == 0 or completed == total:
-                print(f"    Judged {completed}/{total} examples …")
-
-    return results
+    finally:
+        _stop_server_process(server_process)
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────

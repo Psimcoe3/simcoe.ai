@@ -8,9 +8,33 @@ from collections import Counter
 
 
 _STOPWORDS = {
-    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how",
-    "in", "is", "it", "of", "on", "or", "that", "the", "this", "to", "what",
-    "when", "which", "with", "you", "your",
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "for",
+    "from",
+    "how",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "this",
+    "to",
+    "what",
+    "when",
+    "which",
+    "with",
+    "you",
+    "your",
 }
 
 
@@ -77,7 +101,9 @@ def score_document(
 
     section_overlap = len(query_token_set & section_tokens)
     source_overlap = len(query_token_set & source_tokens)
-    content_overlap = sum(min(query_tokens[token], content_tokens.get(token, 0)) for token in query_token_set)
+    content_overlap = sum(
+        min(query_tokens[token], content_tokens.get(token, 0)) for token in query_token_set
+    )
 
     normalized_query = normalise_text(query)
     normalized_document_source = normalise_text(document.get("source", ""))
@@ -111,7 +137,9 @@ def score_document(
         ):
             hint_bonus += 8.0
 
-    return float(section_overlap * 4 + source_overlap * 2 + content_overlap + phrase_bonus + hint_bonus)
+    return float(
+        section_overlap * 4 + source_overlap * 2 + content_overlap + phrase_bonus + hint_bonus
+    )
 
 
 def retrieve_documents(
@@ -133,10 +161,12 @@ def retrieve_documents(
         if score < min_score:
             continue
 
-        ranked.append({
-            **document,
-            "score": round(score, 4),
-        })
+        ranked.append(
+            {
+                **document,
+                "score": round(score, 4),
+            }
+        )
 
     ranked.sort(key=lambda item: (-item["score"], item.get("id", "")))
     return ranked[:top_k]

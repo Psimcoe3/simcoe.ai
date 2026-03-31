@@ -15,6 +15,7 @@ import importlib
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _pass(msg: str) -> None:
     print(f"  ✅  {msg}")
 
@@ -35,6 +36,7 @@ def _section(title: str) -> None:
 
 # ── Checks ────────────────────────────────────────────────────────────────────
 
+
 def check_python() -> bool:
     major, minor = sys.version_info[:2]
     ok = major == 3 and minor >= 11
@@ -46,6 +48,7 @@ def check_python() -> bool:
 def check_torch() -> bool:
     try:
         import torch
+
         ok = True
         _pass(f"PyTorch {torch.__version__}")
     except ImportError:
@@ -79,10 +82,7 @@ def check_torch() -> bool:
                 "Dependency versions may need adjustment."
             )
     else:
-        _fail(
-            "CUDA is NOT available.  "
-            "Training will fall back to CPU and be extremely slow."
-        )
+        _fail("CUDA is NOT available.  Training will fall back to CPU and be extremely slow.")
         ok = False
 
     return ok
@@ -104,6 +104,7 @@ def check_package(pkg_name: str, import_name: str | None = None) -> bool:
 def check_bitsandbytes() -> bool:
     try:
         import bitsandbytes as bnb
+
         _pass(f"bitsandbytes {bnb.__version__}")
 
         # Quick functional check — bnb raises at import time on CUDA mismatch,
@@ -125,15 +126,13 @@ def check_bitsandbytes() -> bool:
 def check_unsloth() -> bool:
     try:
         import unsloth  # noqa: F401
+
         version = getattr(unsloth, "__version__", "unknown")
         _pass(f"unsloth {version}")
         return True
     except ImportError as exc:
         _fail(f"unsloth not installed — {exc}")
-        _warn(
-            "Install with:  "
-            "pip install unsloth[colab-new] @ https://github.com/unslothai/unsloth"
-        )
+        _warn("Install the validated stack with:  pip install -r requirements.txt")
         return False
     except Exception as exc:
         _warn(f"unsloth installed but raised an error on import: {exc}")
@@ -142,6 +141,7 @@ def check_unsloth() -> bool:
 
 def check_env_vars() -> bool:
     import os
+
     ok = True
     # These are optional — the pipeline runs fully locally without any of them.
     for var, note in [
@@ -159,10 +159,12 @@ def check_env_vars() -> bool:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+
 def main() -> None:
     # Load .env if present
     try:
         from dotenv import load_dotenv
+
         load_dotenv()
     except ImportError:
         pass
@@ -174,6 +176,9 @@ def main() -> None:
 
     _section("PyTorch & CUDA")
     results.append(check_torch())
+
+    _section("Unsloth")
+    results.append(check_unsloth())
 
     _section("Hugging Face stack")
     for pkg, imp in [
@@ -189,12 +194,13 @@ def main() -> None:
     _section("Quantisation")
     results.append(check_bitsandbytes())
 
-    _section("Unsloth")
-    results.append(check_unsloth())
-
-    _section("Experiment tracking & evaluation")
-    for pkg in ("wandb", "evaluate", "deepeval"):
-        results.append(check_package(pkg))
+    _section("Experiment tracking, evaluation & APIs")
+    for pkg, imp in [
+        ("wandb", None),
+        ("evaluate", None),
+        ("openai", None),
+    ]:
+        results.append(check_package(pkg, imp))
 
     _section("Environment variables (.env)")
     check_env_vars()  # warnings only — don't count as hard failure

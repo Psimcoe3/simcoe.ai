@@ -1,0 +1,15 @@
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = [
+  ".venv",
+  "data",
+  "models",
+  "sources/managed",
+  "unsloth_compiled_cache",
+]

@@ -25,32 +25,43 @@
     }
   },
   "evaluation_source": {
-    "available_rows": 12,
+    "available_rows": 18,
     "kind": "golden_benchmark",
     "path": "/home/paul/src/simcoe.ai/evals/golden_electrician.jsonl",
-    "selected_rows": 12
+    "selected_rows": 18
   },
-  "generated_at": "2026-03-30T22:05:55.491759+00:00",
+  "generated_at": "2026-03-31T07:44:29.961350+00:00",
   "inference_stats": {
-    "examples_per_second": 0.0064,
+    "evaluated_examples": 12,
+    "examples_per_second": 0.0107,
     "final_batch_size": 1,
     "oom_retries": 0,
     "requested_batch_size": 1
   },
-  "judge_model": null,
+  "judge_model": "simcoe",
   "metrics": {
+    "deterministic_tools": {
+      "avg_tool_match_score": 1.0,
+      "count": 6,
+      "passed": 6,
+      "tool_names": [
+        "estimate_lookup",
+        "revit_entity_lookup"
+      ],
+      "tool_success_rate": 1.0
+    },
     "exact_match": 0.0,
     "rouge": {
-      "rouge1": 0.4295,
-      "rouge2": 0.2875,
-      "rougeL": 0.3418
+      "rouge1": 0.4262,
+      "rouge2": 0.2852,
+      "rougeL": 0.3473
     }
   },
   "mode": "full",
-  "num_examples": 12,
+  "num_examples": 18,
   "per_category_metrics": {
     "blueprint_reading": {
-      "avg_judge_score": null,
+      "avg_judge_score": 5.0,
       "count": 2,
       "exact_match": 0.0,
       "rouge": {
@@ -60,34 +71,52 @@
       }
     },
     "contractor_guidance": {
-      "avg_judge_score": null,
+      "avg_judge_score": 5.0,
       "count": 2,
       "exact_match": 0.0,
       "rouge": {
-        "rouge1": 0.3777,
-        "rouge2": 0.1545,
-        "rougeL": 0.2591
+        "rouge1": 0.3948,
+        "rouge2": 0.1454,
+        "rougeL": 0.2841
       }
     },
+    "estimate_lookup": {
+      "avg_tool_match_score": 1.0,
+      "count": 3,
+      "route": "deterministic_tool",
+      "tool_names": [
+        "estimate_lookup"
+      ],
+      "tool_success_rate": 1.0
+    },
     "estimating_methodology": {
-      "avg_judge_score": null,
+      "avg_judge_score": 4.75,
       "count": 4,
       "exact_match": 0.0,
       "rouge": {
-        "rouge1": 0.4244,
-        "rouge2": 0.2949,
-        "rougeL": 0.3292
+        "rouge1": 0.4028,
+        "rouge2": 0.2896,
+        "rougeL": 0.33
       }
     },
     "nccer_reference_summary": {
-      "avg_judge_score": null,
+      "avg_judge_score": 5.0,
       "count": 4,
       "exact_match": 0.0,
       "rouge": {
-        "rouge1": 0.4681,
-        "rouge2": 0.3401,
-        "rougeL": 0.3853
+        "rouge1": 0.4712,
+        "rouge2": 0.3431,
+        "rougeL": 0.3883
       }
+    },
+    "revit_entity_lookup": {
+      "avg_tool_match_score": 1.0,
+      "count": 3,
+      "route": "deterministic_tool",
+      "tool_names": [
+        "revit_entity_lookup"
+      ],
+      "tool_success_rate": 1.0
     }
   },
   "per_example": [
@@ -95,10 +124,10 @@
       "benchmark_id": "nccer-l1-module-nine-summary",
       "category": "nccer_reference_summary",
       "judge": {
-        "rationale": "LLM-as-judge not configured",
-        "score": null
+        "rationale": "The model response is accurate and complete. It includes all key points from the reference source: Module Nine Conductors and Cables Focuses on the types and applications of conduc\u00ad tors and covers proper wirin g techniq ues. Stresses the appropr iate NEC\u00ae requirements. (Module ID 26109-14; 10 I-lours) Module Ten Basic Electrical Construction Dravvings Focuses on electrical prints, drawings, and sym\u00ad bols. Teaches the types of information that can be found on schema tics, one-lines, and wiring dia\u00ad grams. This course map shows all of the modules in Elect1ical Level One. The suggested training order begins at the bottom and proceeds up. Skill levels increase as you advance on the course map. The local Training Program Sponsor may adjust the training order.",
+        "score": 5
       },
-      "prediction": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 This course map shows all of the modules in\n\nElect1ical Level One. The suggested training order begins at the bottom and proceeds up. Skill levels increase as you advance on the course map. The local Training Program Sponsor may adjust the training order. (Courtesy of 1-1-1/2\" = 1' 0) 1' 1-1-1/2\" = 1' 0) 1' 1-1-1/2\" = 1' 0) 1' 1-1-1/2\" = 1' 0) 1' 1-1-1/2\" = 1' 0) 1' 1-1-1/2\" = 1' 0) 1' 1-1-1/",
+      "prediction": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 This course map shows all of the modules in\n\nElect1ical Level One. The suggested training order begins at the bottom and proceeds up. Skill levels increase as you advance on the course map. The local Training Program Sponsor may adjust the training order. (Courtesy of 1-1-1/2\" = 1' 0) 1' - 1\" 1\" - 1\" 1\" - 1\" 1\" - 1\" 1\" - 1\" 1\" - 1\" 1\" - 1\" 1\" - 1\" 1\" - 1\" 1\" - 1\" 1\" - 1\" 1\" - 1\" 1\" - 1\" 1\" - 1\" 1\" - 1\"",
       "prompt": "### Instruction:\nSummarize the electrical construction reference source Module Nine.\n\n### Retrieved Context:\n[1] Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide\nSection: Module Nine\nContent: Module Nine Conductors and Cables Focuses on the types and applications of conduc\u00ad tors and covers proper wirin g techniq ues. Stresses the appropr iate NEC\u00ae requirements. (Module ID 26109-14; 10 I-lours) Module Ten Basic Electrical Construction Dravvings Focuses on electrical prints, drawings, and sym\u00ad bols. Teaches the types of information that can be found on schema tics, one-lines, and wiring dia\u00ad grams.\n\nKey points:\n- Focuses on the types and applications of conduc\u00ad tors and covers proper wirin g techniq ues. Stresses the appropr iate NEC\u00ae requirements. (Module ID\n- Focuses on electrical prints, drawings, and sym\u00ad bols. Teaches the types of information that can be found on schema tics, one-lines, and wiring dia\u00ad grams. (Module ID 26110-14; 7.5 Hours)\n- Introduction to Electrical Circuits\n- This course map shows all of the modules in\n- Elect1ical Level One. The suggested training order begins at the bottom and proceeds up. Skill levels increase as you advance on the course map. The local Training Program Sponsor may adjust the training order.\n\n### Response:",
       "reference": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 Module Nine\n\nModule Nine Conductors and Cables Focuses on the types and applications of conduc\u00ad tors and covers proper wirin g techniq ues. Stresses the appropr iate NEC\u00ae requirements. (Module ID 26109-14; 10 I-lours) Module Ten Basic Electrical Construction Dravvings Focuses on electrical prints, drawings, and sym\u00ad bols. Teaches the types of information that can be found on schema tics, one-lines, and wiring dia\u00ad grams.\n\nKey points:\n- Focuses on the types and applications of conduc\u00ad tors and covers proper wirin g techniq ues. Stresses the appropr iate NEC\u00ae requirements. (Module ID\n- Focuses on electrical prints, drawings, and sym\u00ad bols. Teaches the types of information that can be found on schema tics, one-lines, and wiring dia\u00ad grams. (Module ID 26110-14; 7.5 Hours)\n- Introduction to Electrical Circuits\n- This course map shows all of the modules in\n- Elect1ical Level One. The suggested training order begins at the bottom and proceeds up. Skill levels increase as you advance on the course map. The local Training Program Sponsor may adjust the training order.",
       "retrieval": {
@@ -126,15 +155,21 @@
           }
         ]
       },
+      "route": "text",
+      "route_evaluation": null,
+      "runtime_owner": "text",
       "section": "Module Nine",
-      "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+      "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide",
+      "tool_expectation": null,
+      "tool_name": null,
+      "tool_request": null
     },
     {
       "benchmark_id": "nccer-l2-module-nine-summary",
       "category": "nccer_reference_summary",
       "judge": {
-        "rationale": "LLM-as-judge not configured",
-        "score": null
+        "rationale": "The model response is accurate and complete. It provides all key points from the source document.",
+        "score": 5
       },
       "prediction": "Source: NCCER Electrical Guides / NCCER Level 2 Trainee Guide \u2014 This course map shows all of the modules in\n\nElectrical level Two. The suggested training order begins at the bottom and proceeds up. Skill levels increase as you advance on the course map. The local Training Program Sponsor may adjust the training order. 32 N CC ER - Electrica l Leve/ Two 26211-17 \u2666 Module Descriptio n ID Module One Electrica l Calculations (Module lD 2620-17; 30 Hours) Gives a thorough explanation of the mathematics needed to do electrical work.\n\nLinked references:\n- 32 N CC ER - Electrica l Leve/ Two 26211-17 \u2666\n- ID Module One Electrica l Calculations (Module lD\n- 2620-17; 30 Hours) Gives a thorough explanation of the mathematics needed to do electrical work.\n- (",
       "prompt": "### Instruction:\nSummarize the electrical construction reference source Module Nine.\n\n### Retrieved Context:\n[1] Source: NCCER Electrical Guides / NCCER Level 2 Trainee Guide\nSection: Module Nine\nContent: Module Nine Grounding and Bonding Focuses on the purpose of grounding and bond\u00ad ing electrical systems. Thoroughly covers NEC\u00ae requirements. (Module JD 26209-17; 15 Hours) Module Ten Circuit Breakers and Fuses Describes fuses and circuit breakers along with their practical applications. Also covers sizing.\n\nKey points:\n- Focuses on the purpose of grounding and bond\u00ad ing electrical systems. Thoroughly covers NEC\u00ae requirements. (Module JD 26209-17; 15 Hours)\n- Describes fuses and circuit breakers along with their practical applications. Also covers sizing.\n- Gives basic descriptions of various types of con\u00ad tactors and relays along with their practical appli\u00ad cations. (Module TD 26211-17; 12.5 Hours)\n- This course map shows all of the modules in\n- Electrical level Two. The suggested training order begins at the bottom and proceeds up. Skill levels increase as you advance on the course map. The local Training Program Sponsor may adjust the training order.\n\n### Response:",
@@ -164,15 +199,21 @@
           }
         ]
       },
+      "route": "text",
+      "route_evaluation": null,
+      "runtime_owner": "text",
       "section": "Module Nine",
-      "source": "NCCER Electrical Guides / NCCER Level 2 Trainee Guide"
+      "source": "NCCER Electrical Guides / NCCER Level 2 Trainee Guide",
+      "tool_expectation": null,
+      "tool_name": null,
+      "tool_request": null
     },
     {
       "benchmark_id": "nccer-l1-section-one-summary",
       "category": "nccer_reference_summary",
       "judge": {
-        "rationale": "LLM-as-judge not configured",
-        "score": null
+        "rationale": "The model response is comprehensive and accurate. It covers all key points from the reference source.",
+        "score": 5
       },
       "prediction": "Response:\nSource: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 SECTION ONE\n\nSECTION ONE 1.0.0 S IZING THE ELECTRICAL SERVICE Objective Size the electric service for a dwelling. a. Calculate the electric service load. b. Calculate the ampacity of service-entrance conductors. c.\n\nKey points:\n- a. Calculate the electric service load.\n- 1. For a residential dwelling of a given size and equipped with a given list of major appliru1ces, demonstrate or explain how to:\n- \u2022 Compute lighting, small appliance, and laundry loads.\n- \u2022 Compute the loads for large appliances. 2.\n- d. Explain how to determine the voltage and am\u00ad pacity rating of the service. e. Explain how to determine the wire size for the various loads. f. Explain how to calculate the load for a 240V appliance. g. Explain",
       "prompt": "### Instruction:\nSummarize the electrical construction reference source SECTION ONE.\n\n### Retrieved Context:\n[1] Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide\nSection: SECTION ONE\nContent: SECTION ONE 1.0.0 IDENTIFYING SECTORS AND TRADE OPTION S IN THE ELECTRICAL INDUSTRY Objective Identify the various sectors and trade options in the electrical industry. a. Describe the typical components in a residential wiring system. b.\n\nKey points:\n- Identify the various sectors and trade options in the electrical industry.\n- a. Describe the typical components in a residential wiring system.\n- b. Describe the typical components in a commercia l wiring system.\n- c. Describe the typical components in an industrial wir.ing system.\n- d. List various career paths and opportunities in the electrical trade.\n\n[2] Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide\nSection: SECTION ONE\nContent: SECTION ONE 1.0.0 S IZING THE ELECTRICAL SERVICE Objective Size the electric service for a dwelling. a. Calculate the electric service load. b.\n\nKey points:\n- Size the electric service for a dwelling.\n- a. Calculate the electric service load.\n- 1. For a residential dwelling of a given size and equipped with a given list of major appliru1ces, demonstrate or explain how to:\n- \u2022 Compute lighting, small appliance, and laundry loads.\n- \u2022 Compute the loads for large appliances.\n\n### Response:",
@@ -202,15 +243,21 @@
           }
         ]
       },
+      "route": "text",
+      "route_evaluation": null,
+      "runtime_owner": "text",
       "section": "SECTION ONE",
-      "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+      "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide",
+      "tool_expectation": null,
+      "tool_name": null,
+      "tool_request": null
     },
     {
       "benchmark_id": "nccer-l4-example-summary",
       "category": "nccer_reference_summary",
       "judge": {
-        "rationale": "LLM-as-judge not configured",
-        "score": null
+        "rationale": "This response is accurate and complete. It follows the example exactly, including all key points and calculations.",
+        "score": 5
       },
       "prediction": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 Example: What size THHN conduc tor would be needed to supply a 150A load when there are 4 to 6 cur\u00ad rent-carrying condu ctors in a raceway with an ambient temperatur e of 110\u00b0F? Solution: The adjushnent factor for 4 to 6 current \u00ad carrying condu ctors is 80%, or 0.8 [NEC Table\n\n- 3]: Multiply this value by the current to get the minimum conductor ampacity:\n- Now, find the size of conductor that has a ampacity equal to or excee ds this value. From NCC Table 310.15(8)(16), it can be determined that No. 4 THHN conduc tors will be the minimum size required to supply this 150A load. (The next larger size",
       "prompt": "### Instruction:\nSummarize the electrical construction reference source Example:.\n\n### Retrieved Context:\n[1] Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide\nSection: Example:\nContent: Example: What size THHN conduc tor would be needed to supply a 150A load when there are 4 to 6 cur\u00ad rent-carrying condu ctors in a raceway with an ambient temperatur e of 110\u00b0F? Solution: The adjushnent factor for 4 to 6 current \u00ad carrying condu ctors is 80%, or 0.8 [NEC Table 310.15(8)(.J)(a)] The correction factor at this ambi \u00ad ent temperatur e is 0.87 [NCC Table 310.15(8)(2) (/J)]. First, find the reciprocals of these two factors.\n\nKey points:\n- What size THHN conduc tor would be needed to supply a 150A load when there are 4 to 6 cur\u00ad rent-carrying condu ctors in a raceway with an ambient temperatur e of 110\u00b0F?\n- The adjushnent factor for 4 to 6 current \u00ad carrying condu ctors is 80%, or 0.8 [NEC Table\n- 310.15(8)(.J)(a)] The correction factor at this ambi \u00ad ent temperatur e is 0.87 [NCC Table 310.15(8)(2)\n- (/J)]. First, find the reciprocals of these two factors.\n- Then, find the product of these reciprocals and the load current to size the conductor:\n\n### Response:",
@@ -240,17 +287,23 @@
           }
         ]
       },
+      "route": "text",
+      "route_evaluation": null,
+      "runtime_owner": "text",
       "section": "Example:",
-      "source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide"
+      "source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide",
+      "tool_expectation": null,
+      "tool_name": null,
+      "tool_request": null
     },
     {
       "benchmark_id": "nccer-l4-contractor-guidance",
       "category": "contractor_guidance",
       "judge": {
-        "rationale": "LLM-as-judge not configured",
-        "score": null
+        "rationale": "The model response is accurate, complete, and well-structured. It provides a clear breakdown of electrical calculation sections: lighting (NEC Article 210), other than lighting (NEC Articles 220\u2013398), motor loads (NEC Article 430), service entrance (NEC Article 230), and branch circuits (NEC Article 210). The response aligns with the NCCER Level 4 Trainee Guide, covering minimum NEC requirements, common industry practice for future expansion, conductor adjustments based on factors like ambient temperature. It highlights feeder sizing considerations per NEC Section 215.2(A)(1)(a) and more than three conductors in a raceway (NEC Section 310-16). The response is concise yet comprehensive, providing key points and linked references to support its claims.",
+        "score": 5
       },
-      "prediction": "Response:\nSource: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 Electrical calculations can be divided into three sections:\n\nElectrical calculations can be divided into three sections: lighting, small appliance loads, and general loads. The NEc\u00ae provides methods of com\u00ad puting lighting and small appliance load calcu\u00ad lations on a unit (per square foot) basis instead of having to itemize and compute each individual light and outlet. The NEc\u00ae also provides a method of computing the total house load on a unit (per square foot) basis.\n\nKey points:\n- This module covers th e resources and reference material that is available to help with electrical calculations. It also provides an overview of the\n- Nf.C\u00ae requirements for calculating lighting, small appliance, and general loads.\n- After completing this module, you will be able to:\n- \u2022 Explain why it is important to have a thorough understanding of mathematical concepts and",
+      "prediction": "Response:\nSource: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 Electrical calculations can be divided into three sections:\n\nElectrical calculations can be divided into three sections: lighting, loads other than lighting, and motor loads. In addition, there are calculations re\u00ad quired to size the service entranc e to a buildin g and the service conductor s. Finally, there are cal\u00ad culations required to size the various parts of the branch circuits.\n\nLinked references:\n- lighting fixtures, and number of circuits needed to supply them. This module covers the calculations required to determine the lighting load of a residence and the service required to supply the lighting load.\n- This module also covers the calculations requi red to determine the number of circuits needed to supply the lighting load and to size the conductors and overcurrent protection for a lighting branch circuit.\n- This module covers the calculations requir ed to determine the loads of small and large",
       "prompt": "### Instruction:\nWhat should an electrical contractor know from NCCER Electrical Guides / NCCER Level 4 Trainee Guide page Electrical calculations can be divided into three sections:?\n\n### Retrieved Context:\n[1] Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide\nSection: Electrical calculations can be divided into three sections:\nContent: minimum NEc\u00ae requirements, this module will focus on those requirements. Common practice in the electrical industry is to design and plan electrical systems to make allowance for futur e expansion. Providing conduit and raceways larger than the minimum required by the NEc\u00ae may reduce the labor requ ired in pulling conductors, which may offset the higher cost of the larger con\u00ad duit./\\ service is likely to be sized larger thnn the minimum required by the NEc\u00ae so that futur e expansion of the electrical system will be possible.\n\nKey points:\n- The allowab le current-carrying capacity (ampac\u00ad ity) of conductors may require ndjustment based on several factors . After complyin g wit h N EC\n- Feeder conductor size is adjusted in the following situations:\n- \u2022 The load to be supplied is a continuo us duty load per NCC Section 215.2(A)( 1)(a).\n- \u2022 There are more than three current-carrying conductors in a raceway per NEC Sectio11\n- \u2022 The ambient temperatur e that the condu ctors will pass through exceeds the temperature ratings for condu ctors listed in NCC Table\n\n### Response:",
       "reference": "Source: NCCER Electrical Guides / NCCER Level 4 Trainee Guide \u2014 Electrical calculations can be divided into three sections:\n\nminimum NEc\u00ae requirements, this module will focus on those requirements. Common practice in the electrical industry is to design and plan electrical systems to make allowance for futur e expansion. Providing conduit and raceways larger than the minimum required by the NEc\u00ae may reduce the labor requ ired in pulling conductors, which may offset the higher cost of the larger con\u00ad duit./\\ service is likely to be sized larger thnn the minimum required by the NEc\u00ae so that futur e expansion of the electrical system will be possible.\n\nKey points:\n- The allowab le current-carrying capacity (ampac\u00ad ity) of conductors may require ndjustment based on several factors . After complyin g wit h N EC\n- Feeder conductor size is adjusted in the following situations:\n- \u2022 The load to be supplied is a continuo us duty load per NCC Section 215.2(A)( 1)(a).\n- \u2022 There are more than three current-carrying conductors in a raceway per NEC Sectio11\n- \u2022 The ambient temperatur e that the condu ctors will pass through exceeds the temperature ratings for condu ctors listed in NCC Table",
       "retrieval": {
@@ -278,17 +331,23 @@
           }
         ]
       },
+      "route": "text",
+      "route_evaluation": null,
+      "runtime_owner": "text",
       "section": "Electrical calculations can be divided into three sections:",
-      "source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide"
+      "source": "NCCER Electrical Guides / NCCER Level 4 Trainee Guide",
+      "tool_expectation": null,
+      "tool_name": null,
+      "tool_request": null
     },
     {
       "benchmark_id": "nccer-l1-contractor-guidance",
       "category": "contractor_guidance",
       "judge": {
-        "rationale": "LLM-as-judge not configured",
-        "score": null
+        "rationale": "The model response is comprehensive and accurate. It covers all key points from the instruction and provides detailed explanations for each point.",
+        "score": 5
       },
-      "prediction": "Response\nSource: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 SECTION ONE\n\nSECTION ONE 1.0.0 ELECTRICAL HAZARDS Objective Identify electrical hazard s and their effects. a. Understand the effects of electrica l shock on the human body. b.\n\nKey points:\n- Identify electrical hazard s and their effects.\n- a. Understand the effects of electrica l shock on the human body.\n- b. Verif y that circuit s are de-energized.\n- Double-insulated/u ngrounded tools: Electr ical tools that are constructed so that the case is insu\u00ad lated from electrical energy. The case is made of a nonconductive material.\n- Fibrillation Very rapid irreg ular contractions of the muscle fibers of the heart that result in the heartbeat and pulse going out of rhythm with each other. When fibrillation occurs in the ventric",
+      "prediction": "Response\nSource: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 SECTION ONE\n\nSECTION ONE 1.0.0 ELECTRICAL HAZARDS Objective Identify electrical hazard s and their effects. a. Understand the effects of electrica l shock on the human body. b.\n\nKey points:\n- Identify the effects of various types of electrical shock on the human body.\n- Understand the effects of high -voltage shock on the human body.\n- Verify that circuits are de-energized.\n- a. Use the lockout/Tagout procedure. b. Use the short- circuit /overc urrent pro tection device. c. Use the ground fault circuit interrup ter. d. Use the low-voltage protective device. e. Feel for voltage. f. Test with an ohmmeter. g. Use the go\u2022 no-go gage. h. Record the pre- and post-",
       "prompt": "### Instruction:\nWhat should an electrical contractor know from NCCER Electrical Guides / NCCER Level 1 Trainee Guide page SECTION ONE?\n\n### Retrieved Context:\n[1] Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide\nSection: SECTION ONE\nContent: SECTION ONE 1.0.0 IDENTIFYING SECTORS AND TRADE OPTION S IN THE ELECTRICAL INDUSTRY Objective Identify the various sectors and trade options in the electrical industry. a. Describe the typical components in a residential wiring system. b.\n\nKey points:\n- Identify the various sectors and trade options in the electrical industry.\n- a. Describe the typical components in a residential wiring system.\n- b. Describe the typical components in a commercia l wiring system.\n- c. Describe the typical components in an industrial wir.ing system.\n- d. List various career paths and opportunities in the electrical trade.\n\n[2] Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide\nSection: SECTION ONE\nContent: SECTION ONE 1.0.0 ELECTRICAL HAZARDS Objective Identify electrical hazard s and their effects. a. Understand the effects of electrica l shock on the human body. b.\n\nKey points:\n- Identify electrical hazard s and their effects.\n- a. Understand the effects of electrica l shock on the human body.\n- b. Verif y that circuit s are de-energized.\n- Double-insulated/u ngrounded tools: Electr ical tools that are constructed so that the case is insu\u00ad lated from electrical energy. The case is made of a nonconductive material.\n- Fibrillation Very rapid irreg ular contractions of the muscle fibers of the heart that result in the heartbeat and pulse going out of rhythm with each other.\n\n### Response:",
       "reference": "Source: NCCER Electrical Guides / NCCER Level 1 Trainee Guide \u2014 SECTION ONE\n\nSECTION ONE 1.0.0 IDENTIFYING SECTORS AND TRADE OPTION S IN THE ELECTRICAL INDUSTRY Objective Identify the various sectors and trade options in the electrical industry. a. Describe the typical components in a residential wiring system. b.\n\nKey points:\n- Identify the various sectors and trade options in the electrical industry.\n- a. Describe the typical components in a residential wiring system.\n- b. Describe the typical components in a commercia l wiring system.\n- c. Describe the typical components in an industrial wir.ing system.\n- d. List various career paths and opportunities in the electrical trade.",
       "retrieval": {
@@ -316,15 +375,21 @@
           }
         ]
       },
+      "route": "text",
+      "route_evaluation": null,
+      "runtime_owner": "text",
       "section": "SECTION ONE",
-      "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide"
+      "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide",
+      "tool_expectation": null,
+      "tool_name": null,
+      "tool_request": null
     },
     {
       "benchmark_id": "njatc-overview-summary",
       "category": "blueprint_reading",
       "judge": {
-        "rationale": "LLM-as-judge not configured",
-        "score": null
+        "rationale": "The model response is excellent. It accurately summarizes the chapter overview and provides clear learning objectives.",
+        "score": 5
       },
       "prediction": "Source: NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd3ff2d0b7e4c5badb2ab0 -- Anna\u2019s Archive \u2014 OVERVIEW\n\n- After completing this chapter, you will be able to:\n- Describe the information found on various schedules.\n- Apply the information found on schedules to a job site.\n- Describe the information found in specifications.",
       "prompt": "### Instruction:\nSummarize the electrical construction reference source OVERVIEW.\n\n### Retrieved Context:\n[1] Source: NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive\nSection: OVERVIEW\nContent: OVERVIEW This chapter covers schedules and specifications. Schedules and specifications give additional information about a job that cannot be found on blueprints . Schedules and specifications are an integral part of the construction process, from bidding to the completion of the project. This chapter discusses the informat ion found in schedules and specifications and relates it to the electrical industry.\n\nKey points:\n- This chapter covers schedules and specifications. Schedules and specifications give additional information about a job that cannot be found on blueprints .\n- After completing this chapter, you will be able to:\n- Describe the information found on various schedules .\n- Apply the information found on schedules to a job site.\n- Describe the information found in specifications.\n\n### Response:",
@@ -354,15 +419,21 @@
           }
         ]
       },
+      "route": "text",
+      "route_evaluation": null,
+      "runtime_owner": "text",
       "section": "OVERVIEW",
-      "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+      "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive",
+      "tool_expectation": null,
+      "tool_name": null,
+      "tool_request": null
     },
     {
       "benchmark_id": "njatc-long-break-line",
       "category": "blueprint_reading",
       "judge": {
-        "rationale": "LLM-as-judge not configured",
-        "score": null
+        "rationale": "The model response is accurate and complete. It correctly identifies the long-break line as a thin line interrupted by a sharp zigzag about every inch. It explains that this type of line serves the same function as a short-break line but is used for larger areas. The response also mentions its use in print reading to pull out sections for enlargement and further inspection. Additionally, it correctly describes extension lines as thin, straight lines extending from the feature to be dimensioned at 90 degrees to the surface being dimensioned. It explains that their function is to indicate where the dimension starts and ends. The response concludes by noting that due to reproduction techniques, line thickness may not be distinguishable in some CAD systems, so line type should be determined by characteristics, location, and apparent function in the drawing.",
+        "score": 5
       },
       "prediction": "Source: NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-1 1) \u2014 4fd3 3ff2d0 4b7e4 1 5 2ec8c3badb2 9ab0 -- Anna\u2019s Archive \u2014 9. Ex tension line. Extension lin es are thin, strai ght lin es that extend th e featur e to be dimensi oned. They usuall y extend from the part a t 90\u00b0 to th e s urface being dimension ed.\n\n9. Ex tension line. Extension lin es are thin, strai ght lin es that extend th e featur e to be dimensi oned. They usuall y extend from the part a t 90\u00b0 to th e s urface being dimension ed.\n- The fun ction of the extension lin e",
       "prompt": "### Instruction:\nSummarize the electrical construction reference source 8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h..\n\n### Retrieved Context:\n[1] Source: NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive\nSection: 8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h.\nContent: 8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h. They serve essentiall y the s am e fun ction as a s h ort-br eak lin e, ex\u00ad cept that they are used for large r areas .\n\nKey points:\n- fun ction as a s h ort-br eak lin e, ex\u00ad cept that they are used for large r areas . In print readin g, th ey are used t o pull out a sec tion of a drawing for enlarg ement and fur\u00ad th er d etail ed inspec tion.\n- 9. Ex tension line. Extension lin es are thin , strai ght lin es that extend th e featur e to be dimensi oned. They usuall y extend from the part a t 90\u00b0 to th e s urface being dimension ed.\n- The fun ction of the extension lin e is to tell the print reader where th e dimen sion start s and ends.\n- NOTE: Due Lo reproduction techniques and plotters used with some CAD sys-\n- terns. the line weight or thickness may not be distinguishable. In this case, the line type should be determined by its characteristics. location. and ap\u00ad parent function in the drawing. See\n\n### Response:",
@@ -392,17 +463,23 @@
           }
         ]
       },
+      "route": "text",
+      "route_evaluation": null,
+      "runtime_owner": "text",
       "section": "8. Long-break line. Long-br eak lines are thin lin es int errupt ed b y a sh arp zigzag about every in c h.",
-      "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive"
+      "source": "NJATC School Materials / Blueprint Reading for Electricians by NJATC (2009-06-11) -- Chuck Wright -- 4fd33ff2d04b7e4152ec8c3badb29ab0 -- Anna\u2019s Archive",
+      "tool_expectation": null,
+      "tool_name": null,
+      "tool_request": null
     },
     {
       "benchmark_id": "bids-contractor-blueprint",
       "category": "estimating_methodology",
       "judge": {
-        "rationale": "LLM-as-judge not configured",
-        "score": null
+        "rationale": "The model response is an exact match to the reference answer. It includes all key points and provides a detailed breakdown of electrical construction cost estimation methodologies.",
+        "score": 5
       },
-      "prediction": "Response\nSource: https://bidsanalytics.com/how-to-estimate-electrical-construction-costs-a-contractor-s-blueprint/ \u2014 Chuck Wright \u2014 2023-06-12 14:00:00 \u2014 Bids Analytics electrical estimating \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna",
+      "prediction": "Response\nSource: https://bidsanalytics.com/how-to-estimate-electrical-construction-costs-a-contractors-blueprint/ \u2014 Chuck Wright \u2014 304fd33d7ecb7e4152ec8c3badb29ab0 \u2014 Anna\u2019s Archive \u2014 100% Complete \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s Archive \u2014 Anna\u2019s",
       "prompt": "### Instruction:\nSummarize the electrical construction reference source How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint.\n\n### Retrieved Context:\n[1] Source: Bids Analytics electrical estimating\nSection: How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint\nContent: Master electrical construction cost estimation with proven methodologies. Material takeoffs, labor analysis, pricing strategies, and technology tools explained.\n\nLinked references:\n- Skip to content\n- Our Trades\n- Labor Estimating\n- Electrical Estimating Services\n- BIM Cost Estimating\n- Estimating Consulting\n- Understanding Electrical Estimation Fundamentals\n- Material Takeoff Methodologies\n\nSource: https://bidsanalytics.com/how-to-estimate-electrical-construction-costs-a-contractors-blueprint/\n\n[2] Source: Bids Analytics electrical estimating\nSection: Electrical Estimating Services\nContent: Professional electrical estimating services with material, labor, and equipment breakdowns for residential and commercial contractors.\n\nKey points:\n- Detailed Material Takeoffs\n- Labor Cost Estimation\n- Lighting System Estimates\n- Panel & Switchgear Cost Analysis\n- Fire Alarm & Security System Estimation\n- Networking & Communication System Costs\n- Finalized Cost Breakdown Reports\n- New Residential Construction Estimating Services\n\nLinked references:\n- Skip to content\n- Our Trades\n- Labor Estimating\n- Electrical Estimating Services\n- BIM Cost Estimating\n- Estimating Consulting\n- Add Plans\n- Start A Project\n\nSource: https://bidsanalytics.com/electrical-estimating-services/\n\n### Response:",
       "reference": "Source: Bids Analytics electrical estimating \u2014 How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint\n\nMaster electrical construction cost estimation with proven methodologies. Material takeoffs, labor analysis, pricing strategies, and technology tools explained.\n\nLinked references:\n- Skip to content\n- Our Trades\n- Labor Estimating\n- Electrical Estimating Services\n- BIM Cost Estimating\n- Estimating Consulting\n- Understanding Electrical Estimation Fundamentals\n- Material Takeoff Methodologies\n\nSource: https://bidsanalytics.com/how-to-estimate-electrical-construction-costs-a-contractors-blueprint/",
       "retrieval": {
@@ -430,15 +507,21 @@
           }
         ]
       },
+      "route": "text",
+      "route_evaluation": null,
+      "runtime_owner": "text",
       "section": "How to Estimate Electrical Construction Costs: A Contractor\u2019s Blueprint",
-      "source": "Bids Analytics electrical estimating"
+      "source": "Bids Analytics electrical estimating",
+      "tool_expectation": null,
+      "tool_name": null,
+      "tool_request": null
     },
     {
       "benchmark_id": "bids-labor-estimating-services",
       "category": "estimating_methodology",
       "judge": {
-        "rationale": "LLM-as-judge not configured",
-        "score": null
+        "rationale": "The model accurately summarizes key points and provides linked references but lacks a clear introduction and conclusion.",
+        "score": 4
       },
       "prediction": "Response\nSource: Bids Analytics electrical estimating \u2014 Electrical Estimating Services\n\nDetailed Material Takeoffs Labor Cost Estimation Lighting System Estimates Panel & Switchgear Cost Analysis Fire Alarm & Security System Estimation Networking & Communication System Costs Finalized Cost Breakdown Reports\n\nKey points:\n- Detailed Material Takeoffs\n- Labor Cost Estimation\n- Lighting System Estimates\n- Panel & Switchgear Cost Analysis\n- Fire Alarm & Security System Estimation\n- Networking & Communication System Costs\n- Finalized Cost Breakdown Reports\n- New Residential Construction Estimating Services\n- Trusted Partner for Accurate Electrical Estimates\n- Our Electrical Estimating Services Include:\n- \u2666 Detailed Material Takeoffs\n- \u2666 Labor Cost Estimation\n- \u2666 Lighting System Estimates\n- \u2666 Panel & Switchgear Cost Analysis\n- \u2666 Fire Alarm & Security System Estimation\n- \u2666 Networking & Communication System Costs\n- \u2666 Finalized Cost Breakdown Reports\n\nLinked",
       "prompt": "### Instruction:\nSummarize the electrical construction reference source Labor Estimating Services.\n\n### Retrieved Context:\n[1] Source: Bids Analytics electrical estimating\nSection: Labor Estimating Services\nContent: Reliable labor estimating services with precise workforce planning, productivity rates, and man-hour calculations for residential, commercial, and industrial construction projects.\n\nKey points:\n- Labor hour for estimating\n- Construction labor cost estimator\n- Auto labor estimator\n- Labor estimate for construction\n- Automotive labor estimator\n- Location-based labor estimate\n- Customized labor cost report\n- New Residential Construction Estimating Services\n\nLinked references:\n- Skip to content\n- Our Trades\n- Labor Estimating\n- Electrical Estimating Services\n- BIM Cost Estimating\n- Estimating Consulting\n- Start a Project\n- Add Plans\n\nSource: https://bidsanalytics.com/labor-estimating/\n\n[2] Source: Bids Analytics electrical estimating\nSection: Electrical Estimating Services\nContent: Professional electrical estimating services with material, labor, and equipment breakdowns for residential and commercial contractors.\n\nKey points:\n- Detailed Material Takeoffs\n- Labor Cost Estimation\n- Lighting System Estimates\n- Panel & Switchgear Cost Analysis\n- Fire Alarm & Security System Estimation\n- Networking & Communication System Costs\n- Finalized Cost Breakdown Reports\n- New Residential Construction Estimating Services\n\nLinked references:\n- Skip to content\n- Our Trades\n- Labor Estimating\n- Electrical Estimating Services\n- BIM Cost Estimating\n- Estimating Consulting\n- Add Plans\n- Start A Project\n\nSource: https://bidsanalytics.com/electrical-estimating-services/\n\n### Response:",
@@ -468,17 +551,23 @@
           }
         ]
       },
+      "route": "text",
+      "route_evaluation": null,
+      "runtime_owner": "text",
       "section": "Labor Estimating Services",
-      "source": "Bids Analytics electrical estimating"
+      "source": "Bids Analytics electrical estimating",
+      "tool_expectation": null,
+      "tool_name": null,
+      "tool_request": null
     },
     {
       "benchmark_id": "ebook-productivity",
       "category": "estimating_methodology",
       "judge": {
-        "rationale": "LLM-as-judge not configured",
-        "score": null
+        "rationale": "The model response is excellent. It accurately summarizes the key points from the source material and provides a clear rationale for each point.",
+        "score": 5
       },
-      "prediction": "Response:\nSource: 2o26 national electrical estimator ebook \u2014 Other Factors That Affect Productivity\n\nOf course, there are exceptions. Sometimes a crew of one takes twice as long as a crew of two. When pulling feeder cable or setting floor-standing switchboards or motor control centers, more help usually cuts the labor cost per installed unit. Some jobs simply can't be done by a crew of one. These labor savings are obvious to anyone who has done this type of work and are assumed in this book's labor tables.\n\nThis book's labor hours are typical of what a trained and motivated journeyman electrician with tools can do on a typical site. The hours include all the time it takes to actually do the work, as well as the time it takes to go get the materials, make the connections, etc. It doesn't include the time it takes to pull, set up, or operate a generator.\n\n- This book's labor hours are typical",
+      "prediction": "Response:\nSource: 2o26 national electrical estimator ebook \u2014 Other Factors That Affect Productivity\n\nOf course, there are exceptions. Sometimes a crew of one takes twice as long as a crew of two. When pulling feeder cable or setting floor-standing switchboards or motor control centers, more help usually cuts the labor cost per installed unit. Some jobs simply can't be done by a crew of one. These labor savings are obvious to anyone who has done this type of work and are assumed in this book's labor tables.\n\nThis book's labor hours are typical of what a trained and motivated journeyman electrician with tools can do on a typical site. The hours include all the time it takes to actually do the work, as well as the time it takes to go get the materials, make the connections, etc. It doesn't include the time it takes to load or unload the truck, drive to the site, or wait for other contractors to finish",
       "prompt": "### Instruction:\nSummarize the electrical construction reference source Other Factors That Affect Productivity.\n\n### Retrieved Context:\n[1] Source: 2026 national electrical estimator ebook\nSection: Other Factors That Affect Productivity\nContent: Other Factors That Affect Productivity This book's tables assume that the crew used for the job is the smallest crew appropriate for the work at hand. Usually this means that the crew is one journeyman electrician. Most experts on the productivity of construction trades agree that the smallest crew that can do the job is usually the most efficient. For example, it's foolish to have two men working together setting duplex receptacles - one handing tools and mate rial to the other as needed.\n\nKey points:\n- This book's tables assume that the crew used for the job is the smallest crew appropriate for the work at hand. Usually this means that the crew is one journeyman electrician.\n- Of course, there are exceptions. Sometimes a crew of one takes twice as long as a crew of two.\n- When pulling feeder cable or setting floor-standing switchboards or motor control centers, more help usually cuts the labor cost per installed unit. Some jobs simply can't be done by a crew of one.\n- These labor savings are obvious to anyone who has done this type of work and are assumed in this book's labor tables.\n- This book's labor hours are typical of what a trained and motivated journeyman electrician with\n\n### Response:",
       "reference": "Source: 2026 national electrical estimator ebook \u2014 Other Factors That Affect Productivity\n\nOther Factors That Affect Productivity This book's tables assume that the crew used for the job is the smallest crew appropriate for the work at hand. Usually this means that the crew is one journeyman electrician. Most experts on the productivity of construction trades agree that the smallest crew that can do the job is usually the most efficient. For example, it's foolish to have two men working together setting duplex receptacles - one handing tools and mate rial to the other as needed.\n\nKey points:\n- This book's tables assume that the crew used for the job is the smallest crew appropriate for the work at hand. Usually this means that the crew is one journeyman electrician.\n- Of course, there are exceptions. Sometimes a crew of one takes twice as long as a crew of two.\n- When pulling feeder cable or setting floor-standing switchboards or motor control centers, more help usually cuts the labor cost per installed unit. Some jobs simply can't be done by a crew of one.\n- These labor savings are obvious to anyone who has done this type of work and are assumed in this book's labor tables.\n- This book's labor hours are typical of what a trained and motivated journeyman electrician with",
       "retrieval": {
@@ -506,17 +595,23 @@
           }
         ]
       },
+      "route": "text",
+      "route_evaluation": null,
+      "runtime_owner": "text",
       "section": "Other Factors That Affect Productivity",
-      "source": "2026 national electrical estimator ebook"
+      "source": "2026 national electrical estimator ebook",
+      "tool_expectation": null,
+      "tool_name": null,
+      "tool_request": null
     },
     {
       "benchmark_id": "ebook-corrections",
       "category": "estimating_methodology",
       "judge": {
-        "rationale": "LLM-as-judge not configured",
-        "score": null
+        "rationale": "The model response is accurate, complete, and well-structured. It covers all key points from the reference answer: very few callbacks are expected when qualified electricians install quality materials; occasional ballast failure or owner negligence can cause callbacks; inadequate lighting, outdated equipment, incorrect switches/receptacles, improper wiring techniques/devices, and unresolved previous callbacks are common causes; good communication and training prevent most problems. The response is concise yet comprehensive.",
+        "score": 5
       },
-      "prediction": "Source: 2e 6e 1026 national electrical estimator ebook \u2014 Electrical contractors should have very few callbacks.\n\n- Electrical contractors should have very few callbacks. When qualified electricians install quality materials, the risk of a callback is small. Occasionally a ballast will fail after 10 or 20 hours in use.\n- And sometimes an owner's negligence will damage a circuit or switch. But most electrical contractors encounter few callbacks for defects in their work.\n- When a contractor makes a mistake or is negligent, the cost of a callback can be high. The worker who made the mistake may no longer be on the job when the callback occurs. Finding the culprit takes time, which means higher labor costs. The crew's productivity suffers because a worker can't give 100% attention to the job at hand. And there's always the risk that the owner will sue the electrical contractor.\n- Avoiding callbacks requires attention to detail throughout a job.",
+      "prediction": "Source: 2e 6e 1026 national electrical estimator ebook \u2014 Electrical contractors should have very few callbacks.\n\n- Electrical contractors should have very few callbacks. When qualified electricians install quality materials, the risk of a callback is small. Occasionally a ballast will fail after 10 or 20 hours in use.\n- And sometimes an owner's negligence will damage a circuit or switch. But most callbacks fall into the following categories:\n- \u2022 Inadequate lighting (burned out lamps)\n- \u2022 Outdated or inoperable electronic equipment (VCR, computer, TV) plugged into the outlet provided for that purpose\n- \u2022 Incorrect switch or receptacle for the application \u2022 Improper wiring techniques or devices\n- \u2022 Incorrect resolution of a previous callback All of these problems can be avoided through good communication and common sense. Train your workers to anticipate and resolve potential problems. And don't forget to follow up.",
       "prompt": "### Instruction:\nSummarize the electrical construction reference source Corrections.\n\n### Retrieved Context:\n[1] Source: 2026 national electrical estimator ebook\nSection: Corrections\nContent: If you're using a larger crew, don't have everyone work at the same time. Instead, break the crew into two units and encourage friendly competition between the two. Offer a reward for the winning crew. Corrections This book's tables assume that little or no time is spent making corrections after the work is done.\n\nKey points:\n- If you're using a larger crew, don't have everyone work at the same time. Instead, break the crew into two units and encourage friendly competition between the two. Offer a reward for the winning crew.\n- This book's tables assume that little or no time is spent making corrections after the work is done.\n- Electrical contractors should have very few callbacks.\n- When qualified electricians install quality materials, the risk of a callback is small. Occasionally a ballast will fail after 10 or 20 hours in use. And sometimes an owner's negligence will damage a circuit or switch.\n- Most electrical contractors prefer to handle specific types of work. Only a few have the capital, equipment and skills needed to handle the largest jobs.\n\n### Response:",
       "reference": "Source: 2026 national electrical estimator ebook \u2014 Corrections\n\nIf you're using a larger crew, don't have everyone work at the same time. Instead, break the crew into two units and encourage friendly competition between the two. Offer a reward for the winning crew. Corrections This book's tables assume that little or no time is spent making corrections after the work is done.\n\nKey points:\n- If you're using a larger crew, don't have everyone work at the same time. Instead, break the crew into two units and encourage friendly competition between the two. Offer a reward for the winning crew.\n- This book's tables assume that little or no time is spent making corrections after the work is done.\n- Electrical contractors should have very few callbacks.\n- When qualified electricians install quality materials, the risk of a callback is small. Occasionally a ballast will fail after 10 or 20 hours in use. And sometimes an owner's negligence will damage a circuit or switch.\n- Most electrical contractors prefer to handle specific types of work. Only a few have the capital, equipment and skills needed to handle the largest jobs.",
       "retrieval": {
@@ -544,28 +639,1197 @@
           }
         ]
       },
+      "route": "text",
+      "route_evaluation": null,
+      "runtime_owner": "text",
       "section": "Corrections",
-      "source": "2026 national electrical estimator ebook"
+      "source": "2026 national electrical estimator ebook",
+      "tool_expectation": null,
+      "tool_name": null,
+      "tool_request": null
+    },
+    {
+      "benchmark_id": "estimate-emt-adapter-3-4",
+      "category": "estimate_lookup",
+      "judge": {
+        "rationale": "not evaluated for this route",
+        "score": null
+      },
+      "prediction": "{\"category\": null, \"crew\": \"1 Elec\", \"data_contract\": {\"data_family\": \"estimate_lookup_records\", \"review_state\": \"review_required\", \"routing_hint\": \"deterministic_tool_input\", \"runtime_owner\": \"geometry_rules\", \"schema_version\": 1, \"sft_candidate\": false}, \"description\": \"EMT to conduit adapters, (compression), 3/4\\\" diameter, to 15' H\", \"estimate\": {\"bare_equipment\": 0.0, \"bare_labor\": 11.6, \"bare_materials\": 5.4, \"bare_total\": 17.0, \"crew\": \"1 Elec\", \"daily_output\": 60.0, \"description\": \"EMT to conduit adapters, (compression), 3/4\\\" diameter, to 15' H\", \"hourly_operational_cost\": null, \"installed_total\": null, \"labor_hours\": 0.133, \"rent_per_day\": null, \"rent_per_month\": null, \"rent_per_week\": null, \"unit\": \"Ea.\"}, \"family_name\": null, \"lookup_key\": \"emt-to-conduit-adapters-compression-3-4-diameter-to-15-h\", \"manufacturer\": null, \"match_reasons\": [{\"tokens\": [\"15\", \"adapters\", \"compression\", \"conduit\", \"diameter\", \"emt\", \"to\"], \"type\": \"token_overlap\", \"weight\": 21.0}, {\"field\": \"description\", \"type\": \"exact_field_match\", \"weight\": 12.0}], \"match_score\": 33.0, \"part_number\": null, \"quantity_rollup\": {\"estimated_days\": 2.0, \"quantity\": 120.0, \"supported\": true, \"totals\": {\"bare_equipment\": 0.0, \"bare_labor\": 1392.0, \"bare_materials\": 648.0, \"bare_total\": 2040.0, \"labor_hours\": 15.96}}, \"record_id\": \"estimate_lookup:2347b5ec5124f0c8\", \"source\": {\"name\": \"sources/managed/electricalai_docs/manual_review/other/estimating/RSmeans/www.rsmeansonline2.com.har\", \"row\": 9658}, \"unit\": \"Ea.\"}",
+      "prompt": "### Instruction:\nFind the estimate lookup for EMT to conduit adapters, (compression), 3/4\" diameter, to 15' H.\n\n### Response:",
+      "reference": "",
+      "retrieval": null,
+      "route": "deterministic_tool",
+      "route_evaluation": {
+        "checks": [
+          {
+            "actual": 1,
+            "expected": 1,
+            "passed": true,
+            "path": "result_count_at_least"
+          },
+          {
+            "actual": "estimate_lookup:2347b5ec5124f0c8",
+            "expected": "estimate_lookup:2347b5ec5124f0c8",
+            "passed": true,
+            "path": "top_result.record_id"
+          },
+          {
+            "actual": "emt-to-conduit-adapters-compression-3-4-diameter-to-15-h",
+            "expected": "emt-to-conduit-adapters-compression-3-4-diameter-to-15-h",
+            "passed": true,
+            "path": "top_result.lookup_key"
+          },
+          {
+            "actual": "Ea.",
+            "expected": "Ea.",
+            "passed": true,
+            "path": "top_result.unit"
+          },
+          {
+            "actual": 17.0,
+            "expected": 17.0,
+            "passed": true,
+            "path": "top_result.estimate.bare_total"
+          },
+          {
+            "actual": 0.133,
+            "expected": 0.133,
+            "passed": true,
+            "path": "top_result.estimate.labor_hours"
+          },
+          {
+            "actual": true,
+            "expected": true,
+            "passed": true,
+            "path": "top_result.quantity_rollup.supported"
+          },
+          {
+            "actual": 2.0,
+            "expected": 2.0,
+            "passed": true,
+            "path": "top_result.quantity_rollup.estimated_days"
+          },
+          {
+            "actual": 2040.0,
+            "expected": 2040.0,
+            "passed": true,
+            "path": "top_result.quantity_rollup.totals.bare_total"
+          }
+        ],
+        "match_score": 1.0,
+        "passed": true,
+        "passed_checks": 9,
+        "response": {
+          "generated_at": "2026-03-31T07:44:28.188644+00:00",
+          "provenance": {
+            "candidate_record_count": 13732,
+            "index_path": "/home/paul/src/simcoe.ai/data/raw/estimate_index.jsonl",
+            "matched_record_count": 4330,
+            "record_count": 13732
+          },
+          "request": {
+            "filters": {},
+            "lookup_key": null,
+            "quantity": 120.0,
+            "query": "EMT to conduit adapters, (compression), 3/4\" diameter, to 15' H",
+            "record_id": null,
+            "request_id": "deterministic_tool_request:b14d56a4d79af325",
+            "schema_version": 1,
+            "tool_name": "estimate_lookup",
+            "top_k": 1
+          },
+          "response_type": "lookup_result",
+          "result_count": 1,
+          "results": [
+            {
+              "category": null,
+              "crew": "1 Elec",
+              "data_contract": {
+                "data_family": "estimate_lookup_records",
+                "review_state": "review_required",
+                "routing_hint": "deterministic_tool_input",
+                "runtime_owner": "geometry_rules",
+                "schema_version": 1,
+                "sft_candidate": false
+              },
+              "description": "EMT to conduit adapters, (compression), 3/4\" diameter, to 15' H",
+              "estimate": {
+                "bare_equipment": 0.0,
+                "bare_labor": 11.6,
+                "bare_materials": 5.4,
+                "bare_total": 17.0,
+                "crew": "1 Elec",
+                "daily_output": 60.0,
+                "description": "EMT to conduit adapters, (compression), 3/4\" diameter, to 15' H",
+                "hourly_operational_cost": null,
+                "installed_total": null,
+                "labor_hours": 0.133,
+                "rent_per_day": null,
+                "rent_per_month": null,
+                "rent_per_week": null,
+                "unit": "Ea."
+              },
+              "family_name": null,
+              "lookup_key": "emt-to-conduit-adapters-compression-3-4-diameter-to-15-h",
+              "manufacturer": null,
+              "match_reasons": [
+                {
+                  "tokens": [
+                    "15",
+                    "adapters",
+                    "compression",
+                    "conduit",
+                    "diameter",
+                    "emt",
+                    "to"
+                  ],
+                  "type": "token_overlap",
+                  "weight": 21.0
+                },
+                {
+                  "field": "description",
+                  "type": "exact_field_match",
+                  "weight": 12.0
+                }
+              ],
+              "match_score": 33.0,
+              "part_number": null,
+              "quantity_rollup": {
+                "estimated_days": 2.0,
+                "quantity": 120.0,
+                "supported": true,
+                "totals": {
+                  "bare_equipment": 0.0,
+                  "bare_labor": 1392.0,
+                  "bare_materials": 648.0,
+                  "bare_total": 2040.0,
+                  "labor_hours": 15.96
+                }
+              },
+              "record_id": "estimate_lookup:2347b5ec5124f0c8",
+              "source": {
+                "name": "sources/managed/electricalai_docs/manual_review/other/estimating/RSmeans/www.rsmeansonline2.com.har",
+                "row": 9658
+              },
+              "unit": "Ea."
+            }
+          ],
+          "runtime_owner": "geometry_rules",
+          "schema_version": 1,
+          "tool_name": "estimate_lookup",
+          "warnings": []
+        },
+        "route": "deterministic_tool",
+        "tool_name": "estimate_lookup",
+        "total_checks": 9,
+        "warnings": []
+      },
+      "runtime_owner": "geometry_rules",
+      "section": "EMT to conduit adapters, (compression), 3/4\" diameter, to 15' H",
+      "source": "RSMeans estimate index",
+      "tool_expectation": {
+        "result_count_at_least": 1,
+        "top_result": {
+          "estimate": {
+            "bare_total": 17.0,
+            "labor_hours": 0.133
+          },
+          "lookup_key": "emt-to-conduit-adapters-compression-3-4-diameter-to-15-h",
+          "quantity_rollup": {
+            "estimated_days": 2.0,
+            "supported": true,
+            "totals": {
+              "bare_total": 2040.0
+            }
+          },
+          "record_id": "estimate_lookup:2347b5ec5124f0c8",
+          "unit": "Ea."
+        }
+      },
+      "tool_name": "estimate_lookup",
+      "tool_request": {
+        "quantity": 120,
+        "query": "EMT to conduit adapters, (compression), 3/4\" diameter, to 15' H",
+        "top_k": 1
+      }
+    },
+    {
+      "benchmark_id": "estimate-emt-adapter-1-inch",
+      "category": "estimate_lookup",
+      "judge": {
+        "rationale": "not evaluated for this route",
+        "score": null
+      },
+      "prediction": "{\"category\": null, \"crew\": \"1 Elec\", \"data_contract\": {\"data_family\": \"estimate_lookup_records\", \"review_state\": \"review_required\", \"routing_hint\": \"deterministic_tool_input\", \"runtime_owner\": \"geometry_rules\", \"schema_version\": 1, \"sft_candidate\": false}, \"description\": \"EMT to conduit adapters, (compression), 1\\\" diameter, to 15' H\", \"estimate\": {\"bare_equipment\": 0.0, \"bare_labor\": 13.9, \"bare_materials\": 8.25, \"bare_total\": 22.15, \"crew\": \"1 Elec\", \"daily_output\": 50.0, \"description\": \"EMT to conduit adapters, (compression), 1\\\" diameter, to 15' H\", \"hourly_operational_cost\": null, \"installed_total\": null, \"labor_hours\": 0.16, \"rent_per_day\": null, \"rent_per_month\": null, \"rent_per_week\": null, \"unit\": \"Ea.\"}, \"family_name\": null, \"lookup_key\": \"emt-to-conduit-adapters-compression-1-diameter-to-15-h\", \"manufacturer\": null, \"match_reasons\": [{\"tokens\": [\"15\", \"adapters\", \"compression\", \"conduit\", \"diameter\", \"emt\", \"to\"], \"type\": \"token_overlap\", \"weight\": 21.0}, {\"field\": \"description\", \"type\": \"exact_field_match\", \"weight\": 12.0}], \"match_score\": 33.0, \"part_number\": null, \"quantity_rollup\": {\"estimated_days\": 1.0, \"quantity\": 50.0, \"supported\": true, \"totals\": {\"bare_equipment\": 0.0, \"bare_labor\": 695.0, \"bare_materials\": 412.5, \"bare_total\": 1107.5, \"labor_hours\": 8.0}}, \"record_id\": \"estimate_lookup:26f50e1946608f39\", \"source\": {\"name\": \"sources/managed/electricalai_docs/manual_review/other/estimating/RSmeans/www.rsmeansonline2.com.har\", \"row\": 9659}, \"unit\": \"Ea.\"}",
+      "prompt": "### Instruction:\nFind the estimate lookup for EMT to conduit adapters, (compression), 1\" diameter, to 15' H.\n\n### Response:",
+      "reference": "",
+      "retrieval": null,
+      "route": "deterministic_tool",
+      "route_evaluation": {
+        "checks": [
+          {
+            "actual": 1,
+            "expected": 1,
+            "passed": true,
+            "path": "result_count_at_least"
+          },
+          {
+            "actual": "estimate_lookup:26f50e1946608f39",
+            "expected": "estimate_lookup:26f50e1946608f39",
+            "passed": true,
+            "path": "top_result.record_id"
+          },
+          {
+            "actual": "emt-to-conduit-adapters-compression-1-diameter-to-15-h",
+            "expected": "emt-to-conduit-adapters-compression-1-diameter-to-15-h",
+            "passed": true,
+            "path": "top_result.lookup_key"
+          },
+          {
+            "actual": "Ea.",
+            "expected": "Ea.",
+            "passed": true,
+            "path": "top_result.unit"
+          },
+          {
+            "actual": 22.15,
+            "expected": 22.15,
+            "passed": true,
+            "path": "top_result.estimate.bare_total"
+          },
+          {
+            "actual": 0.16,
+            "expected": 0.16,
+            "passed": true,
+            "path": "top_result.estimate.labor_hours"
+          },
+          {
+            "actual": true,
+            "expected": true,
+            "passed": true,
+            "path": "top_result.quantity_rollup.supported"
+          },
+          {
+            "actual": 1.0,
+            "expected": 1.0,
+            "passed": true,
+            "path": "top_result.quantity_rollup.estimated_days"
+          },
+          {
+            "actual": 1107.5,
+            "expected": 1107.5,
+            "passed": true,
+            "path": "top_result.quantity_rollup.totals.bare_total"
+          }
+        ],
+        "match_score": 1.0,
+        "passed": true,
+        "passed_checks": 9,
+        "response": {
+          "generated_at": "2026-03-31T07:44:28.680895+00:00",
+          "provenance": {
+            "candidate_record_count": 13732,
+            "index_path": "/home/paul/src/simcoe.ai/data/raw/estimate_index.jsonl",
+            "matched_record_count": 4330,
+            "record_count": 13732
+          },
+          "request": {
+            "filters": {},
+            "lookup_key": null,
+            "quantity": 50.0,
+            "query": "EMT to conduit adapters, (compression), 1\" diameter, to 15' H",
+            "record_id": null,
+            "request_id": "deterministic_tool_request:6bc94cf4715d50cf",
+            "schema_version": 1,
+            "tool_name": "estimate_lookup",
+            "top_k": 1
+          },
+          "response_type": "lookup_result",
+          "result_count": 1,
+          "results": [
+            {
+              "category": null,
+              "crew": "1 Elec",
+              "data_contract": {
+                "data_family": "estimate_lookup_records",
+                "review_state": "review_required",
+                "routing_hint": "deterministic_tool_input",
+                "runtime_owner": "geometry_rules",
+                "schema_version": 1,
+                "sft_candidate": false
+              },
+              "description": "EMT to conduit adapters, (compression), 1\" diameter, to 15' H",
+              "estimate": {
+                "bare_equipment": 0.0,
+                "bare_labor": 13.9,
+                "bare_materials": 8.25,
+                "bare_total": 22.15,
+                "crew": "1 Elec",
+                "daily_output": 50.0,
+                "description": "EMT to conduit adapters, (compression), 1\" diameter, to 15' H",
+                "hourly_operational_cost": null,
+                "installed_total": null,
+                "labor_hours": 0.16,
+                "rent_per_day": null,
+                "rent_per_month": null,
+                "rent_per_week": null,
+                "unit": "Ea."
+              },
+              "family_name": null,
+              "lookup_key": "emt-to-conduit-adapters-compression-1-diameter-to-15-h",
+              "manufacturer": null,
+              "match_reasons": [
+                {
+                  "tokens": [
+                    "15",
+                    "adapters",
+                    "compression",
+                    "conduit",
+                    "diameter",
+                    "emt",
+                    "to"
+                  ],
+                  "type": "token_overlap",
+                  "weight": 21.0
+                },
+                {
+                  "field": "description",
+                  "type": "exact_field_match",
+                  "weight": 12.0
+                }
+              ],
+              "match_score": 33.0,
+              "part_number": null,
+              "quantity_rollup": {
+                "estimated_days": 1.0,
+                "quantity": 50.0,
+                "supported": true,
+                "totals": {
+                  "bare_equipment": 0.0,
+                  "bare_labor": 695.0,
+                  "bare_materials": 412.5,
+                  "bare_total": 1107.5,
+                  "labor_hours": 8.0
+                }
+              },
+              "record_id": "estimate_lookup:26f50e1946608f39",
+              "source": {
+                "name": "sources/managed/electricalai_docs/manual_review/other/estimating/RSmeans/www.rsmeansonline2.com.har",
+                "row": 9659
+              },
+              "unit": "Ea."
+            }
+          ],
+          "runtime_owner": "geometry_rules",
+          "schema_version": 1,
+          "tool_name": "estimate_lookup",
+          "warnings": []
+        },
+        "route": "deterministic_tool",
+        "tool_name": "estimate_lookup",
+        "total_checks": 9,
+        "warnings": []
+      },
+      "runtime_owner": "geometry_rules",
+      "section": "EMT to conduit adapters, (compression), 1\" diameter, to 15' H",
+      "source": "RSMeans estimate index",
+      "tool_expectation": {
+        "result_count_at_least": 1,
+        "top_result": {
+          "estimate": {
+            "bare_total": 22.15,
+            "labor_hours": 0.16
+          },
+          "lookup_key": "emt-to-conduit-adapters-compression-1-diameter-to-15-h",
+          "quantity_rollup": {
+            "estimated_days": 1.0,
+            "supported": true,
+            "totals": {
+              "bare_total": 1107.5
+            }
+          },
+          "record_id": "estimate_lookup:26f50e1946608f39",
+          "unit": "Ea."
+        }
+      },
+      "tool_name": "estimate_lookup",
+      "tool_request": {
+        "quantity": 50,
+        "query": "EMT to conduit adapters, (compression), 1\" diameter, to 15' H",
+        "top_k": 1
+      }
+    },
+    {
+      "benchmark_id": "estimate-main-office-expense-over-10m",
+      "category": "estimate_lookup",
+      "judge": {
+        "rationale": "not evaluated for this route",
+        "score": null
+      },
+      "prediction": "{\"category\": null, \"crew\": null, \"data_contract\": {\"data_family\": \"estimate_lookup_records\", \"review_state\": \"review_required\", \"routing_hint\": \"deterministic_tool_input\", \"runtime_owner\": \"geometry_rules\", \"schema_version\": 1, \"sft_candidate\": false}, \"description\": \"Main office expense, average for General Contractors as a percentage of annual volume, annual volume over $10,000,000\", \"estimate\": {\"bare_equipment\": 0.0, \"bare_labor\": 0.0, \"bare_materials\": 0.0, \"bare_total\": null, \"crew\": null, \"daily_output\": null, \"description\": \"Main office expense, average for General Contractors as a percentage of annual volume, annual volume over $10,000,000\", \"hourly_operational_cost\": null, \"installed_total\": null, \"labor_hours\": null, \"rent_per_day\": null, \"rent_per_month\": null, \"rent_per_week\": null, \"unit\": \"% Vol.\"}, \"family_name\": null, \"lookup_key\": \"main-office-expense-average-for-general-contractors-as-a-percentage-of-annual-volume-annual-volume-over-10-000-000\", \"manufacturer\": null, \"match_reasons\": [{\"tokens\": [\"000\", \"10\", \"annual\", \"as\", \"average\", \"contractors\", \"expense\", \"for\", \"general\", \"main\", \"of\", \"office\", \"over\", \"percentage\", \"volume\"], \"type\": \"token_overlap\", \"weight\": 45.0}, {\"field\": \"description\", \"type\": \"exact_field_match\", \"weight\": 12.0}, {\"field\": \"unit\", \"type\": \"query_contains_field\", \"weight\": 1.0}], \"match_score\": 58.0, \"part_number\": null, \"quantity_rollup\": {\"quantity\": 10.0, \"reason\": \"unit_not_rollup_safe\", \"supported\": false}, \"record_id\": \"estimate_lookup:2ce93ae914611337\", \"source\": {\"name\": \"sources/managed/electricalai_docs/manual_review/other/estimating/RSmeans/www.rsmeansonline.com.har\", \"row\": 3}, \"unit\": \"% Vol.\"}",
+      "prompt": "### Instruction:\nFind the estimate lookup for main office expense, average for General Contractors as a percentage of annual volume over $10,000,000.\n\n### Response:",
+      "reference": "",
+      "retrieval": null,
+      "route": "deterministic_tool",
+      "route_evaluation": {
+        "checks": [
+          {
+            "actual": 1,
+            "expected": 1,
+            "passed": true,
+            "path": "result_count_at_least"
+          },
+          {
+            "actual": "estimate_lookup:2ce93ae914611337",
+            "expected": "estimate_lookup:2ce93ae914611337",
+            "passed": true,
+            "path": "top_result.record_id"
+          },
+          {
+            "actual": "main-office-expense-average-for-general-contractors-as-a-percentage-of-annual-volume-annual-volume-over-10-000-000",
+            "expected": "main-office-expense-average-for-general-contractors-as-a-percentage-of-annual-volume-annual-volume-over-10-000-000",
+            "passed": true,
+            "path": "top_result.lookup_key"
+          },
+          {
+            "actual": "% Vol.",
+            "expected": "% Vol.",
+            "passed": true,
+            "path": "top_result.unit"
+          },
+          {
+            "actual": false,
+            "expected": false,
+            "passed": true,
+            "path": "top_result.quantity_rollup.supported"
+          },
+          {
+            "actual": "unit_not_rollup_safe",
+            "expected": "unit_not_rollup_safe",
+            "passed": true,
+            "path": "top_result.quantity_rollup.reason"
+          }
+        ],
+        "match_score": 1.0,
+        "passed": true,
+        "passed_checks": 6,
+        "response": {
+          "generated_at": "2026-03-31T07:44:29.053726+00:00",
+          "provenance": {
+            "candidate_record_count": 13732,
+            "index_path": "/home/paul/src/simcoe.ai/data/raw/estimate_index.jsonl",
+            "matched_record_count": 3164,
+            "record_count": 13732
+          },
+          "request": {
+            "filters": {},
+            "lookup_key": null,
+            "quantity": 10.0,
+            "query": "Main office expense, average for General Contractors as a percentage of annual volume, annual volume over $10,000,000",
+            "record_id": null,
+            "request_id": "deterministic_tool_request:e4b88fee8c82fa2b",
+            "schema_version": 1,
+            "tool_name": "estimate_lookup",
+            "top_k": 1
+          },
+          "response_type": "lookup_result",
+          "result_count": 1,
+          "results": [
+            {
+              "category": null,
+              "crew": null,
+              "data_contract": {
+                "data_family": "estimate_lookup_records",
+                "review_state": "review_required",
+                "routing_hint": "deterministic_tool_input",
+                "runtime_owner": "geometry_rules",
+                "schema_version": 1,
+                "sft_candidate": false
+              },
+              "description": "Main office expense, average for General Contractors as a percentage of annual volume, annual volume over $10,000,000",
+              "estimate": {
+                "bare_equipment": 0.0,
+                "bare_labor": 0.0,
+                "bare_materials": 0.0,
+                "bare_total": null,
+                "crew": null,
+                "daily_output": null,
+                "description": "Main office expense, average for General Contractors as a percentage of annual volume, annual volume over $10,000,000",
+                "hourly_operational_cost": null,
+                "installed_total": null,
+                "labor_hours": null,
+                "rent_per_day": null,
+                "rent_per_month": null,
+                "rent_per_week": null,
+                "unit": "% Vol."
+              },
+              "family_name": null,
+              "lookup_key": "main-office-expense-average-for-general-contractors-as-a-percentage-of-annual-volume-annual-volume-over-10-000-000",
+              "manufacturer": null,
+              "match_reasons": [
+                {
+                  "tokens": [
+                    "000",
+                    "10",
+                    "annual",
+                    "as",
+                    "average",
+                    "contractors",
+                    "expense",
+                    "for",
+                    "general",
+                    "main",
+                    "of",
+                    "office",
+                    "over",
+                    "percentage",
+                    "volume"
+                  ],
+                  "type": "token_overlap",
+                  "weight": 45.0
+                },
+                {
+                  "field": "description",
+                  "type": "exact_field_match",
+                  "weight": 12.0
+                },
+                {
+                  "field": "unit",
+                  "type": "query_contains_field",
+                  "weight": 1.0
+                }
+              ],
+              "match_score": 58.0,
+              "part_number": null,
+              "quantity_rollup": {
+                "quantity": 10.0,
+                "reason": "unit_not_rollup_safe",
+                "supported": false
+              },
+              "record_id": "estimate_lookup:2ce93ae914611337",
+              "source": {
+                "name": "sources/managed/electricalai_docs/manual_review/other/estimating/RSmeans/www.rsmeansonline.com.har",
+                "row": 3
+              },
+              "unit": "% Vol."
+            }
+          ],
+          "runtime_owner": "geometry_rules",
+          "schema_version": 1,
+          "tool_name": "estimate_lookup",
+          "warnings": []
+        },
+        "route": "deterministic_tool",
+        "tool_name": "estimate_lookup",
+        "total_checks": 6,
+        "warnings": []
+      },
+      "runtime_owner": "geometry_rules",
+      "section": "Main office expense, average for General Contractors as a percentage of annual volume, annual volume over $10,000,000",
+      "source": "RSMeans estimate index",
+      "tool_expectation": {
+        "result_count_at_least": 1,
+        "top_result": {
+          "lookup_key": "main-office-expense-average-for-general-contractors-as-a-percentage-of-annual-volume-annual-volume-over-10-000-000",
+          "quantity_rollup": {
+            "reason": "unit_not_rollup_safe",
+            "supported": false
+          },
+          "record_id": "estimate_lookup:2ce93ae914611337",
+          "unit": "% Vol."
+        }
+      },
+      "tool_name": "estimate_lookup",
+      "tool_request": {
+        "quantity": 10,
+        "query": "Main office expense, average for General Contractors as a percentage of annual volume, annual volume over $10,000,000",
+        "top_k": 1
+      }
+    },
+    {
+      "benchmark_id": "revit-aluminum-rack-assembly",
+      "category": "revit_entity_lookup",
+      "judge": {
+        "rationale": "not evaluated for this route",
+        "score": null
+      },
+      "prediction": "{\"category\": \"Assemblies\", \"cost\": null, \"data_contract\": {\"data_family\": \"spatial_grounding_records\", \"review_state\": \"review_required\", \"routing_hint\": \"deterministic_tool_input\", \"runtime_owner\": \"geometry_rules\", \"schema_version\": 1, \"sft_candidate\": false}, \"description\": \"Aluminum Rack Assembly\", \"estimate_id\": null, \"family_and_type\": \"eE_ASM_Aluminum_Rack : eE_ASM_Aluminum_Rack\", \"family_name\": \"eE_ASM_Aluminum_Rack\", \"file_type\": null, \"finish\": null, \"labor_hours\": null, \"lookup_key\": \"assemblies-aluminum-rack-ee-asm-aluminum-rack-ee-asm-aluminum-rack-aluminum-rack-assembly\", \"manufacturer\": null, \"match_reasons\": [{\"tokens\": [\"aluminum\", \"assembly\", \"rack\"], \"type\": \"token_overlap\", \"weight\": 9.0}, {\"field\": \"description\", \"type\": \"exact_field_match\", \"weight\": 12.0}, {\"field\": \"subcategory\", \"type\": \"query_contains_field\", \"weight\": 5.0}], \"match_score\": 26.0, \"material\": null, \"model\": null, \"nominal_diameter\": null, \"overall_length\": null, \"part_number\": null, \"record_id\": \"revit_family_reference:6f1afdb2557532cd\", \"record_type\": \"revit_family_reference\", \"relative_source_path\": null, \"size\": null, \"source_fields\": null, \"source_name\": \"sources/managed/electricalai_docs/manual_review/tabular/csv model info/eV_FamilyInstanceList(2).xlsx - Itemized List - Final Export.csv\", \"source_path\": null, \"source_type\": \"structured_export\", \"source_url\": null, \"subcategory\": \"Aluminum Rack\", \"type_name\": \"eE_ASM_Aluminum_Rack\", \"unit\": \"ASM\"}",
+      "prompt": "### Instruction:\nFind the Revit entity lookup for Aluminum Rack Assembly.\n\n### Response:",
+      "reference": "",
+      "retrieval": null,
+      "route": "deterministic_tool",
+      "route_evaluation": {
+        "checks": [
+          {
+            "actual": 1,
+            "expected": 1,
+            "passed": true,
+            "path": "result_count_at_least"
+          },
+          {
+            "actual": "revit_family_reference:6f1afdb2557532cd",
+            "expected": "revit_family_reference:6f1afdb2557532cd",
+            "passed": true,
+            "path": "top_result.record_id"
+          },
+          {
+            "actual": "assemblies-aluminum-rack-ee-asm-aluminum-rack-ee-asm-aluminum-rack-aluminum-rack-assembly",
+            "expected": "assemblies-aluminum-rack-ee-asm-aluminum-rack-ee-asm-aluminum-rack-aluminum-rack-assembly",
+            "passed": true,
+            "path": "top_result.lookup_key"
+          },
+          {
+            "actual": "Assemblies",
+            "expected": "Assemblies",
+            "passed": true,
+            "path": "top_result.category"
+          },
+          {
+            "actual": "Aluminum Rack",
+            "expected": "Aluminum Rack",
+            "passed": true,
+            "path": "top_result.subcategory"
+          },
+          {
+            "actual": "eE_ASM_Aluminum_Rack",
+            "expected": "eE_ASM_Aluminum_Rack",
+            "passed": true,
+            "path": "top_result.family_name"
+          },
+          {
+            "actual": "eE_ASM_Aluminum_Rack",
+            "expected": "eE_ASM_Aluminum_Rack",
+            "passed": true,
+            "path": "top_result.type_name"
+          },
+          {
+            "actual": "Aluminum Rack Assembly",
+            "expected": "Aluminum Rack Assembly",
+            "passed": true,
+            "path": "top_result.description"
+          },
+          {
+            "actual": "ASM",
+            "expected": "ASM",
+            "passed": true,
+            "path": "top_result.unit"
+          }
+        ],
+        "match_score": 1.0,
+        "passed": true,
+        "passed_checks": 9,
+        "response": {
+          "generated_at": "2026-03-31T07:44:29.282691+00:00",
+          "provenance": {
+            "candidate_record_count": 9813,
+            "index_path": "/home/paul/src/simcoe.ai/data/raw/revit_family_index.jsonl",
+            "matched_record_count": 274,
+            "record_count": 9813
+          },
+          "request": {
+            "filters": {},
+            "lookup_key": null,
+            "quantity": null,
+            "query": "Aluminum Rack Assembly",
+            "record_id": null,
+            "request_id": "deterministic_tool_request:f716d6287fa0cdc7",
+            "schema_version": 1,
+            "tool_name": "revit_entity_lookup",
+            "top_k": 1
+          },
+          "response_type": "lookup_result",
+          "result_count": 1,
+          "results": [
+            {
+              "category": "Assemblies",
+              "cost": null,
+              "data_contract": {
+                "data_family": "spatial_grounding_records",
+                "review_state": "review_required",
+                "routing_hint": "deterministic_tool_input",
+                "runtime_owner": "geometry_rules",
+                "schema_version": 1,
+                "sft_candidate": false
+              },
+              "description": "Aluminum Rack Assembly",
+              "estimate_id": null,
+              "family_and_type": "eE_ASM_Aluminum_Rack : eE_ASM_Aluminum_Rack",
+              "family_name": "eE_ASM_Aluminum_Rack",
+              "file_type": null,
+              "finish": null,
+              "labor_hours": null,
+              "lookup_key": "assemblies-aluminum-rack-ee-asm-aluminum-rack-ee-asm-aluminum-rack-aluminum-rack-assembly",
+              "manufacturer": null,
+              "match_reasons": [
+                {
+                  "tokens": [
+                    "aluminum",
+                    "assembly",
+                    "rack"
+                  ],
+                  "type": "token_overlap",
+                  "weight": 9.0
+                },
+                {
+                  "field": "description",
+                  "type": "exact_field_match",
+                  "weight": 12.0
+                },
+                {
+                  "field": "subcategory",
+                  "type": "query_contains_field",
+                  "weight": 5.0
+                }
+              ],
+              "match_score": 26.0,
+              "material": null,
+              "model": null,
+              "nominal_diameter": null,
+              "overall_length": null,
+              "part_number": null,
+              "record_id": "revit_family_reference:6f1afdb2557532cd",
+              "record_type": "revit_family_reference",
+              "relative_source_path": null,
+              "size": null,
+              "source_fields": null,
+              "source_name": "sources/managed/electricalai_docs/manual_review/tabular/csv model info/eV_FamilyInstanceList(2).xlsx - Itemized List - Final Export.csv",
+              "source_path": null,
+              "source_type": "structured_export",
+              "source_url": null,
+              "subcategory": "Aluminum Rack",
+              "type_name": "eE_ASM_Aluminum_Rack",
+              "unit": "ASM"
+            }
+          ],
+          "runtime_owner": "geometry_rules",
+          "schema_version": 1,
+          "tool_name": "revit_entity_lookup",
+          "warnings": []
+        },
+        "route": "deterministic_tool",
+        "tool_name": "revit_entity_lookup",
+        "total_checks": 9,
+        "warnings": []
+      },
+      "runtime_owner": "geometry_rules",
+      "section": "Aluminum Rack Assembly",
+      "source": "Revit structured export",
+      "tool_expectation": {
+        "result_count_at_least": 1,
+        "top_result": {
+          "category": "Assemblies",
+          "description": "Aluminum Rack Assembly",
+          "family_name": "eE_ASM_Aluminum_Rack",
+          "lookup_key": "assemblies-aluminum-rack-ee-asm-aluminum-rack-ee-asm-aluminum-rack-aluminum-rack-assembly",
+          "record_id": "revit_family_reference:6f1afdb2557532cd",
+          "subcategory": "Aluminum Rack",
+          "type_name": "eE_ASM_Aluminum_Rack",
+          "unit": "ASM"
+        }
+      },
+      "tool_name": "revit_entity_lookup",
+      "tool_request": {
+        "query": "Aluminum Rack Assembly",
+        "top_k": 1
+      }
+    },
+    {
+      "benchmark_id": "revit-pullbox-nema-1-galvanized",
+      "category": "revit_entity_lookup",
+      "judge": {
+        "rationale": "not evaluated for this route",
+        "score": null
+      },
+      "prediction": "{\"category\": \"Assemblies\", \"cost\": null, \"data_contract\": {\"data_family\": \"spatial_grounding_records\", \"review_state\": \"review_required\", \"routing_hint\": \"deterministic_tool_input\", \"runtime_owner\": \"geometry_rules\", \"schema_version\": 1, \"sft_candidate\": false}, \"description\": \"12in x 48in x 48in Nema 1 Galvanized Screw Cover\", \"estimate_id\": null, \"family_and_type\": \"eE_ASM_Pullbox_Supported_v3 : Nema 1 Galvanized\", \"family_name\": \"eE_ASM_Pullbox_Supported_v3\", \"file_type\": null, \"finish\": null, \"labor_hours\": null, \"lookup_key\": \"assemblies-junction-box-ee-asm-pullbox-supported-v3-nema-1-galvanized-12in-x-48in-x-48in-nema-1-galvanized-screw-cover\", \"manufacturer\": null, \"match_reasons\": [{\"tokens\": [\"12in\", \"48in\", \"cover\", \"galvanized\", \"nema\", \"screw\"], \"type\": \"token_overlap\", \"weight\": 18.0}, {\"field\": \"type_name\", \"type\": \"query_contains_field\", \"weight\": 7.0}, {\"field\": \"description\", \"type\": \"exact_field_match\", \"weight\": 12.0}], \"match_score\": 37.0, \"material\": null, \"model\": null, \"nominal_diameter\": null, \"overall_length\": null, \"part_number\": null, \"record_id\": \"revit_family_reference:cd6997f046c7197d\", \"record_type\": \"revit_family_reference\", \"relative_source_path\": null, \"size\": null, \"source_fields\": null, \"source_name\": \"sources/managed/electricalai_docs/manual_review/tabular/csv model info/eV_FamilyInstanceList(2).xlsx - Itemized List - Final Export.csv\", \"source_path\": null, \"source_type\": \"structured_export\", \"source_url\": null, \"subcategory\": \"Junction Box\", \"type_name\": \"Nema 1 Galvanized\", \"unit\": \"ASM\"}",
+      "prompt": "### Instruction:\nFind the Revit entity lookup for 12in x 48in x 48in Nema 1 Galvanized Screw Cover.\n\n### Response:",
+      "reference": "",
+      "retrieval": null,
+      "route": "deterministic_tool",
+      "route_evaluation": {
+        "checks": [
+          {
+            "actual": 1,
+            "expected": 1,
+            "passed": true,
+            "path": "result_count_at_least"
+          },
+          {
+            "actual": "revit_family_reference:cd6997f046c7197d",
+            "expected": "revit_family_reference:cd6997f046c7197d",
+            "passed": true,
+            "path": "top_result.record_id"
+          },
+          {
+            "actual": "assemblies-junction-box-ee-asm-pullbox-supported-v3-nema-1-galvanized-12in-x-48in-x-48in-nema-1-galvanized-screw-cover",
+            "expected": "assemblies-junction-box-ee-asm-pullbox-supported-v3-nema-1-galvanized-12in-x-48in-x-48in-nema-1-galvanized-screw-cover",
+            "passed": true,
+            "path": "top_result.lookup_key"
+          },
+          {
+            "actual": "Assemblies",
+            "expected": "Assemblies",
+            "passed": true,
+            "path": "top_result.category"
+          },
+          {
+            "actual": "Junction Box",
+            "expected": "Junction Box",
+            "passed": true,
+            "path": "top_result.subcategory"
+          },
+          {
+            "actual": "eE_ASM_Pullbox_Supported_v3",
+            "expected": "eE_ASM_Pullbox_Supported_v3",
+            "passed": true,
+            "path": "top_result.family_name"
+          },
+          {
+            "actual": "Nema 1 Galvanized",
+            "expected": "Nema 1 Galvanized",
+            "passed": true,
+            "path": "top_result.type_name"
+          },
+          {
+            "actual": "12in x 48in x 48in Nema 1 Galvanized Screw Cover",
+            "expected": "12in x 48in x 48in Nema 1 Galvanized Screw Cover",
+            "passed": true,
+            "path": "top_result.description"
+          },
+          {
+            "actual": "ASM",
+            "expected": "ASM",
+            "passed": true,
+            "path": "top_result.unit"
+          }
+        ],
+        "match_score": 1.0,
+        "passed": true,
+        "passed_checks": 9,
+        "response": {
+          "generated_at": "2026-03-31T07:44:29.511005+00:00",
+          "provenance": {
+            "candidate_record_count": 9813,
+            "index_path": "/home/paul/src/simcoe.ai/data/raw/revit_family_index.jsonl",
+            "matched_record_count": 2193,
+            "record_count": 9813
+          },
+          "request": {
+            "filters": {},
+            "lookup_key": null,
+            "quantity": null,
+            "query": "12in x 48in x 48in Nema 1 Galvanized Screw Cover",
+            "record_id": null,
+            "request_id": "deterministic_tool_request:147f315e4af63df5",
+            "schema_version": 1,
+            "tool_name": "revit_entity_lookup",
+            "top_k": 1
+          },
+          "response_type": "lookup_result",
+          "result_count": 1,
+          "results": [
+            {
+              "category": "Assemblies",
+              "cost": null,
+              "data_contract": {
+                "data_family": "spatial_grounding_records",
+                "review_state": "review_required",
+                "routing_hint": "deterministic_tool_input",
+                "runtime_owner": "geometry_rules",
+                "schema_version": 1,
+                "sft_candidate": false
+              },
+              "description": "12in x 48in x 48in Nema 1 Galvanized Screw Cover",
+              "estimate_id": null,
+              "family_and_type": "eE_ASM_Pullbox_Supported_v3 : Nema 1 Galvanized",
+              "family_name": "eE_ASM_Pullbox_Supported_v3",
+              "file_type": null,
+              "finish": null,
+              "labor_hours": null,
+              "lookup_key": "assemblies-junction-box-ee-asm-pullbox-supported-v3-nema-1-galvanized-12in-x-48in-x-48in-nema-1-galvanized-screw-cover",
+              "manufacturer": null,
+              "match_reasons": [
+                {
+                  "tokens": [
+                    "12in",
+                    "48in",
+                    "cover",
+                    "galvanized",
+                    "nema",
+                    "screw"
+                  ],
+                  "type": "token_overlap",
+                  "weight": 18.0
+                },
+                {
+                  "field": "type_name",
+                  "type": "query_contains_field",
+                  "weight": 7.0
+                },
+                {
+                  "field": "description",
+                  "type": "exact_field_match",
+                  "weight": 12.0
+                }
+              ],
+              "match_score": 37.0,
+              "material": null,
+              "model": null,
+              "nominal_diameter": null,
+              "overall_length": null,
+              "part_number": null,
+              "record_id": "revit_family_reference:cd6997f046c7197d",
+              "record_type": "revit_family_reference",
+              "relative_source_path": null,
+              "size": null,
+              "source_fields": null,
+              "source_name": "sources/managed/electricalai_docs/manual_review/tabular/csv model info/eV_FamilyInstanceList(2).xlsx - Itemized List - Final Export.csv",
+              "source_path": null,
+              "source_type": "structured_export",
+              "source_url": null,
+              "subcategory": "Junction Box",
+              "type_name": "Nema 1 Galvanized",
+              "unit": "ASM"
+            }
+          ],
+          "runtime_owner": "geometry_rules",
+          "schema_version": 1,
+          "tool_name": "revit_entity_lookup",
+          "warnings": []
+        },
+        "route": "deterministic_tool",
+        "tool_name": "revit_entity_lookup",
+        "total_checks": 9,
+        "warnings": []
+      },
+      "runtime_owner": "geometry_rules",
+      "section": "12in x 48in x 48in Nema 1 Galvanized Screw Cover",
+      "source": "Revit structured export",
+      "tool_expectation": {
+        "result_count_at_least": 1,
+        "top_result": {
+          "category": "Assemblies",
+          "description": "12in x 48in x 48in Nema 1 Galvanized Screw Cover",
+          "family_name": "eE_ASM_Pullbox_Supported_v3",
+          "lookup_key": "assemblies-junction-box-ee-asm-pullbox-supported-v3-nema-1-galvanized-12in-x-48in-x-48in-nema-1-galvanized-screw-cover",
+          "record_id": "revit_family_reference:cd6997f046c7197d",
+          "subcategory": "Junction Box",
+          "type_name": "Nema 1 Galvanized",
+          "unit": "ASM"
+        }
+      },
+      "tool_name": "revit_entity_lookup",
+      "tool_request": {
+        "query": "12in x 48in x 48in Nema 1 Galvanized Screw Cover",
+        "top_k": 1
+      }
+    },
+    {
+      "benchmark_id": "revit-emt-nipple-description-only",
+      "category": "revit_entity_lookup",
+      "judge": {
+        "rationale": "not evaluated for this route",
+        "score": null
+      },
+      "prediction": "{\"category\": \"Assemblies\", \"cost\": null, \"data_contract\": {\"data_family\": \"spatial_grounding_records\", \"review_state\": \"review_required\", \"routing_hint\": \"deterministic_tool_input\", \"runtime_owner\": \"geometry_rules\", \"schema_version\": 1, \"sft_candidate\": false}, \"description\": \"1-1/2in EMT Nipple\", \"estimate_id\": null, \"family_and_type\": null, \"family_name\": null, \"file_type\": null, \"finish\": null, \"labor_hours\": null, \"lookup_key\": \"assemblies-emt-nipple-1-1-2in-emt-nipple\", \"manufacturer\": null, \"match_reasons\": [{\"tokens\": [\"2in\", \"emt\", \"nipple\"], \"type\": \"token_overlap\", \"weight\": 9.0}, {\"field\": \"description\", \"type\": \"exact_field_match\", \"weight\": 12.0}, {\"field\": \"subcategory\", \"type\": \"query_contains_field\", \"weight\": 5.0}], \"match_score\": 26.0, \"material\": null, \"model\": null, \"nominal_diameter\": null, \"overall_length\": null, \"part_number\": null, \"record_id\": \"revit_family_reference:8eb95d38f199a2c8\", \"record_type\": \"revit_family_reference\", \"relative_source_path\": null, \"size\": null, \"source_fields\": null, \"source_name\": \"sources/managed/electricalai_docs/manual_review/tabular/csv model info/eV_FamilyInstanceList(2).xlsx - Itemized List - Final Export.csv\", \"source_path\": null, \"source_type\": \"structured_export\", \"source_url\": null, \"subcategory\": \"EMT Nipple\", \"type_name\": null, \"unit\": \"ASM\"}",
+      "prompt": "### Instruction:\nFind the Revit entity lookup for 1-1/2in EMT Nipple.\n\n### Response:",
+      "reference": "",
+      "retrieval": null,
+      "route": "deterministic_tool",
+      "route_evaluation": {
+        "checks": [
+          {
+            "actual": 1,
+            "expected": 1,
+            "passed": true,
+            "path": "result_count_at_least"
+          },
+          {
+            "actual": "revit_family_reference:8eb95d38f199a2c8",
+            "expected": "revit_family_reference:8eb95d38f199a2c8",
+            "passed": true,
+            "path": "top_result.record_id"
+          },
+          {
+            "actual": "assemblies-emt-nipple-1-1-2in-emt-nipple",
+            "expected": "assemblies-emt-nipple-1-1-2in-emt-nipple",
+            "passed": true,
+            "path": "top_result.lookup_key"
+          },
+          {
+            "actual": "Assemblies",
+            "expected": "Assemblies",
+            "passed": true,
+            "path": "top_result.category"
+          },
+          {
+            "actual": "EMT Nipple",
+            "expected": "EMT Nipple",
+            "passed": true,
+            "path": "top_result.subcategory"
+          },
+          {
+            "actual": null,
+            "expected": null,
+            "passed": true,
+            "path": "top_result.family_name"
+          },
+          {
+            "actual": null,
+            "expected": null,
+            "passed": true,
+            "path": "top_result.type_name"
+          },
+          {
+            "actual": "1-1/2in EMT Nipple",
+            "expected": "1-1/2in EMT Nipple",
+            "passed": true,
+            "path": "top_result.description"
+          },
+          {
+            "actual": "ASM",
+            "expected": "ASM",
+            "passed": true,
+            "path": "top_result.unit"
+          }
+        ],
+        "match_score": 1.0,
+        "passed": true,
+        "passed_checks": 9,
+        "response": {
+          "generated_at": "2026-03-31T07:44:29.894134+00:00",
+          "provenance": {
+            "candidate_record_count": 9813,
+            "index_path": "/home/paul/src/simcoe.ai/data/raw/revit_family_index.jsonl",
+            "matched_record_count": 3331,
+            "record_count": 9813
+          },
+          "request": {
+            "filters": {},
+            "lookup_key": null,
+            "quantity": null,
+            "query": "1-1/2in EMT Nipple",
+            "record_id": null,
+            "request_id": "deterministic_tool_request:534731fe39a0bee3",
+            "schema_version": 1,
+            "tool_name": "revit_entity_lookup",
+            "top_k": 1
+          },
+          "response_type": "lookup_result",
+          "result_count": 1,
+          "results": [
+            {
+              "category": "Assemblies",
+              "cost": null,
+              "data_contract": {
+                "data_family": "spatial_grounding_records",
+                "review_state": "review_required",
+                "routing_hint": "deterministic_tool_input",
+                "runtime_owner": "geometry_rules",
+                "schema_version": 1,
+                "sft_candidate": false
+              },
+              "description": "1-1/2in EMT Nipple",
+              "estimate_id": null,
+              "family_and_type": null,
+              "family_name": null,
+              "file_type": null,
+              "finish": null,
+              "labor_hours": null,
+              "lookup_key": "assemblies-emt-nipple-1-1-2in-emt-nipple",
+              "manufacturer": null,
+              "match_reasons": [
+                {
+                  "tokens": [
+                    "2in",
+                    "emt",
+                    "nipple"
+                  ],
+                  "type": "token_overlap",
+                  "weight": 9.0
+                },
+                {
+                  "field": "description",
+                  "type": "exact_field_match",
+                  "weight": 12.0
+                },
+                {
+                  "field": "subcategory",
+                  "type": "query_contains_field",
+                  "weight": 5.0
+                }
+              ],
+              "match_score": 26.0,
+              "material": null,
+              "model": null,
+              "nominal_diameter": null,
+              "overall_length": null,
+              "part_number": null,
+              "record_id": "revit_family_reference:8eb95d38f199a2c8",
+              "record_type": "revit_family_reference",
+              "relative_source_path": null,
+              "size": null,
+              "source_fields": null,
+              "source_name": "sources/managed/electricalai_docs/manual_review/tabular/csv model info/eV_FamilyInstanceList(2).xlsx - Itemized List - Final Export.csv",
+              "source_path": null,
+              "source_type": "structured_export",
+              "source_url": null,
+              "subcategory": "EMT Nipple",
+              "type_name": null,
+              "unit": "ASM"
+            }
+          ],
+          "runtime_owner": "geometry_rules",
+          "schema_version": 1,
+          "tool_name": "revit_entity_lookup",
+          "warnings": []
+        },
+        "route": "deterministic_tool",
+        "tool_name": "revit_entity_lookup",
+        "total_checks": 9,
+        "warnings": []
+      },
+      "runtime_owner": "geometry_rules",
+      "section": "1-1/2in EMT Nipple",
+      "source": "Revit structured export",
+      "tool_expectation": {
+        "result_count_at_least": 1,
+        "top_result": {
+          "category": "Assemblies",
+          "description": "1-1/2in EMT Nipple",
+          "family_name": null,
+          "lookup_key": "assemblies-emt-nipple-1-1-2in-emt-nipple",
+          "record_id": "revit_family_reference:8eb95d38f199a2c8",
+          "subcategory": "EMT Nipple",
+          "type_name": null,
+          "unit": "ASM"
+        }
+      },
+      "tool_name": "revit_entity_lookup",
+      "tool_request": {
+        "query": "1-1/2in EMT Nipple",
+        "top_k": 1
+      }
     }
   ],
   "release_gate": {
     "checks": [
       {
-        "actual": 0.4295,
+        "actual": 0.4262,
         "name": "rouge1",
         "passed": true,
         "status": "evaluated",
         "threshold": 0.22
       },
       {
-        "actual": 0.2875,
+        "actual": 0.2852,
         "name": "rouge2",
         "passed": true,
         "status": "evaluated",
         "threshold": 0.12
       },
       {
-        "actual": 0.3418,
+        "actual": 0.3473,
         "name": "rougeL",
         "passed": true,
         "status": "evaluated",
@@ -579,50 +1843,60 @@
         "threshold": 0.0
       },
       {
-        "actual": null,
+        "actual": 4.9167,
         "name": "avg_judge_score",
         "passed": true,
-        "reason": "judge scores unavailable",
-        "status": "skipped",
+        "status": "evaluated",
         "threshold": 3.5
       },
       {
-        "actual": 0.4681,
+        "actual": {
+          "grounded_examples": 12,
+          "retrieval_enabled": true,
+          "retrieval_used": true
+        },
+        "name": "grounded_benchmark_retrieval",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": "enabled_and_used"
+      },
+      {
+        "actual": 0.4712,
         "name": "category:nccer_reference_summary:min_rouge1",
         "passed": true,
         "status": "evaluated",
         "threshold": 0.16
       },
       {
-        "actual": 0.3401,
+        "actual": 0.3431,
         "name": "category:nccer_reference_summary:min_rouge2",
         "passed": true,
         "status": "evaluated",
         "threshold": 0.08
       },
       {
-        "actual": 0.3853,
+        "actual": 0.3883,
         "name": "category:nccer_reference_summary:min_rougeL",
         "passed": true,
         "status": "evaluated",
         "threshold": 0.14
       },
       {
-        "actual": 0.3777,
+        "actual": 0.3948,
         "name": "category:contractor_guidance:min_rouge1",
         "passed": true,
         "status": "evaluated",
         "threshold": 0.16
       },
       {
-        "actual": 0.1545,
+        "actual": 0.1454,
         "name": "category:contractor_guidance:min_rouge2",
         "passed": true,
         "status": "evaluated",
         "threshold": 0.08
       },
       {
-        "actual": 0.2591,
+        "actual": 0.2841,
         "name": "category:contractor_guidance:min_rougeL",
         "passed": true,
         "status": "evaluated",
@@ -650,28 +1924,44 @@
         "threshold": 0.14
       },
       {
-        "actual": 0.4244,
+        "actual": 0.4028,
         "name": "category:estimating_methodology:min_rouge1",
         "passed": true,
         "status": "evaluated",
         "threshold": 0.16
       },
       {
-        "actual": 0.2949,
+        "actual": 0.2896,
         "name": "category:estimating_methodology:min_rouge2",
         "passed": true,
         "status": "evaluated",
         "threshold": 0.08
       },
       {
-        "actual": 0.3292,
+        "actual": 0.33,
         "name": "category:estimating_methodology:min_rougeL",
         "passed": true,
         "status": "evaluated",
         "threshold": 0.14
+      },
+      {
+        "actual": 1.0,
+        "name": "category:estimate_lookup:min_tool_success_rate",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 1.0
+      },
+      {
+        "actual": 1.0,
+        "name": "category:revit_entity_lookup:min_tool_success_rate",
+        "passed": true,
+        "status": "evaluated",
+        "threshold": 1.0
       }
     ],
     "configured": true,
+    "failed_checks": [],
+    "failure_count": 0,
     "mode": "full",
     "passed": true
   },
@@ -987,18 +2277,19 @@
     "used": true
   },
   "settings": {
-    "fail_on_threshold_breach": false,
+    "fail_on_threshold_breach": true,
     "inference_batch_size": 1,
     "judge_concurrency": 2,
     "max_new_tokens": 192,
     "max_seq_length": 2048,
-    "metrics_only": true,
+    "metrics_only": false,
+    "release_mode": true,
     "use_retrieval": true
   },
   "timings_sec": {
-    "inference": 1865.9568,
-    "judge": 0.0,
-    "model_load": 1.5336,
-    "total": 1869.3409
+    "inference": 1121.3246,
+    "judge": 370.6896,
+    "model_load": 4.4737,
+    "total": 1500.2976
   }
 }

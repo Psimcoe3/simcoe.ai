@@ -43,3 +43,10 @@ Thumbs.db
 # ── Jupyter notebooks checkpoints ────────────────────────────────────────
 .ipynb_checkpoints/
 unsloth_compiled_cache/
+
+# ── Local quality tooling caches ─────────────────────────────────────────
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/

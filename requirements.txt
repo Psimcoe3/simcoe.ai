@@ -1,39 +1,44 @@
-# Core Python / PyTorch — requires CUDA 12.x drivers on the host
-torch==2.5.1
-torchvision==0.20.1
-torchaudio==0.20.1
+--extra-index-url https://download.pytorch.org/whl/cu124
+
+# Validated working stack for this repo: Python 3.12.3 + CUDA 12.4.
+# The torchao pin is intentional; newer torchao builds emit an incompatible
+# torch warning with the validated torch 2.6.0+cu124 / transformers 5.3.0 stack.
+
+# Core Python / PyTorch
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124
+torchaudio==2.6.0+cu124
 
 # Hugging Face ecosystem
-transformers==4.47.1
-datasets==3.2.0
-peft==0.14.0
-trl==0.13.0
-accelerate==1.2.1
-huggingface_hub==0.27.1
+transformers==5.3.0
+datasets==4.3.0
+peft==0.18.1
+trl==0.24.0
+accelerate==1.13.0
+huggingface_hub==1.8.0
 
-# 4-bit quantisation (NF4 / double-quant)
-bitsandbytes==0.45.0
-
-# Unsloth — optimised NVIDIA kernels (2x faster, 60 % less VRAM)
-# Install separately with the GPU-specific wheel; see README for the exact command.
-unsloth==2024.12.4
+# Quantization / kernels
+bitsandbytes==0.49.2
+unsloth==2026.3.17
+torchao==0.12.0
 
 # Experiment tracking
 wandb==0.19.1
+tensorboard==2.20.0
 
 # Evaluation
 evaluate==0.4.3
 rouge-score==0.1.2
-deepeval==1.4.2
-openai>=1.0.0
+openai==2.30.0
 
-# Misc utilities
+# Export and utilities
+gguf==0.18.0
+pyzstd==0.19.1
 python-dotenv==1.0.1
-pyyaml==6.0.2
+pyyaml==6.0.3
 requests==2.32.3
 beautifulsoup4==4.12.3
-pypdf==6.0.0
-numpy==1.26.4
-scipy==1.14.1
-sentencepiece==0.2.0
-protobuf==5.29.2
+pypdf==6.9.2
+numpy==2.3.5
+sentencepiece==0.2.1
+protobuf==5.29.6

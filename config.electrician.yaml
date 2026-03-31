@@ -127,6 +127,8 @@ release:
       min_rougeL: 0.14
     estimate_lookup:
       min_tool_success_rate: 1.0
+    revit_entity_lookup:
+      min_tool_success_rate: 1.0
 
 retrieval:
   enabled: true
@@ -145,6 +147,12 @@ deterministic_tools:
     max_results: 10
     min_score: 2
     default_quantity: 1.0
+  revit_entity_lookup:
+    enabled: true
+    index_path: "data/raw/revit_family_index.jsonl"
+    default_top_k: 5
+    max_results: 10
+    min_score: 2
 
 privacy:
   tracking: "tensorboard"
