@@ -8,11 +8,17 @@ import argparse
 import shutil
 from pathlib import Path
 
-from config_validation import load_config, require_file, validate_source_registry_config
+from config_validation import (
+    load_config,
+    require_file,
+    validate_managed_sources_config,
+    validate_source_registry_config,
+)
 from manifest_utils import current_utc_timestamp, read_json_file, write_json_file
 from source_registry_utils import (
     managed_relative_path,
     materialized_manifest_path,
+    resolve_repo_managed_path,
     repo_sync_dir,
     source_registry_namespace,
 )
@@ -142,6 +148,10 @@ def _materialized_asset_key(asset: dict) -> str:
 
 
 def target_path_for_asset(asset: dict, repo_root: Path, repo_dir: str, namespace: str) -> Path:
+    repo_managed_path = asset.get("repo_managed_path")
+    if isinstance(repo_managed_path, str) and repo_managed_path.strip():
+        return repo_root / Path(repo_managed_path.strip())
+
     suggested = asset.get("suggested_ingestion") if isinstance(asset.get("suggested_ingestion"), dict) else {}
     relative_target = managed_relative_path(
         str(asset.get("relative_path") or ""),
@@ -163,10 +173,12 @@ def main() -> int:
     args = parse_args()
     cfg = load_config(args.config)
     validate_source_registry_config(cfg)
+    validate_managed_sources_config(cfg)
 
     source_registry = cfg.get("source_registry")
     if not isinstance(source_registry, dict):
         raise SystemExit("Config must define a source_registry section")
+    managed_sources_cfg = cfg.get("managed_sources") if isinstance(cfg.get("managed_sources"), dict) else {}
 
     registry_path = args.registry or source_registry["manifest_path"]
     require_file(registry_path, "Source registry manifest")
@@ -186,6 +198,20 @@ def main() -> int:
     out_manifest = args.out_manifest or materialized_manifest_path(source_registry)
     namespace = source_registry_namespace(source_registry, str(registry_root))
     out_manifest_path = Path(out_manifest)
+
+    for asset in assets:
+        if not isinstance(asset, dict):
+            continue
+        if isinstance(asset.get("repo_managed_path"), str) and asset.get("repo_managed_path").strip():
+            continue
+        asset["repo_managed_path"] = resolve_repo_managed_path(
+            relative_path=str(asset.get("relative_path") or ""),
+            asset_kind=str(asset.get("asset_kind") or "other"),
+            suggested_ingestion=asset.get("suggested_ingestion") if isinstance(asset.get("suggested_ingestion"), dict) else None,
+            namespace=namespace,
+            repo_sync_root=repo_dir,
+            managed_sources_cfg=managed_sources_cfg,
+        )
 
     chosen_assets = selected_assets(assets, args)
     if not chosen_assets:

@@ -190,18 +190,35 @@ def format_retrieved_context(results: list[dict], max_context_chars: int) -> str
     return "\n\n".join(chunks)
 
 
-def build_retrieval_augmented_prompt(prompt: str, retrieved_context: str) -> str:
-    if not retrieved_context.strip():
+def build_context_augmented_prompt(
+    prompt: str,
+    *,
+    memory_context: str = "",
+    retrieved_context: str = "",
+) -> str:
+    sections: list[str] = []
+    if memory_context.strip():
+        sections.append(f"### Memory Hints:\n{memory_context}")
+    if retrieved_context.strip():
+        sections.append(f"### Retrieved Context:\n{retrieved_context}")
+
+    if not sections:
         return prompt
 
+    section_text = "\n\n".join(sections)
+
     if "### Response:" not in prompt:
-        return f"{prompt}\n\n### Retrieved Context:\n{retrieved_context}"
+        return f"{prompt}\n\n{section_text}"
 
     return prompt.replace(
         "### Response:",
-        f"### Retrieved Context:\n{retrieved_context}\n\n### Response:",
+        f"{section_text}\n\n### Response:",
         1,
     )
+
+
+def build_retrieval_augmented_prompt(prompt: str, retrieved_context: str) -> str:
+    return build_context_augmented_prompt(prompt, retrieved_context=retrieved_context)
 
 
 def load_jsonl(path: str) -> list[dict]:

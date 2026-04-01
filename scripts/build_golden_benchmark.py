@@ -30,6 +30,12 @@ def _optional_string(value: object) -> str | None:
     return cleaned or None
 
 
+def _optional_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [cleaned for item in value if isinstance(item, str) and (cleaned := item.strip())]
+
+
 def _resolve_route_fields(
     spec: dict,
     *,
@@ -85,6 +91,7 @@ def _direct_tool_row_from_spec(
         "category": category,
         "route": route,
         "runtime_owner": runtime_owner,
+        "attachment_paths": _optional_string_list(spec.get("attachment_paths")),
         "tool_name": tool_name,
         "tool_request": tool_request,
         "tool_expectation": tool_expectation,
@@ -182,6 +189,7 @@ def main() -> None:
             "category": category,
             "route": route,
             "runtime_owner": runtime_owner,
+            "attachment_paths": _optional_string_list(spec.get("attachment_paths")),
             "tool_name": None,
             "tool_request": None,
             "tool_expectation": None,

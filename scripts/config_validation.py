@@ -18,6 +18,11 @@ from runtime_contracts import (
 import yaml
 
 
+MEMORY_KINDS = {"operator_note", "verified_fact", "decision", "exception"}
+MEMORY_STATUSES = {"active", "stale", "retracted"}
+MEMORY_CONTRADICTION_POLICIES = {"mark_stale", "track_only"}
+
+
 def fail(message: str) -> None:
     print(f"❌  {message}")
     sys.exit(1)
@@ -699,6 +704,137 @@ def validate_retrieval_config(cfg: dict) -> None:
             require_file(manifest_path, "Retrieval manifest file")
 
 
+def validate_memory_config(cfg: dict) -> None:
+    memory = cfg.get("memory")
+    if memory is None:
+        return
+
+    if not isinstance(memory, dict):
+        fail("memory must be a mapping when present")
+
+    require_keys(
+        memory,
+        "memory",
+        {
+            "enabled",
+            "root_dir",
+            "index_path",
+            "topics_dir",
+            "events_path",
+            "default_top_k",
+            "topic_candidate_limit",
+            "max_context_chars",
+            "max_index_entries",
+            "max_summary_chars",
+            "max_supporting_observations",
+            "max_trace_results",
+            "max_trace_excluded",
+            "min_score",
+            "require_verification",
+            "contradiction_policy",
+            "exclude_contradicted_topics",
+            "import_max_records",
+            "allowed_kinds",
+            "exclude_statuses",
+            "consolidation_min_events",
+        },
+    )
+
+    require_bool(memory["enabled"], "memory.enabled")
+    require_non_empty_string(memory["root_dir"], "memory.root_dir")
+    require_non_empty_string(memory["index_path"], "memory.index_path")
+    require_non_empty_string(memory["topics_dir"], "memory.topics_dir")
+    require_non_empty_string(memory["events_path"], "memory.events_path")
+    default_top_k = require_positive_int(memory["default_top_k"], "memory.default_top_k")
+    topic_candidate_limit = require_positive_int(
+        memory["topic_candidate_limit"],
+        "memory.topic_candidate_limit",
+    )
+    max_context_chars = require_positive_int(
+        memory["max_context_chars"],
+        "memory.max_context_chars",
+    )
+    max_index_entries = require_positive_int(
+        memory["max_index_entries"],
+        "memory.max_index_entries",
+    )
+    max_summary_chars = require_positive_int(
+        memory["max_summary_chars"],
+        "memory.max_summary_chars",
+    )
+    max_supporting_observations = require_positive_int(
+        memory["max_supporting_observations"],
+        "memory.max_supporting_observations",
+    )
+    max_trace_results = require_positive_int(
+        memory["max_trace_results"],
+        "memory.max_trace_results",
+    )
+    max_trace_excluded = require_positive_int(
+        memory["max_trace_excluded"],
+        "memory.max_trace_excluded",
+    )
+    require_number_in_closed_range(
+        memory["min_score"],
+        "memory.min_score",
+        0,
+        1_000_000,
+    )
+    require_bool(memory["require_verification"], "memory.require_verification")
+    contradiction_policy = require_choice(
+        memory["contradiction_policy"],
+        "memory.contradiction_policy",
+        MEMORY_CONTRADICTION_POLICIES,
+    )
+    exclude_contradicted_topics = require_bool(
+        memory["exclude_contradicted_topics"],
+        "memory.exclude_contradicted_topics",
+    )
+    import_max_records = require_positive_int(
+        memory["import_max_records"],
+        "memory.import_max_records",
+    )
+    allowed_kinds = require_string_list(memory["allowed_kinds"], "memory.allowed_kinds")
+    exclude_statuses = require_string_list(memory["exclude_statuses"], "memory.exclude_statuses")
+    require_positive_int(
+        memory["consolidation_min_events"],
+        "memory.consolidation_min_events",
+    )
+
+    unknown_kinds = sorted(set(allowed_kinds) - MEMORY_KINDS)
+    if unknown_kinds:
+        fail(
+            "memory.allowed_kinds contains unsupported values: "
+            f"{', '.join(unknown_kinds)}"
+        )
+
+    unknown_statuses = sorted(set(exclude_statuses) - MEMORY_STATUSES)
+    if unknown_statuses:
+        fail(
+            "memory.exclude_statuses contains unsupported values: "
+            f"{', '.join(unknown_statuses)}"
+        )
+
+    if default_top_k > topic_candidate_limit:
+        fail("memory.default_top_k cannot exceed memory.topic_candidate_limit")
+    if default_top_k > max_index_entries:
+        fail("memory.default_top_k cannot exceed memory.max_index_entries")
+    if max_summary_chars > max_context_chars:
+        fail("memory.max_summary_chars cannot exceed memory.max_context_chars")
+    if max_supporting_observations > max_trace_results:
+        fail("memory.max_supporting_observations cannot exceed memory.max_trace_results")
+    if max_trace_results > topic_candidate_limit:
+        fail("memory.max_trace_results cannot exceed memory.topic_candidate_limit")
+    if max_trace_excluded > max_index_entries:
+        fail("memory.max_trace_excluded cannot exceed memory.max_index_entries")
+    if contradiction_policy == "track_only" and not exclude_contradicted_topics:
+        fail(
+            "memory.exclude_contradicted_topics must be true when memory.contradiction_policy is 'track_only'"
+        )
+    if import_max_records < default_top_k:
+        fail("memory.import_max_records cannot be smaller than memory.default_top_k")
+
+
 def validate_prepare_data_config(cfg: dict) -> None:
     data = require_section(cfg, "data")
     model = require_section(cfg, "model")
@@ -708,6 +844,7 @@ def validate_prepare_data_config(cfg: dict) -> None:
     validate_multimodal_config(cfg)
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
+    validate_memory_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
     validate_deterministic_tools_config(cfg)
@@ -734,6 +871,7 @@ def validate_train_config(cfg: dict) -> None:
     validate_multimodal_config(cfg)
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
+    validate_memory_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
     validate_deterministic_tools_config(cfg)
@@ -794,6 +932,7 @@ def validate_export_config(cfg: dict) -> None:
     validate_multimodal_config(cfg)
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
+    validate_memory_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
     validate_deterministic_tools_config(cfg)
@@ -889,6 +1028,7 @@ def validate_evaluate_config(cfg: dict, num_examples: int) -> None:
     validate_multimodal_config(cfg)
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
+    validate_memory_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
 
@@ -903,6 +1043,7 @@ def validate_release_artifact_config(cfg: dict) -> None:
     validate_routing_config(cfg)
     validate_multimodal_config(cfg)
     validate_release_config(cfg)
+    validate_memory_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
 
@@ -970,4 +1111,5 @@ def validate_release_artifact_config(cfg: dict) -> None:
 
     if judge_concurrency is not None and judge_concurrency < 1:
         fail("evaluation.judge_concurrency must be a positive integer")
+    validate_memory_config(cfg)
     validate_deterministic_tools_config(cfg)

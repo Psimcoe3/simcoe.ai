@@ -52,11 +52,11 @@ GOLDEN_SOURCE      ?= $(RETRIEVAL_SOURCE)
 GOLDEN_SPEC        ?= evals/golden_electrician_spec.json
 GOLDEN_OUT         ?= evals/golden_electrician.jsonl
 GOLDEN_MANIFEST    ?= evals/golden_electrician.manifest.json
-QUALITY_PATHS      ?= scripts/check_env.py scripts/deterministic_tool_utils.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/runtime_contracts.py scripts/train.py scripts/validate_release_artifacts.py scripts/package_release_bundle.py tests
+QUALITY_PATHS      ?= scripts/check_env.py scripts/deterministic_tool_utils.py scripts/indexed_memory.py scripts/request_router.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/runtime_contracts.py scripts/train.py scripts/validate_release_artifacts.py scripts/package_release_bundle.py tests
 TEST_PATHS         ?= tests
 ARGS               ?=
 
-.PHONY: all quality quality-release release-bundle release-verify lint test check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest revit-lookup estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
+.PHONY: all quality quality-release release-bundle release-verify lint test check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release route-request memory-add memory-query memory-import memory-consolidate memory-rebuild-index source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest revit-lookup estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -124,6 +124,24 @@ evaluate-quick: ## Run a faster metrics-only evaluation profile
 
 evaluate-release: ## Evaluate and fail if configured release thresholds are not met
 	$(PYTHON) scripts/evaluate.py --config $(CONFIG) --release
+
+route-request: ## Classify a single request into text/retrieval/tool/drawing routes (pass inputs via ARGS)
+	$(PYTHON) scripts/request_router.py --config $(CONFIG) $(ARGS)
+
+memory-add: ## Append a memory event and rebuild the topic/index projections (pass inputs via ARGS)
+	$(PYTHON) scripts/indexed_memory.py --config $(CONFIG) add $(ARGS)
+
+memory-query: ## Query the indexed memory store (pass inputs via ARGS)
+	$(PYTHON) scripts/indexed_memory.py --config $(CONFIG) query $(ARGS)
+
+memory-import: ## Import curated memory rows from JSON, JSONL, or YAML (pass inputs via ARGS)
+	$(PYTHON) scripts/indexed_memory.py --config $(CONFIG) import $(ARGS)
+
+memory-consolidate: ## Rebuild topic files from the append-only memory event log
+	$(PYTHON) scripts/indexed_memory.py --config $(CONFIG) consolidate
+
+memory-rebuild-index: ## Rebuild the pointer-only memory index from topic records
+	$(PYTHON) scripts/indexed_memory.py --config $(CONFIG) rebuild-index
 
 source-registry: ## Build a registry manifest for the configured external source root
 	$(PYTHON) scripts/build_source_registry.py --config $(CONFIG)

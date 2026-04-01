@@ -12,12 +12,13 @@ from pathlib import Path
 from config_validation import (
     load_config,
     require_directory,
+    validate_managed_sources_config,
     validate_source_registry_config,
 )
 from data_contracts import infer_asset_kind, stable_identifier, suggested_ingestion_contract
 from manifest_utils import current_utc_timestamp, file_metadata, write_json_file
 from source_registry_utils import (
-    managed_relative_path,
+    resolve_repo_managed_path,
     materialized_manifest_path,
     repo_sync_dir,
     source_registry_namespace,
@@ -41,10 +42,12 @@ def main() -> int:
     args = parse_args()
     cfg = load_config(args.config)
     validate_source_registry_config(cfg)
+    validate_managed_sources_config(cfg)
 
     registry_cfg = cfg.get("source_registry")
     if not isinstance(registry_cfg, dict):
         raise SystemExit("Config must define a source_registry section")
+    managed_sources_cfg = cfg.get("managed_sources") if isinstance(cfg.get("managed_sources"), dict) else {}
 
     configured_root = Path(registry_cfg["root"])
     scan_root = Path(args.root or registry_cfg["root"])
@@ -76,7 +79,7 @@ def main() -> int:
             relative_path = os.path.relpath(path_str, relative_base_str)
             asset_kind = infer_asset_kind(path_str)
             path = Path(path_str)
-            suggested = suggested_ingestion_contract(asset_kind)
+            suggested = suggested_ingestion_contract(asset_kind, relative_path)
             metadata = file_metadata(path_str, include_sha256=not args.skip_sha256)
             total_bytes += metadata["size_bytes"]
             asset_kind_counts[asset_kind] += 1
@@ -93,14 +96,13 @@ def main() -> int:
                     "default_data_family": registry_cfg["default_data_family"],
                     "default_sft_candidate": False,
                     "suggested_ingestion": suggested,
-                    "repo_managed_path": str(
-                        Path(repo_sync_root)
-                        / managed_relative_path(
-                            relative_path,
-                            asset_kind,
-                            suggested.get("runtime_owner"),
-                            namespace,
-                        )
+                    "repo_managed_path": resolve_repo_managed_path(
+                        relative_path=relative_path,
+                        asset_kind=asset_kind,
+                        suggested_ingestion=suggested,
+                        namespace=namespace,
+                        repo_sync_root=repo_sync_root,
+                        managed_sources_cfg=managed_sources_cfg,
                     ),
                     **metadata,
                 }

@@ -5,7 +5,7 @@ Helpers for repo-managed source registry organization.
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 DEFAULT_REPO_SYNC_DIR = "sources/managed"
@@ -57,3 +57,46 @@ def managed_relative_path(
     kind_segment = _slugify_segment(asset_kind or "other", "other")
     normalized_relative_path = Path(str(relative_path).replace("\\", "/")).as_posix().lstrip("/")
     return str(Path(namespace) / owner_segment / kind_segment / normalized_relative_path)
+
+
+def _normalized_relative_path(relative_path: str) -> str:
+    return PurePosixPath(str(relative_path).replace("\\", "/")).as_posix().lstrip("/")
+
+
+def _relative_path_within_managed_root(relative_path: str, managed_root: str) -> str:
+    normalized_relative_path = _normalized_relative_path(relative_path)
+    path_parts = PurePosixPath(normalized_relative_path).parts
+    managed_root_name = Path(managed_root).name.strip().lower()
+    if path_parts and managed_root_name and path_parts[0].strip().lower() == managed_root_name:
+        trimmed = PurePosixPath(*path_parts[1:]).as_posix()
+        if trimmed and trimmed != ".":
+            return trimmed
+    return normalized_relative_path
+
+
+def resolve_repo_managed_path(
+    *,
+    relative_path: str,
+    asset_kind: str,
+    suggested_ingestion: dict | None,
+    namespace: str,
+    repo_sync_root: str,
+    managed_sources_cfg: dict | None = None,
+) -> str:
+    suggested = suggested_ingestion if isinstance(suggested_ingestion, dict) else {}
+    managed_source_key = suggested.get("managed_source_key")
+    if isinstance(managed_sources_cfg, dict) and isinstance(managed_source_key, str) and managed_source_key.strip():
+        managed_root = managed_sources_cfg.get(managed_source_key)
+        if isinstance(managed_root, str) and managed_root.strip():
+            relative_suffix = _relative_path_within_managed_root(relative_path, managed_root)
+            return str(Path(managed_root.strip()) / relative_suffix)
+
+    return str(
+        Path(repo_sync_root)
+        / managed_relative_path(
+            relative_path,
+            asset_kind,
+            suggested.get("runtime_owner") if isinstance(suggested, dict) else None,
+            namespace,
+        )
+    )

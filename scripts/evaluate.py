@@ -36,14 +36,17 @@ except ImportError:
     torch = None
 
 from config_validation import load_config, validate_evaluate_config
+from data_contracts import stable_identifier
 from datasets import load_from_disk
 from deterministic_tool_utils import build_tool_request
 from estimate_lookup import TOOL_NAME as ESTIMATE_LOOKUP_TOOL_NAME, run_estimate_lookup_request
+from indexed_memory import format_memory_context, query_memory
 from manifest_utils import current_utc_timestamp, read_json_file, write_json_file
+from request_router import route_request
 import requests
 from revit_entity_lookup import TOOL_NAME as REVIT_ENTITY_LOOKUP_TOOL_NAME, run_revit_entity_lookup_request
 from retrieval_utils import (
-    build_retrieval_augmented_prompt,
+    build_context_augmented_prompt,
     extract_instruction_text,
     format_retrieved_context,
     load_jsonl,
@@ -125,20 +128,46 @@ def build_example_from_text(text: str) -> dict:
         "section": None,
         "route": "text",
         "runtime_owner": "text",
+        "routing_decision": None,
+        "attachment_paths": [],
         "tool_name": None,
         "tool_request": None,
         "tool_expectation": None,
     }
 
 
-def build_example_from_benchmark_row(row: dict, multimodal_enabled: bool) -> dict:
+def _attachment_paths_from_benchmark_row(row: dict) -> list[str]:
+    attachment_paths = row.get("attachment_paths")
+    if not isinstance(attachment_paths, list):
+        return []
+    return [str(path).strip() for path in attachment_paths if isinstance(path, str) and str(path).strip()]
+
+
+def build_example_from_benchmark_row(row: dict, cfg: dict, multimodal_enabled: bool) -> dict:
     instruction = str(row.get("instruction", "")).strip()
     context = row.get("input")
     reference = str(row.get("response") or row.get("output") or "").strip()
     benchmark_id = str(row.get("benchmark_id") or "benchmark_row").strip() or "benchmark_row"
+    attachment_paths = _attachment_paths_from_benchmark_row(row)
+    routing_decision = None
+
+    if row.get("route") is None:
+        try:
+            routing_decision = route_request(
+                cfg,
+                instruction,
+                context=context if isinstance(context, str) else None,
+                source=row.get("source") if isinstance(row.get("source"), str) else None,
+                section=row.get("section") if isinstance(row.get("section"), str) else None,
+                attachments=attachment_paths,
+                tool_name=row.get("tool_name") if isinstance(row.get("tool_name"), str) else None,
+            )
+        except ValueError as exc:
+            raise SystemExit(f"benchmark[{benchmark_id}] routing failed: {exc}") from exc
+
     try:
         route, runtime_owner = validate_route_contract(
-            row.get("route") or ROUTE_TEXT,
+            row.get("route") or (routing_decision or {}).get("resolved_route") or ROUTE_TEXT,
             row.get("runtime_owner"),
             multimodal_enabled=multimodal_enabled,
             route_label=f"benchmark[{benchmark_id}].route",
@@ -156,6 +185,8 @@ def build_example_from_benchmark_row(row: dict, multimodal_enabled: bool) -> dic
         "section": row.get("section"),
         "route": route,
         "runtime_owner": runtime_owner,
+        "routing_decision": routing_decision,
+        "attachment_paths": attachment_paths,
         "tool_name": row.get("tool_name"),
         "tool_request": row.get("tool_request") if isinstance(row.get("tool_request"), dict) else None,
         "tool_expectation": row.get("tool_expectation") if isinstance(row.get("tool_expectation"), dict) else None,
@@ -170,7 +201,7 @@ def load_evaluation_examples(cfg: dict, settings: dict) -> tuple[list[dict], dic
         benchmark_rows = load_jsonl(benchmark_path)
         example_count = min(settings["num_examples"], len(benchmark_rows))
         selected_rows = benchmark_rows[:example_count]
-        examples = [build_example_from_benchmark_row(row, multimodal_enabled) for row in selected_rows]
+        examples = [build_example_from_benchmark_row(row, cfg, multimodal_enabled) for row in selected_rows]
         return examples, {
             "kind": "golden_benchmark",
             "path": os.path.abspath(benchmark_path),
@@ -193,25 +224,36 @@ def load_evaluation_examples(cfg: dict, settings: dict) -> tuple[list[dict], dic
 
 def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: dict) -> tuple[list[str], dict]:
     retrieval_cfg = cfg.get("retrieval") if isinstance(cfg.get("retrieval"), dict) else None
+    memory_cfg = cfg.get("memory") if isinstance(cfg.get("memory"), dict) else None
     route_forces_retrieval = any(_route_name(example) == ROUTE_RETRIEVAL for example in examples)
     requested_retrieval = bool(settings["use_retrieval"] or route_forces_retrieval)
+    memory_enabled = bool(memory_cfg and memory_cfg.get("enabled", False))
 
     if not retrieval_cfg:
         if requested_retrieval:
             raise SystemExit("Evaluation examples require retrieval, but config.retrieval is not defined")
-        return [example["prompt"] for example in examples], {"enabled": False, "used": False}
+        return [example["prompt"] for example in examples], {
+            "enabled": False,
+            "used": False,
+            "memory": {"enabled": memory_enabled, "used": False, "per_example": []},
+        }
 
     retrieval_enabled = bool(retrieval_cfg.get("enabled", False))
     if not retrieval_enabled:
         if requested_retrieval:
             raise SystemExit("Evaluation examples require retrieval, but retrieval.enabled is false")
-        return [example["prompt"] for example in examples], {"enabled": False, "used": False}
+        return [example["prompt"] for example in examples], {
+            "enabled": False,
+            "used": False,
+            "memory": {"enabled": memory_enabled, "used": False, "per_example": []},
+        }
 
     if not requested_retrieval:
         return [example["prompt"] for example in examples], {
             "enabled": True,
             "used": False,
             "forced_by_routes": False,
+            "memory": {"enabled": memory_enabled, "used": False, "per_example": []},
         }
 
     corpus_path = retrieval_cfg["corpus_path"]
@@ -223,7 +265,10 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
     prompts: list[str] = []
     traces: list[dict] = []
     retrieval_usage_count = 0
-    for example in examples:
+    memory_query_count = 0
+    memory_usage_count = 0
+    memory_traces: list[dict] = []
+    for index, example in enumerate(examples):
         query = extract_instruction_text(example["prompt"])
         should_retrieve = bool(settings["use_retrieval"] or _route_name(example) == ROUTE_RETRIEVAL)
         trace = {
@@ -233,6 +278,9 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
             "preferred_section": example.get("section"),
             "used": should_retrieve,
             "results": [],
+            "memory_results": [],
+            "memory_excluded": [],
+            "memory_used": False,
         }
 
         if should_retrieve:
@@ -245,7 +293,41 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
                 preferred_section=example.get("section"),
             )
             retrieved_context = format_retrieved_context(retrieved, max_context_chars=max_context_chars)
-            prompts.append(build_retrieval_augmented_prompt(example["prompt"], retrieved_context))
+            memory_query = {"used": False, "results": [], "excluded": []}
+            memory_context = ""
+            if memory_enabled:
+                memory_request_id = stable_identifier(
+                    "evaluation_memory_query",
+                    example.get("benchmark_id") or f"example_{index}",
+                    query,
+                    example.get("source") or "",
+                    example.get("section") or "",
+                )
+                memory_query = query_memory(
+                    cfg,
+                    query,
+                    request_id=memory_request_id,
+                    trace_result_limit=int(memory_cfg.get("max_trace_results", 3) or 3),
+                    trace_excluded_limit=int(memory_cfg.get("max_trace_excluded", 3) or 3),
+                    supporting_observation_limit=int(
+                        memory_cfg.get("max_supporting_observations", 3) or 3
+                    ),
+                )
+                memory_context = format_memory_context(
+                    memory_query.get("results", []),
+                    int(memory_cfg.get("max_context_chars", 1200) or 1200),
+                )
+                memory_query_count += 1
+                if memory_query.get("used"):
+                    memory_usage_count += 1
+
+            prompts.append(
+                build_context_augmented_prompt(
+                    example["prompt"],
+                    memory_context=memory_context,
+                    retrieved_context=retrieved_context,
+                )
+            )
             trace["results"] = [
                 {
                     "id": item.get("id"),
@@ -255,15 +337,31 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
                 }
                 for item in retrieved
             ]
+            trace["memory_request_id"] = memory_query.get("request_id")
+            trace["memory_results"] = memory_query.get(
+                "trace_results",
+                memory_query.get("results", []),
+            )
+            trace["memory_excluded"] = memory_query.get("excluded", [])
+            trace["memory_used"] = bool(memory_query.get("used"))
             retrieval_usage_count += 1
         else:
             prompts.append(example["prompt"])
 
         traces.append(trace)
+        memory_traces.append(
+            {
+                "query": query,
+                "request_id": trace.get("memory_request_id"),
+                "used": trace["memory_used"],
+                "results": trace["memory_results"],
+                "excluded": trace["memory_excluded"],
+            }
+        )
 
     return prompts, {
         "enabled": True,
-        "used": retrieval_usage_count > 0,
+        "used": retrieval_usage_count > 0 or memory_usage_count > 0,
         "forced_by_routes": route_forces_retrieval,
         "corpus_path": os.path.abspath(corpus_path),
         "corpus_size": len(corpus),
@@ -271,6 +369,12 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
         "max_context_chars": max_context_chars,
         "min_score": min_score,
         "retrieval_example_count": retrieval_usage_count,
+        "memory": {
+            "enabled": memory_enabled,
+            "used": memory_usage_count > 0,
+            "query_count": memory_query_count,
+            "per_example": memory_traces,
+        },
         "per_example": traces,
     }
 
@@ -1469,6 +1573,7 @@ def main() -> None:
         },
         "evaluation_source": evaluation_source,
         "retrieval": retrieval_info,
+        "memory": retrieval_info.get("memory", {"enabled": False, "used": False}),
         "data_manifest": processed_manifest,
         "release_gate": release_gate,
         "timings_sec": {
@@ -1489,6 +1594,8 @@ def main() -> None:
                 "benchmark_id": examples[i].get("benchmark_id"),
                 "route": _route_name(examples[i]),
                 "runtime_owner": examples[i].get("runtime_owner"),
+                "routing_decision": examples[i].get("routing_decision"),
+                "attachment_paths": examples[i].get("attachment_paths"),
                 "tool_name": examples[i].get("tool_name"),
                 "tool_request": examples[i].get("tool_request"),
                 "tool_expectation": examples[i].get("tool_expectation"),

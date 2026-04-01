@@ -103,6 +103,7 @@ simcoe.ai/
 │   ├── config_validation.py # Shared config/prerequisite validation
 │   ├── data_contracts.py  # Stable IDs and review-safe data-family metadata
 │   ├── deterministic_tool_utils.py # Stable request/response envelopes for lookup runtimes
+│   ├── indexed_memory.py  # Pointer-only memory index + topic/event storage + query CLI
 │   ├── generate_data.py   # Synthetic data generation via Ollama or OpenAI-compatible APIs
 │   ├── prepare_data.py    # JSONL → formatted + split dataset
 │   ├── revit_entity_lookup.py # Deterministic Revit/entity lookup runtime
@@ -201,6 +202,7 @@ Key sections:
 | `evaluation` | `judge_model`, `results_path`, `inference_batch_size`, `max_new_tokens` |
 | `release` | `fail_on_threshold_breach`, quick/full thresholds, category thresholds, smoke-test requirements |
 | `retrieval` | `enabled`, corpus path, benchmark-time retrieval settings |
+| `memory` | `enabled`, file-backed memory paths, pointer-index limits, and skeptical retrieval settings |
 | `architecture` | primary runtime, retrieval requirement, multimodal/geometry feature flags |
 | `source_registry` | external source root, registry manifest path, review-safe defaults |
 | `managed_sources` | repo-owned mirror paths used as defaults by PDF, folder-ingest, and estimate-index workflows |
@@ -256,8 +258,28 @@ Key sections:
 - Supports quick and full evaluation profiles via config plus CLI overrides for example count, batch size, and generation length.
 - Uses `evaluation.golden_benchmark_path` for full-mode benchmark runs when configured.
 - Can inject retrieved context from a local corpus when `retrieval.enabled` and `retrieval.use_in_full_evaluation` are set.
+- Can also inject local indexed-memory hints when `memory.enabled` is true. Memory stays separate from the retrieval corpus: the always-loaded file is a pointer-only index, while full topic records are loaded on demand and filtered skeptically.
 - Supports mixed-route golden benchmarks where some rows are evaluated through deterministic tools instead of text generation.
 - Reports deterministic-tool success and match-score metrics separately so text and tool regressions are visible independently.
+
+### 5. Memory workflows (`scripts/indexed_memory.py`)
+
+- Memory is local operational state, not training data and not release lineage.
+- The store has three layers: `events.jsonl` as an append-only log, `topics/*.json` as materialized topic records, and `MEMORY.json` as a pointer-only index that never stores full topic content.
+- Query results are skeptical by default: stale, retracted, contradicted, below-threshold, and unverified topics are excluded and returned with explicit reasons.
+- Consolidation tracks superseded and contradicted observations, and evaluation traces now carry a stable `memory_request_id` so memory hits can be audited per benchmark row.
+- Curated imports are supported from JSON, JSONL, and YAML. Imported rows must be explicit operator knowledge, not derivable scratch state.
+- Operator commands:
+
+```bash
+make memory-add CONFIG=config.electrician.yaml ARGS='--topic "Grounding guidance" --summary "Prefer verified grounding notes" --content "Use verified NCCER grounding guidance before falling back to generic notes." --kind verified_fact --tag grounding'
+
+make memory-query CONFIG=config.electrician.yaml ARGS='--query "grounding guidance"'
+
+make memory-import CONFIG=config.electrician.yaml ARGS='--source-file data/raw/curated_memory.jsonl --source-label operator_seed'
+
+make memory-consolidate CONFIG=config.electrician.yaml
+```
 - Emits release-gate results from the optional `release` section, including per-category threshold checks, and can fail non-zero when thresholds are breached.
 - Saves results to `evals/results.json`.
 

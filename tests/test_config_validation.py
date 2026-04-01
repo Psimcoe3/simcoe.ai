@@ -4,7 +4,11 @@ from copy import deepcopy
 
 import pytest
 
-from config_validation import validate_multimodal_config, validate_routing_config
+from config_validation import (
+    validate_memory_config,
+    validate_multimodal_config,
+    validate_routing_config,
+)
 
 
 def _base_cfg() -> dict:
@@ -65,7 +69,9 @@ def test_validate_multimodal_config_accepts_disabled_scaffold() -> None:
     validate_multimodal_config(_base_cfg())
 
 
-def test_validate_multimodal_config_requires_model_when_enabled(capsys: pytest.CaptureFixture[str]) -> None:
+def test_validate_multimodal_config_requires_model_when_enabled(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     cfg = _base_cfg()
     cfg["architecture"]["multimodal_runtime_enabled"] = True
 
@@ -80,8 +86,12 @@ def test_validate_multimodal_config_rejects_overlapping_drawing_roots(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     cfg = _base_cfg()
-    cfg["managed_sources"]["drawings_multimodal_root"] = "sources/managed/electricalai_docs/retrieval/document/Drawings/sheets"
-    cfg["multimodal"]["drawing_asset_root"] = "sources/managed/electricalai_docs/retrieval/document/Drawings/sheets"
+    cfg["managed_sources"]["drawings_multimodal_root"] = (
+        "sources/managed/electricalai_docs/retrieval/document/Drawings/sheets"
+    )
+    cfg["multimodal"]["drawing_asset_root"] = (
+        "sources/managed/electricalai_docs/retrieval/document/Drawings/sheets"
+    )
 
     with pytest.raises(SystemExit):
         validate_multimodal_config(cfg)
@@ -106,3 +116,103 @@ def test_validate_routing_config_rejects_multimodal_default_when_disabled(
 def test_validate_routing_config_accepts_complete_route_map() -> None:
     cfg = deepcopy(_base_cfg())
     validate_routing_config(cfg)
+
+
+def test_validate_memory_config_accepts_scaffold() -> None:
+    validate_memory_config(
+        {
+            "memory": {
+                "enabled": False,
+                "root_dir": "data/memory",
+                "index_path": "data/memory/MEMORY.json",
+                "topics_dir": "data/memory/topics",
+                "events_path": "data/memory/events.jsonl",
+                "default_top_k": 3,
+                "topic_candidate_limit": 8,
+                "max_context_chars": 1200,
+                "max_index_entries": 64,
+                "max_summary_chars": 160,
+                "max_supporting_observations": 3,
+                "max_trace_results": 3,
+                "max_trace_excluded": 3,
+                "min_score": 2,
+                "require_verification": True,
+                "contradiction_policy": "mark_stale",
+                "exclude_contradicted_topics": True,
+                "import_max_records": 32,
+                "allowed_kinds": ["operator_note", "verified_fact", "decision", "exception"],
+                "exclude_statuses": ["stale", "retracted"],
+                "consolidation_min_events": 8,
+            }
+        }
+    )
+
+
+def test_validate_memory_config_rejects_unknown_kind(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        validate_memory_config(
+            {
+                "memory": {
+                    "enabled": False,
+                    "root_dir": "data/memory",
+                    "index_path": "data/memory/MEMORY.json",
+                    "topics_dir": "data/memory/topics",
+                    "events_path": "data/memory/events.jsonl",
+                    "default_top_k": 3,
+                    "topic_candidate_limit": 8,
+                    "max_context_chars": 1200,
+                    "max_index_entries": 64,
+                    "max_summary_chars": 160,
+                    "max_supporting_observations": 3,
+                    "max_trace_results": 3,
+                    "max_trace_excluded": 3,
+                    "min_score": 2,
+                    "require_verification": True,
+                    "contradiction_policy": "mark_stale",
+                    "exclude_contradicted_topics": True,
+                    "import_max_records": 32,
+                    "allowed_kinds": ["operator_note", "not_a_kind"],
+                    "exclude_statuses": ["stale", "retracted"],
+                    "consolidation_min_events": 8,
+                }
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert "memory.allowed_kinds contains unsupported values" in captured.out
+
+
+def test_validate_memory_config_rejects_track_only_without_exclusion(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        validate_memory_config(
+            {
+                "memory": {
+                    "enabled": False,
+                    "root_dir": "data/memory",
+                    "index_path": "data/memory/MEMORY.json",
+                    "topics_dir": "data/memory/topics",
+                    "events_path": "data/memory/events.jsonl",
+                    "default_top_k": 3,
+                    "topic_candidate_limit": 8,
+                    "max_context_chars": 1200,
+                    "max_index_entries": 64,
+                    "max_summary_chars": 160,
+                    "max_supporting_observations": 3,
+                    "max_trace_results": 3,
+                    "max_trace_excluded": 3,
+                    "min_score": 2,
+                    "require_verification": True,
+                    "contradiction_policy": "track_only",
+                    "exclude_contradicted_topics": False,
+                    "import_max_records": 32,
+                    "allowed_kinds": ["operator_note", "verified_fact", "decision", "exception"],
+                    "exclude_statuses": ["stale", "retracted"],
+                    "consolidation_min_events": 8,
+                }
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert "memory.exclude_contradicted_topics must be true" in captured.out

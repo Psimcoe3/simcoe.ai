@@ -154,6 +154,35 @@ retrieval:
   min_score: 2
   use_in_full_evaluation: false
 
+memory:
+  enabled: false
+  root_dir: "data/memory"
+  index_path: "data/memory/MEMORY.json"
+  topics_dir: "data/memory/topics"
+  events_path: "data/memory/events.jsonl"
+  default_top_k: 3
+  topic_candidate_limit: 8
+  max_context_chars: 1200
+  max_index_entries: 64
+  max_summary_chars: 160
+  max_supporting_observations: 3
+  max_trace_results: 3
+  max_trace_excluded: 3
+  min_score: 2
+  require_verification: true
+  contradiction_policy: "mark_stale"
+  exclude_contradicted_topics: true
+  import_max_records: 250
+  allowed_kinds:
+    - operator_note
+    - verified_fact
+    - decision
+    - exception
+  exclude_statuses:
+    - stale
+    - retracted
+  consolidation_min_events: 8
+
 deterministic_tools:
   estimate_lookup:
     enabled: true
