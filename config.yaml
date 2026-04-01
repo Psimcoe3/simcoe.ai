@@ -156,6 +156,7 @@ retrieval:
 
 memory:
   enabled: false
+  provider: "file"
   root_dir: "data/memory"
   index_path: "data/memory/MEMORY.json"
   topics_dir: "data/memory/topics"

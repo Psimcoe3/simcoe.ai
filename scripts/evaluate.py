@@ -29,6 +29,7 @@ import shutil
 import subprocess
 import string
 import time
+from typing import Any
 
 try:
     import torch
@@ -37,13 +38,11 @@ except ImportError:
 
 from config_validation import load_config, validate_evaluate_config
 from data_contracts import stable_identifier
-from datasets import load_from_disk
 from deterministic_tool_utils import build_tool_request
 from estimate_lookup import TOOL_NAME as ESTIMATE_LOOKUP_TOOL_NAME, run_estimate_lookup_request
 from indexed_memory import format_memory_context, query_memory
 from manifest_utils import current_utc_timestamp, read_json_file, write_json_file
 from request_router import route_request
-import requests
 from revit_entity_lookup import TOOL_NAME as REVIT_ENTITY_LOOKUP_TOOL_NAME, run_revit_entity_lookup_request
 from retrieval_utils import (
     build_context_augmented_prompt,
@@ -59,8 +58,6 @@ from runtime_contracts import (
     ROUTE_TEXT,
     validate_route_contract,
 )
-from tokenizer_utils import load_tokenizer_with_compat
-from transformers import AutoModelForCausalLM, GenerationConfig, pipeline
 
 try:
     from rouge_score import rouge_scorer
@@ -82,6 +79,25 @@ def _normalise(text: str) -> str:
     text = text.translate(str.maketrans("", "", string.punctuation))
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def _load_datasets_api():
+    from datasets import load_from_disk
+
+    return load_from_disk
+
+
+def _load_generation_runtime():
+    from tokenizer_utils import load_tokenizer_with_compat
+    from transformers import AutoModelForCausalLM, GenerationConfig, pipeline
+
+    return load_tokenizer_with_compat, AutoModelForCausalLM, GenerationConfig, pipeline
+
+
+def _load_requests_module():
+    import requests
+
+    return requests
 
 
 # ── Inference ─────────────────────────────────────────────────────────────────
@@ -210,6 +226,7 @@ def load_evaluation_examples(cfg: dict, settings: dict) -> tuple[list[dict], dic
         }
 
     valid_dir = os.path.join(cfg["data"]["processed_dir"], "valid")
+    load_from_disk = _load_datasets_api()
     valid_ds = load_from_disk(valid_dir)
     example_count = min(settings["num_examples"], len(valid_ds))
     rows = list(valid_ds.select(range(example_count)))
@@ -220,6 +237,16 @@ def load_evaluation_examples(cfg: dict, settings: dict) -> tuple[list[dict], dic
         "available_rows": len(valid_ds),
         "selected_rows": example_count,
     }
+
+
+def _build_memory_request_id(example: dict, index: int, query: str) -> str:
+    return stable_identifier(
+        "evaluation_memory_query",
+        example.get("benchmark_id") or f"example_{index}",
+        query,
+        example.get("source") or "",
+        example.get("section") or "",
+    )
 
 
 def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: dict) -> tuple[list[str], dict]:
@@ -262,6 +289,49 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
     max_context_chars = int(retrieval_cfg.get("max_context_chars", 1600))
     min_score = float(retrieval_cfg.get("min_score", 1.0))
 
+    example_queries = [extract_instruction_text(example["prompt"]) for example in examples]
+    should_retrieve_flags = [
+        bool(settings["use_retrieval"] or _route_name(example) == ROUTE_RETRIEVAL)
+        for example in examples
+    ]
+
+    retrieval_futures: dict[int, object] = {}
+    memory_futures: dict[int, object] = {}
+    task_count = sum(1 for should_retrieve in should_retrieve_flags if should_retrieve)
+    if memory_enabled:
+        task_count += sum(1 for should_retrieve in should_retrieve_flags if should_retrieve)
+    prefetch_workers = max(1, min(task_count or 1, os.cpu_count() or 1, 8))
+
+    if task_count > 0:
+        with ThreadPoolExecutor(max_workers=prefetch_workers) as executor:
+            for index, example in enumerate(examples):
+                if not should_retrieve_flags[index]:
+                    continue
+
+                query = example_queries[index]
+                retrieval_futures[index] = executor.submit(
+                    retrieve_documents,
+                    query,
+                    corpus,
+                    top_k=top_k,
+                    min_score=min_score,
+                    preferred_source=example.get("source"),
+                    preferred_section=example.get("section"),
+                )
+
+                if memory_enabled:
+                    memory_futures[index] = executor.submit(
+                        query_memory,
+                        cfg,
+                        query,
+                        request_id=_build_memory_request_id(example, index, query),
+                        trace_result_limit=int(memory_cfg.get("max_trace_results", 3) or 3),
+                        trace_excluded_limit=int(memory_cfg.get("max_trace_excluded", 3) or 3),
+                        supporting_observation_limit=int(
+                            memory_cfg.get("max_supporting_observations", 3) or 3
+                        ),
+                    )
+
     prompts: list[str] = []
     traces: list[dict] = []
     retrieval_usage_count = 0
@@ -269,8 +339,8 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
     memory_usage_count = 0
     memory_traces: list[dict] = []
     for index, example in enumerate(examples):
-        query = extract_instruction_text(example["prompt"])
-        should_retrieve = bool(settings["use_retrieval"] or _route_name(example) == ROUTE_RETRIEVAL)
+        query = example_queries[index]
+        should_retrieve = should_retrieve_flags[index]
         trace = {
             "route": _route_name(example),
             "query": query,
@@ -284,42 +354,22 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
         }
 
         if should_retrieve:
-            retrieved = retrieve_documents(
-                query,
-                corpus,
-                top_k=top_k,
-                min_score=min_score,
-                preferred_source=example.get("source"),
-                preferred_section=example.get("section"),
-            )
+            retrieved = retrieval_futures[index].result()
+            if memory_enabled and index in memory_futures:
+                memory_query = memory_futures[index].result()
+                memory_query_count += 1
+                if memory_query.get("used"):
+                    memory_usage_count += 1
+            else:
+                memory_query = {"used": False, "results": [], "excluded": []}
+
             retrieved_context = format_retrieved_context(retrieved, max_context_chars=max_context_chars)
-            memory_query = {"used": False, "results": [], "excluded": []}
             memory_context = ""
             if memory_enabled:
-                memory_request_id = stable_identifier(
-                    "evaluation_memory_query",
-                    example.get("benchmark_id") or f"example_{index}",
-                    query,
-                    example.get("source") or "",
-                    example.get("section") or "",
-                )
-                memory_query = query_memory(
-                    cfg,
-                    query,
-                    request_id=memory_request_id,
-                    trace_result_limit=int(memory_cfg.get("max_trace_results", 3) or 3),
-                    trace_excluded_limit=int(memory_cfg.get("max_trace_excluded", 3) or 3),
-                    supporting_observation_limit=int(
-                        memory_cfg.get("max_supporting_observations", 3) or 3
-                    ),
-                )
                 memory_context = format_memory_context(
                     memory_query.get("results", []),
                     int(memory_cfg.get("max_context_chars", 1200) or 1200),
                 )
-                memory_query_count += 1
-                if memory_query.get("used"):
-                    memory_usage_count += 1
 
             prompts.append(
                 build_context_augmented_prompt(
@@ -368,6 +418,7 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
         "top_k": top_k,
         "max_context_chars": max_context_chars,
         "min_score": min_score,
+        "context_prefetch_workers": prefetch_workers,
         "retrieval_example_count": retrieval_usage_count,
         "memory": {
             "enabled": memory_enabled,
@@ -467,7 +518,8 @@ def _format_release_actual(actual: object) -> str:
     return str(actual)
 
 
-def build_generation_config(gen_pipeline, max_new_tokens: int, pad_token_id: int) -> GenerationConfig:
+def build_generation_config(gen_pipeline, max_new_tokens: int, pad_token_id: int) -> Any:
+    _, _, GenerationConfig, _ = _load_generation_runtime()
     base_generation_config = getattr(gen_pipeline.model, "generation_config", None)
     if base_generation_config is None:
         generation_config = GenerationConfig()
@@ -1115,6 +1167,7 @@ def _ollama_binary() -> str | None:
 
 
 def _wait_for_ollama_server(timeout_sec: float = 30.0) -> None:
+    requests = _load_requests_module()
     deadline = time.time() + timeout_sec
     last_error: Exception | None = None
 
@@ -1133,6 +1186,7 @@ def _wait_for_ollama_server(timeout_sec: float = 30.0) -> None:
 
 
 def _ensure_ollama_server() -> subprocess.Popen | None:
+    requests = _load_requests_module()
     try:
         _wait_for_ollama_server(timeout_sec=1.0)
         return None
@@ -1439,6 +1493,7 @@ def main() -> None:
     if text_indexes:
         print(f"\n🔍  Loading merged model from: {model_dir}")
         model_load_start = time.perf_counter()
+        load_tokenizer_with_compat, AutoModelForCausalLM, _, pipeline = _load_generation_runtime()
         tokenizer = load_tokenizer_with_compat(model_dir)
         if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
             tokenizer.pad_token_id = tokenizer.eos_token_id

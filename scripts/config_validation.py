@@ -21,6 +21,7 @@ import yaml
 MEMORY_KINDS = {"operator_note", "verified_fact", "decision", "exception"}
 MEMORY_STATUSES = {"active", "stale", "retracted"}
 MEMORY_CONTRADICTION_POLICIES = {"mark_stale", "track_only"}
+MEMORY_PROVIDERS = {"file"}
 
 
 def fail(message: str) -> None:
@@ -717,6 +718,7 @@ def validate_memory_config(cfg: dict) -> None:
         "memory",
         {
             "enabled",
+            "provider",
             "root_dir",
             "index_path",
             "topics_dir",
@@ -741,6 +743,7 @@ def validate_memory_config(cfg: dict) -> None:
     )
 
     require_bool(memory["enabled"], "memory.enabled")
+    require_choice(memory["provider"], "memory.provider", MEMORY_PROVIDERS)
     require_non_empty_string(memory["root_dir"], "memory.root_dir")
     require_non_empty_string(memory["index_path"], "memory.index_path")
     require_non_empty_string(memory["topics_dir"], "memory.topics_dir")

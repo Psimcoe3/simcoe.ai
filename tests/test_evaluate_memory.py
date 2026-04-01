@@ -32,6 +32,7 @@ def _cfg(tmp_path) -> dict:
         },
         "memory": {
             "enabled": True,
+            "provider": "file",
             "root_dir": str(memory_root),
             "index_path": str(memory_root / "MEMORY.json"),
             "topics_dir": str(memory_root / "topics"),
@@ -83,6 +84,7 @@ def test_prepare_prompts_with_retrieval_merges_memory_hints(tmp_path) -> None:
 
     assert "### Memory Hints:" in prompts[0]
     assert "### Retrieved Context:" in prompts[0]
+    assert metadata["context_prefetch_workers"] >= 1
     assert metadata["memory"]["used"] is True
     assert metadata["per_example"][0]["memory_used"] is True
     assert metadata["per_example"][0]["memory_request_id"]

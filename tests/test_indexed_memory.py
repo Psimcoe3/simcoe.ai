@@ -16,6 +16,7 @@ def _cfg(tmp_path) -> dict:
     return {
         "memory": {
             "enabled": True,
+            "provider": "file",
             "root_dir": str(root_dir),
             "index_path": str(root_dir / "MEMORY.json"),
             "topics_dir": str(root_dir / "topics"),
@@ -158,6 +159,7 @@ def test_query_memory_preserves_request_lineage_for_returned_topic(tmp_path) -> 
 
     result = query_memory(cfg, "grounding guidance", request_id="req-123")
 
+    assert result["provider"] == "file"
     assert result["request_id"] == "req-123"
     assert result["results"]
     assert result["results"][0]["lineage"]["request_id"] == "req-123"

@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import Protocol
 
 import yaml
 
@@ -22,12 +23,14 @@ MEMORY_KINDS = {"operator_note", "verified_fact", "decision", "exception"}
 MEMORY_STATUSES = {"active", "stale", "retracted"}
 MEMORY_VERIFICATION_STATUSES = {"verified", "unverified", "disputed"}
 MEMORY_CONTRADICTION_POLICIES = {"mark_stale", "track_only"}
+MEMORY_PROVIDERS = {"file"}
 
 
 def _memory_cfg(cfg: dict) -> dict:
     section = cfg.get("memory") if isinstance(cfg.get("memory"), dict) else {}
     return {
         "enabled": bool(section.get("enabled", False)),
+        "provider": str(section.get("provider") or "file"),
         "root_dir": str(section.get("root_dir") or "data/memory"),
         "index_path": str(section.get("index_path") or "data/memory/MEMORY.json"),
         "topics_dir": str(section.get("topics_dir") or "data/memory/topics"),
@@ -427,8 +430,19 @@ def _write_topic_record(settings: dict, topic_record: dict) -> None:
     write_json_file(str(topic_path), topic_record)
 
 
-def rebuild_memory_index(cfg: dict) -> dict:
-    settings = _memory_cfg(cfg)
+def _load_index_payload(settings: dict) -> dict:
+    _ensure_layout(settings)
+    index_path = Path(settings["index_path"])
+    if not index_path.exists():
+        return _rebuild_memory_index(settings)
+
+    payload = read_json_file(str(index_path))
+    if not isinstance(payload, dict) or not isinstance(payload.get("topics"), list):
+        return _rebuild_memory_index(settings)
+    return payload
+
+
+def _rebuild_memory_index(settings: dict) -> dict:
     _ensure_layout(settings)
 
     topics: list[dict] = []
@@ -465,6 +479,7 @@ def rebuild_memory_index(cfg: dict) -> dict:
     payload = {
         "schema_version": MEMORY_SCHEMA_VERSION,
         "generated_at": current_utc_timestamp(),
+        "provider": settings["provider"],
         "topic_count": len(topics),
         "topics": topics[: settings["max_index_entries"]],
     }
@@ -472,8 +487,7 @@ def rebuild_memory_index(cfg: dict) -> dict:
     return payload
 
 
-def consolidate_memory(cfg: dict) -> dict:
-    settings = _memory_cfg(cfg)
+def _consolidate_memory(settings: dict) -> dict:
     _ensure_layout(settings)
     events = _load_events(settings)
 
@@ -499,10 +513,11 @@ def consolidate_memory(cfg: dict) -> dict:
     for filename in existing_paths - retained_paths:
         (topics_dir / filename).unlink(missing_ok=True)
 
-    index_payload = rebuild_memory_index(cfg)
+    index_payload = _rebuild_memory_index(settings)
     return {
         "schema_version": MEMORY_SCHEMA_VERSION,
         "generated_at": current_utc_timestamp(),
+        "provider": settings["provider"],
         "event_count": len(events),
         "topic_count": len(events_by_topic),
         "duplicates_removed": duplicates_removed,
@@ -511,8 +526,7 @@ def consolidate_memory(cfg: dict) -> dict:
     }
 
 
-def record_memory_entries(cfg: dict, entries: list[dict]) -> list[dict]:
-    settings = _memory_cfg(cfg)
+def _record_memory_entries(settings: dict, entries: list[dict]) -> list[dict]:
     events = [
         _build_memory_event(
             settings,
@@ -531,7 +545,7 @@ def record_memory_entries(cfg: dict, entries: list[dict]) -> list[dict]:
         for entry in entries
     ]
     _append_events(settings, events)
-    consolidate_memory(cfg)
+    _consolidate_memory(settings)
     return events
 
 
@@ -612,13 +626,12 @@ def _read_import_rows(source_path: str) -> list[dict]:
     return normalized_rows
 
 
-def import_memory_entries(
-    cfg: dict,
+def _import_memory_entries(
+    settings: dict,
     source_path: str,
     *,
     source_label: str | None = None,
 ) -> dict:
-    settings = _memory_cfg(cfg)
     rows = _read_import_rows(source_path)
     if len(rows) > settings["import_max_records"]:
         raise ValueError(
@@ -670,11 +683,12 @@ def import_memory_entries(
         topic_ids.add(_topic_id(topic))
         entries.append(entry)
 
-    events = record_memory_entries(cfg, entries)
+    events = _record_memory_entries(settings, entries)
     return {
         "schema_version": MEMORY_SCHEMA_VERSION,
         "batch_id": batch_id,
         "generated_at": current_utc_timestamp(),
+        "provider": settings["provider"],
         "source_path": str(path.resolve()),
         "source_label": batch_source,
         "imported_count": len(events),
@@ -710,8 +724,8 @@ def _score_topic_record(query: str, topic_record: dict) -> float:
     )
 
 
-def query_memory(
-    cfg: dict,
+def _query_memory(
+    settings: dict,
     query: str,
     *,
     top_k: int | None = None,
@@ -722,9 +736,8 @@ def query_memory(
     trace_excluded_limit: int | None = None,
     supporting_observation_limit: int | None = None,
 ) -> dict:
-    settings = _memory_cfg(cfg)
     _ensure_layout(settings)
-    index_payload = rebuild_memory_index(cfg)
+    index_payload = _load_index_payload(settings)
 
     candidate_limit = settings["topic_candidate_limit"]
     selected_top_k = top_k if isinstance(top_k, int) and top_k > 0 else settings["default_top_k"]
@@ -840,6 +853,7 @@ def query_memory(
     return {
         "schema_version": MEMORY_SCHEMA_VERSION,
         "generated_at": current_utc_timestamp(),
+        "provider": settings["provider"],
         "query": query,
         "request_id": selected_request_id,
         "used": bool(results),
@@ -856,6 +870,146 @@ def query_memory(
         "min_score": selected_min_score,
         "require_verification": require_verified,
     }
+
+
+class MemoryProvider(Protocol):
+    def rebuild_index(self) -> dict: ...
+
+    def consolidate(self) -> dict: ...
+
+    def record_entries(self, entries: list[dict]) -> list[dict]: ...
+
+    def import_entries(
+        self,
+        source_path: str,
+        *,
+        source_label: str | None = None,
+    ) -> dict: ...
+
+    def query(
+        self,
+        query: str,
+        *,
+        top_k: int | None = None,
+        min_score: float | None = None,
+        require_verification: bool | None = None,
+        request_id: str | None = None,
+        trace_result_limit: int | None = None,
+        trace_excluded_limit: int | None = None,
+        supporting_observation_limit: int | None = None,
+    ) -> dict: ...
+
+
+class FileMemoryProvider:
+    def __init__(self, settings: dict) -> None:
+        self.settings = settings
+
+    def rebuild_index(self) -> dict:
+        return _rebuild_memory_index(self.settings)
+
+    def consolidate(self) -> dict:
+        return _consolidate_memory(self.settings)
+
+    def record_entries(self, entries: list[dict]) -> list[dict]:
+        return _record_memory_entries(self.settings, entries)
+
+    def import_entries(
+        self,
+        source_path: str,
+        *,
+        source_label: str | None = None,
+    ) -> dict:
+        return _import_memory_entries(
+            self.settings,
+            source_path,
+            source_label=source_label,
+        )
+
+    def query(
+        self,
+        query: str,
+        *,
+        top_k: int | None = None,
+        min_score: float | None = None,
+        require_verification: bool | None = None,
+        request_id: str | None = None,
+        trace_result_limit: int | None = None,
+        trace_excluded_limit: int | None = None,
+        supporting_observation_limit: int | None = None,
+    ) -> dict:
+        return _query_memory(
+            self.settings,
+            query,
+            top_k=top_k,
+            min_score=min_score,
+            require_verification=require_verification,
+            request_id=request_id,
+            trace_result_limit=trace_result_limit,
+            trace_excluded_limit=trace_excluded_limit,
+            supporting_observation_limit=supporting_observation_limit,
+        )
+
+
+MEMORY_PROVIDER_FACTORIES = {
+    "file": FileMemoryProvider,
+}
+
+
+def _get_memory_provider(cfg: dict) -> MemoryProvider:
+    settings = _memory_cfg(cfg)
+    provider_name = settings["provider"]
+    factory = MEMORY_PROVIDER_FACTORIES.get(provider_name)
+    if factory is None:
+        raise ValueError(f"Unsupported memory provider: {provider_name}")
+    return factory(settings)
+
+
+def rebuild_memory_index(cfg: dict) -> dict:
+    return _get_memory_provider(cfg).rebuild_index()
+
+
+def consolidate_memory(cfg: dict) -> dict:
+    return _get_memory_provider(cfg).consolidate()
+
+
+def record_memory_entries(cfg: dict, entries: list[dict]) -> list[dict]:
+    return _get_memory_provider(cfg).record_entries(entries)
+
+
+def import_memory_entries(
+    cfg: dict,
+    source_path: str,
+    *,
+    source_label: str | None = None,
+) -> dict:
+    return _get_memory_provider(cfg).import_entries(
+        source_path,
+        source_label=source_label,
+    )
+
+
+def query_memory(
+    cfg: dict,
+    query: str,
+    *,
+    top_k: int | None = None,
+    min_score: float | None = None,
+    require_verification: bool | None = None,
+    request_id: str | None = None,
+    trace_result_limit: int | None = None,
+    trace_excluded_limit: int | None = None,
+    supporting_observation_limit: int | None = None,
+) -> dict:
+    return _get_memory_provider(cfg).query(
+        query,
+        top_k=top_k,
+        min_score=min_score,
+        require_verification=require_verification,
+        request_id=request_id,
+        trace_result_limit=trace_result_limit,
+        trace_excluded_limit=trace_excluded_limit,
+        supporting_observation_limit=supporting_observation_limit,
+    )
 
 
 def format_memory_context(results: list[dict], max_context_chars: int) -> str:

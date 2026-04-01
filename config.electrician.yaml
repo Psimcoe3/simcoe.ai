@@ -170,6 +170,7 @@ retrieval:
 
 memory:
   enabled: true
+  provider: "file"
   root_dir: "data/memory_electrician"
   index_path: "data/memory_electrician/MEMORY.json"
   topics_dir: "data/memory_electrician/topics"

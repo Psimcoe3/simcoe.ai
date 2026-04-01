@@ -259,6 +259,7 @@ Key sections:
 - Uses `evaluation.golden_benchmark_path` for full-mode benchmark runs when configured.
 - Can inject retrieved context from a local corpus when `retrieval.enabled` and `retrieval.use_in_full_evaluation` are set.
 - Can also inject local indexed-memory hints when `memory.enabled` is true. Memory stays separate from the retrieval corpus: the always-loaded file is a pointer-only index, while full topic records are loaded on demand and filtered skeptically.
+- Retrieval and memory context assembly now prefetch in parallel during evaluation, and memory queries read the maintained pointer index rather than rebuilding it on every lookup.
 - Supports mixed-route golden benchmarks where some rows are evaluated through deterministic tools instead of text generation.
 - Reports deterministic-tool success and match-score metrics separately so text and tool regressions are visible independently.
 
@@ -266,6 +267,7 @@ Key sections:
 
 - Memory is local operational state, not training data and not release lineage.
 - The store has three layers: `events.jsonl` as an append-only log, `topics/*.json` as materialized topic records, and `MEMORY.json` as a pointer-only index that never stores full topic content.
+- `memory.provider` is explicit even though the current backend is only `file`; that keeps evaluation and CLI call sites stable if a local SQLite or other backend is added later.
 - Query results are skeptical by default: stale, retracted, contradicted, below-threshold, and unverified topics are excluded and returned with explicit reasons.
 - Consolidation tracks superseded and contradicted observations, and evaluation traces now carry a stable `memory_request_id` so memory hits can be audited per benchmark row.
 - Curated imports are supported from JSON, JSONL, and YAML. Imported rows must be explicit operator knowledge, not derivable scratch state.

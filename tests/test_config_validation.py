@@ -123,6 +123,7 @@ def test_validate_memory_config_accepts_scaffold() -> None:
         {
             "memory": {
                 "enabled": False,
+                "provider": "file",
                 "root_dir": "data/memory",
                 "index_path": "data/memory/MEMORY.json",
                 "topics_dir": "data/memory/topics",
@@ -154,6 +155,7 @@ def test_validate_memory_config_rejects_unknown_kind(capsys: pytest.CaptureFixtu
             {
                 "memory": {
                     "enabled": False,
+                    "provider": "file",
                     "root_dir": "data/memory",
                     "index_path": "data/memory/MEMORY.json",
                     "topics_dir": "data/memory/topics",
@@ -190,6 +192,7 @@ def test_validate_memory_config_rejects_track_only_without_exclusion(
             {
                 "memory": {
                     "enabled": False,
+                    "provider": "file",
                     "root_dir": "data/memory",
                     "index_path": "data/memory/MEMORY.json",
                     "topics_dir": "data/memory/topics",
@@ -216,3 +219,40 @@ def test_validate_memory_config_rejects_track_only_without_exclusion(
 
     captured = capsys.readouterr()
     assert "memory.exclude_contradicted_topics must be true" in captured.out
+
+
+def test_validate_memory_config_rejects_unknown_provider(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        validate_memory_config(
+            {
+                "memory": {
+                    "enabled": False,
+                    "provider": "sqlite",
+                    "root_dir": "data/memory",
+                    "index_path": "data/memory/MEMORY.json",
+                    "topics_dir": "data/memory/topics",
+                    "events_path": "data/memory/events.jsonl",
+                    "default_top_k": 3,
+                    "topic_candidate_limit": 8,
+                    "max_context_chars": 1200,
+                    "max_index_entries": 64,
+                    "max_summary_chars": 160,
+                    "max_supporting_observations": 3,
+                    "max_trace_results": 3,
+                    "max_trace_excluded": 3,
+                    "min_score": 2,
+                    "require_verification": True,
+                    "contradiction_policy": "mark_stale",
+                    "exclude_contradicted_topics": True,
+                    "import_max_records": 32,
+                    "allowed_kinds": ["operator_note", "verified_fact", "decision", "exception"],
+                    "exclude_statuses": ["stale", "retracted"],
+                    "consolidation_min_events": 8,
+                }
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert "memory.provider must be one of" in captured.out
