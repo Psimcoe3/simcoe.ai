@@ -5,6 +5,8 @@ from copy import deepcopy
 import pytest
 
 from config_validation import (
+    validate_context_providers_config,
+    validate_hooks_config,
     validate_memory_config,
     validate_multimodal_config,
     validate_routing_config,
@@ -256,3 +258,74 @@ def test_validate_memory_config_rejects_unknown_provider(
 
     captured = capsys.readouterr()
     assert "memory.provider must be one of" in captured.out
+
+
+def test_validate_context_providers_config_accepts_scaffold() -> None:
+    validate_context_providers_config(
+        {
+            "context_providers": {
+                "order": ["memory", "retrieval"],
+                "max_workers": 4,
+            }
+        }
+    )
+
+
+def test_validate_context_providers_config_requires_retrieval(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        validate_context_providers_config(
+            {
+                "context_providers": {
+                    "order": ["memory"],
+                    "max_workers": 4,
+                }
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert "context_providers.order must include 'retrieval'" in captured.out
+
+
+def test_validate_hooks_config_accepts_scaffold() -> None:
+    validate_hooks_config(
+        {
+            "hooks": {
+                "enabled": True,
+                "rules": [
+                    {
+                        "name": "annotate_retrieval_provider",
+                        "stage": "post_context_provider",
+                        "action": "annotate",
+                        "match": {"provider": "retrieval"},
+                        "fields": {"policy": "grounded"},
+                    }
+                ],
+            }
+        }
+    )
+
+
+def test_validate_hooks_config_rejects_unknown_stage(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        validate_hooks_config(
+            {
+                "hooks": {
+                    "enabled": True,
+                    "rules": [
+                        {
+                            "name": "bad_stage",
+                            "stage": "post_llm",
+                            "action": "annotate",
+                            "fields": {"policy": "grounded"},
+                        }
+                    ],
+                }
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert "hooks.rules[0].stage must be one of" in captured.out

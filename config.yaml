@@ -154,6 +154,12 @@ retrieval:
   min_score: 2
   use_in_full_evaluation: false
 
+context_providers:
+  order:
+    - memory
+    - retrieval
+  max_workers: 8
+
 memory:
   enabled: false
   provider: "file"
@@ -183,6 +189,10 @@ memory:
     - stale
     - retracted
   consolidation_min_events: 8
+
+hooks:
+  enabled: false
+  rules: []
 
 deterministic_tools:
   estimate_lookup:

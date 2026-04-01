@@ -36,22 +36,28 @@ try:
 except ImportError:
     torch = None
 
+from context_providers import (
+    active_context_provider_names,
+    build_context_provider_registry,
+    resolve_context_provider_settings,
+)
 from config_validation import load_config, validate_evaluate_config
-from data_contracts import stable_identifier
 from deterministic_tool_utils import build_tool_request
 from estimate_lookup import TOOL_NAME as ESTIMATE_LOOKUP_TOOL_NAME, run_estimate_lookup_request
-from indexed_memory import format_memory_context, query_memory
+from hook_runtime import apply_hook_stage
 from manifest_utils import current_utc_timestamp, read_json_file, write_json_file
 from request_router import route_request
 from revit_entity_lookup import TOOL_NAME as REVIT_ENTITY_LOOKUP_TOOL_NAME, run_revit_entity_lookup_request
 from retrieval_utils import (
     build_context_augmented_prompt,
     extract_instruction_text,
-    format_retrieved_context,
     load_jsonl,
-    retrieve_documents,
 )
 from runtime_contracts import (
+    CONTEXT_PROVIDER_MEMORY,
+    CONTEXT_PROVIDER_RETRIEVAL,
+    HOOK_STAGE_POST_DETERMINISTIC_TOOL,
+    HOOK_STAGE_PRE_DETERMINISTIC_TOOL,
     ROUTE_DETERMINISTIC_TOOL,
     ROUTE_MIXED,
     ROUTE_RETRIEVAL,
@@ -239,22 +245,25 @@ def load_evaluation_examples(cfg: dict, settings: dict) -> tuple[list[dict], dic
     }
 
 
-def _build_memory_request_id(example: dict, index: int, query: str) -> str:
-    return stable_identifier(
-        "evaluation_memory_query",
-        example.get("benchmark_id") or f"example_{index}",
-        query,
-        example.get("source") or "",
-        example.get("section") or "",
-    )
-
-
 def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: dict) -> tuple[list[str], dict]:
     retrieval_cfg = cfg.get("retrieval") if isinstance(cfg.get("retrieval"), dict) else None
     memory_cfg = cfg.get("memory") if isinstance(cfg.get("memory"), dict) else None
+    provider_settings = resolve_context_provider_settings(cfg)
     route_forces_retrieval = any(_route_name(example) == ROUTE_RETRIEVAL for example in examples)
     requested_retrieval = bool(settings["use_retrieval"] or route_forces_retrieval)
     memory_enabled = bool(memory_cfg and memory_cfg.get("enabled", False))
+    context_provider_metadata = {
+        "order": list(provider_settings["order"]),
+        "max_workers": provider_settings["max_workers"],
+        "active": active_context_provider_names(cfg, provider_settings["order"]),
+        "per_example": [],
+    }
+    empty_memory_metadata = {
+        "enabled": memory_enabled,
+        "used": False,
+        "query_count": 0,
+        "per_example": [],
+    }
 
     if not retrieval_cfg:
         if requested_retrieval:
@@ -262,7 +271,8 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
         return [example["prompt"] for example in examples], {
             "enabled": False,
             "used": False,
-            "memory": {"enabled": memory_enabled, "used": False, "per_example": []},
+            "memory": empty_memory_metadata,
+            "context_providers": context_provider_metadata,
         }
 
     retrieval_enabled = bool(retrieval_cfg.get("enabled", False))
@@ -272,7 +282,8 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
         return [example["prompt"] for example in examples], {
             "enabled": False,
             "used": False,
-            "memory": {"enabled": memory_enabled, "used": False, "per_example": []},
+            "memory": empty_memory_metadata,
+            "context_providers": context_provider_metadata,
         }
 
     if not requested_retrieval:
@@ -280,14 +291,15 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
             "enabled": True,
             "used": False,
             "forced_by_routes": False,
-            "memory": {"enabled": memory_enabled, "used": False, "per_example": []},
+            "memory": empty_memory_metadata,
+            "context_providers": context_provider_metadata,
         }
 
-    corpus_path = retrieval_cfg["corpus_path"]
-    corpus = load_jsonl(corpus_path)
-    top_k = int(retrieval_cfg.get("top_k", 3))
-    max_context_chars = int(retrieval_cfg.get("max_context_chars", 1600))
-    min_score = float(retrieval_cfg.get("min_score", 1.0))
+    providers, provider_metadata = build_context_provider_registry(cfg)
+    if CONTEXT_PROVIDER_RETRIEVAL not in {provider["name"] for provider in providers}:
+        raise SystemExit(
+            "Evaluation examples require the retrieval context provider, but context_providers.order excludes it"
+        )
 
     example_queries = [extract_instruction_text(example["prompt"]) for example in examples]
     should_retrieve_flags = [
@@ -295,12 +307,16 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
         for example in examples
     ]
 
-    retrieval_futures: dict[int, object] = {}
-    memory_futures: dict[int, object] = {}
-    task_count = sum(1 for should_retrieve in should_retrieve_flags if should_retrieve)
-    if memory_enabled:
-        task_count += sum(1 for should_retrieve in should_retrieve_flags if should_retrieve)
-    prefetch_workers = max(1, min(task_count or 1, os.cpu_count() or 1, 8))
+    provider_futures: dict[tuple[int, str], object] = {}
+    task_count = sum(len(providers) for should_retrieve in should_retrieve_flags if should_retrieve)
+    prefetch_workers = max(
+        1,
+        min(
+            task_count or 1,
+            os.cpu_count() or 1,
+            int(provider_settings["max_workers"] or 1),
+        ),
+    )
 
     if task_count > 0:
         with ThreadPoolExecutor(max_workers=prefetch_workers) as executor:
@@ -309,27 +325,12 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
                     continue
 
                 query = example_queries[index]
-                retrieval_futures[index] = executor.submit(
-                    retrieve_documents,
-                    query,
-                    corpus,
-                    top_k=top_k,
-                    min_score=min_score,
-                    preferred_source=example.get("source"),
-                    preferred_section=example.get("section"),
-                )
-
-                if memory_enabled:
-                    memory_futures[index] = executor.submit(
-                        query_memory,
-                        cfg,
+                for provider in providers:
+                    provider_futures[(index, provider["name"])] = executor.submit(
+                        provider["query_fn"],
+                        example,
                         query,
-                        request_id=_build_memory_request_id(example, index, query),
-                        trace_result_limit=int(memory_cfg.get("max_trace_results", 3) or 3),
-                        trace_excluded_limit=int(memory_cfg.get("max_trace_excluded", 3) or 3),
-                        supporting_observation_limit=int(
-                            memory_cfg.get("max_supporting_observations", 3) or 3
-                        ),
+                        index,
                     )
 
     prompts: list[str] = []
@@ -338,6 +339,7 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
     memory_query_count = 0
     memory_usage_count = 0
     memory_traces: list[dict] = []
+    provider_trace_groups: list[dict] = []
     for index, example in enumerate(examples):
         query = example_queries[index]
         should_retrieve = should_retrieve_flags[index]
@@ -351,50 +353,46 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
             "memory_results": [],
             "memory_excluded": [],
             "memory_used": False,
+            "context_providers": [],
+        }
+        provider_group = {
+            "query": query,
+            "providers": [],
         }
 
         if should_retrieve:
-            retrieved = retrieval_futures[index].result()
-            if memory_enabled and index in memory_futures:
-                memory_query = memory_futures[index].result()
-                memory_query_count += 1
-                if memory_query.get("used"):
-                    memory_usage_count += 1
-            else:
-                memory_query = {"used": False, "results": [], "excluded": []}
+            context_sections: list[tuple[str, str]] = []
+            for provider in providers:
+                provider_result = provider_futures[(index, provider["name"])].result()
+                provider_trace = copy.deepcopy(provider_result["trace"])
+                trace["context_providers"].append(provider_trace)
+                provider_group["providers"].append(provider_trace)
+                if provider_result["context"].strip():
+                    context_sections.append(
+                        (provider_result["section_title"], provider_result["context"])
+                    )
 
-            retrieved_context = format_retrieved_context(retrieved, max_context_chars=max_context_chars)
-            memory_context = ""
-            if memory_enabled:
-                memory_context = format_memory_context(
-                    memory_query.get("results", []),
-                    int(memory_cfg.get("max_context_chars", 1200) or 1200),
-                )
+                if provider["name"] == CONTEXT_PROVIDER_RETRIEVAL:
+                    retrieval_usage_count += 1
+                    trace["results"] = copy.deepcopy(provider_trace.get("results", []))
+                    trace["retrieval_context_included"] = bool(
+                        provider_trace.get("context_included", False)
+                    )
+                if provider["name"] == CONTEXT_PROVIDER_MEMORY:
+                    memory_query_count += 1
+                    trace["memory_request_id"] = provider_trace.get("request_id")
+                    trace["memory_results"] = copy.deepcopy(provider_trace.get("results", []))
+                    trace["memory_excluded"] = copy.deepcopy(provider_trace.get("excluded", []))
+                    trace["memory_used"] = bool(provider_trace.get("used"))
+                    if trace["memory_used"]:
+                        memory_usage_count += 1
 
             prompts.append(
                 build_context_augmented_prompt(
                     example["prompt"],
-                    memory_context=memory_context,
-                    retrieved_context=retrieved_context,
+                    context_sections=context_sections,
                 )
             )
-            trace["results"] = [
-                {
-                    "id": item.get("id"),
-                    "source": item.get("source"),
-                    "section": item.get("section"),
-                    "score": item.get("score"),
-                }
-                for item in retrieved
-            ]
-            trace["memory_request_id"] = memory_query.get("request_id")
-            trace["memory_results"] = memory_query.get(
-                "trace_results",
-                memory_query.get("results", []),
-            )
-            trace["memory_excluded"] = memory_query.get("excluded", [])
-            trace["memory_used"] = bool(memory_query.get("used"))
-            retrieval_usage_count += 1
         else:
             prompts.append(example["prompt"])
 
@@ -408,16 +406,21 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
                 "excluded": trace["memory_excluded"],
             }
         )
+        provider_trace_groups.append(provider_group)
 
+    context_provider_metadata = {
+        **provider_metadata,
+        "per_example": provider_trace_groups,
+    }
     return prompts, {
         "enabled": True,
         "used": retrieval_usage_count > 0 or memory_usage_count > 0,
         "forced_by_routes": route_forces_retrieval,
-        "corpus_path": os.path.abspath(corpus_path),
-        "corpus_size": len(corpus),
-        "top_k": top_k,
-        "max_context_chars": max_context_chars,
-        "min_score": min_score,
+        "corpus_path": provider_metadata.get("corpus_path"),
+        "corpus_size": provider_metadata.get("corpus_size", 0),
+        "top_k": provider_metadata.get("top_k"),
+        "max_context_chars": provider_metadata.get("max_context_chars"),
+        "min_score": provider_metadata.get("min_score"),
         "context_prefetch_workers": prefetch_workers,
         "retrieval_example_count": retrieval_usage_count,
         "memory": {
@@ -426,6 +429,7 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
             "query_count": memory_query_count,
             "per_example": memory_traces,
         },
+        "context_providers": context_provider_metadata,
         "per_example": traces,
     }
 
@@ -974,6 +978,34 @@ def _compare_expected_fields(
     )
 
 
+def _build_deterministic_tool_failure(
+    example: dict,
+    tool_name: object,
+    *,
+    checks: list[dict],
+    error: str,
+    response: dict | None,
+    hook_events: list[dict],
+    hook_annotations: dict,
+) -> dict:
+    result = {
+        "route": _route_name(example),
+        "tool_name": tool_name,
+        "passed": False,
+        "match_score": 0.0,
+        "passed_checks": 0,
+        "total_checks": len(checks),
+        "checks": checks,
+        "error": error,
+        "response": response,
+    }
+    if hook_events:
+        result["hook_events"] = hook_events
+    if hook_annotations:
+        result["hook_annotations"] = hook_annotations
+    return result
+
+
 def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
     tool_name = example.get("tool_name")
     tool_request = example.get("tool_request") if isinstance(example.get("tool_request"), dict) else {}
@@ -992,6 +1024,40 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
     )
 
     checks: list[dict] = []
+    pre_hook = apply_hook_stage(
+        cfg,
+        HOOK_STAGE_PRE_DETERMINISTIC_TOOL,
+        {
+            "route": _route_name(example),
+            "tool_name": tool_name,
+            "request": copy.deepcopy(request),
+            "benchmark_id": example.get("benchmark_id"),
+        },
+    )
+    hook_events = list(pre_hook["events"])
+    hook_annotations = dict(pre_hook["annotations"])
+    if pre_hook["denied"]:
+        return _build_deterministic_tool_failure(
+            example,
+            tool_name,
+            checks=[
+                {
+                    "path": "tool_execution",
+                    "expected": "success",
+                    "actual": pre_hook["deny_reason"],
+                    "passed": False,
+                }
+            ],
+            error=pre_hook["deny_reason"] or "Deterministic tool denied by hook",
+            response=None,
+            hook_events=hook_events,
+            hook_annotations=hook_annotations,
+        )
+
+    hook_payload = pre_hook["payload"]
+    tool_name = hook_payload.get("tool_name") if isinstance(hook_payload.get("tool_name"), str) else tool_name
+    request = hook_payload.get("request") if isinstance(hook_payload.get("request"), dict) else request
+
     try:
         if tool_name == ESTIMATE_LOOKUP_TOOL_NAME:
             response = run_estimate_lookup_request(
@@ -1008,14 +1074,10 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
                 min_score=tool_request.get("min_score"),
             )
         else:
-            return {
-                "route": _route_name(example),
-                "tool_name": tool_name,
-                "passed": False,
-                "match_score": 0.0,
-                "passed_checks": 0,
-                "total_checks": 1,
-                "checks": [
+            return _build_deterministic_tool_failure(
+                example,
+                tool_name,
+                checks=[
                     {
                         "path": "tool_name",
                         "expected": [ESTIMATE_LOOKUP_TOOL_NAME, REVIT_ENTITY_LOOKUP_TOOL_NAME],
@@ -1023,9 +1085,47 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
                         "passed": False,
                     }
                 ],
-                "error": f"Unsupported deterministic tool: {tool_name}",
-                "response": None,
-            }
+                error=f"Unsupported deterministic tool: {tool_name}",
+                response=None,
+                hook_events=hook_events,
+                hook_annotations=hook_annotations,
+            )
+
+        post_hook = apply_hook_stage(
+            cfg,
+            HOOK_STAGE_POST_DETERMINISTIC_TOOL,
+            {
+                "route": _route_name(example),
+                "tool_name": tool_name,
+                "request": copy.deepcopy(request),
+                "response": copy.deepcopy(response),
+                "benchmark_id": example.get("benchmark_id"),
+            },
+        )
+        hook_events.extend(post_hook["events"])
+        hook_annotations = dict(post_hook["annotations"])
+        if post_hook["denied"]:
+            return _build_deterministic_tool_failure(
+                example,
+                tool_name,
+                checks=[
+                    {
+                        "path": "tool_execution",
+                        "expected": "success",
+                        "actual": post_hook["deny_reason"],
+                        "passed": False,
+                    }
+                ],
+                error=post_hook["deny_reason"] or "Deterministic tool denied by hook",
+                response=None,
+                hook_events=hook_events,
+                hook_annotations=hook_annotations,
+            )
+
+        tool_payload = post_hook["payload"]
+        tool_name = tool_payload.get("tool_name") if isinstance(tool_payload.get("tool_name"), str) else tool_name
+        request = tool_payload.get("request") if isinstance(tool_payload.get("request"), dict) else request
+        response = tool_payload.get("response") if isinstance(tool_payload.get("response"), dict) else response
 
         minimum_results = tool_expectation.get("result_count_at_least")
         if minimum_results is not None:
@@ -1044,14 +1144,10 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
             top_result = response.get("results", [None])[0] if response.get("results") else None
             _compare_expected_fields(top_result_expectation, top_result, "top_result", checks)
     except Exception as exc:
-        return {
-            "route": _route_name(example),
-            "tool_name": tool_name,
-            "passed": False,
-            "match_score": 0.0,
-            "passed_checks": 0,
-            "total_checks": 1,
-            "checks": [
+        return _build_deterministic_tool_failure(
+            example,
+            tool_name,
+            checks=[
                 {
                     "path": "tool_execution",
                     "expected": "success",
@@ -1059,9 +1155,11 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
                     "passed": False,
                 }
             ],
-            "error": str(exc),
-            "response": None,
-        }
+            error=str(exc),
+            response=None,
+            hook_events=hook_events,
+            hook_annotations=hook_annotations,
+        )
 
     total_checks = len(checks)
     passed_checks = sum(1 for check in checks if check["passed"])
@@ -1072,7 +1170,7 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
         passed = bool(response.get("result_count", 0))
         match_score = 1.0 if passed else 0.0
 
-    return {
+    result = {
         "route": _route_name(example),
         "tool_name": tool_name,
         "passed": passed,
@@ -1083,6 +1181,11 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
         "response": response,
         "warnings": response.get("warnings", []),
     }
+    if hook_events:
+        result["hook_events"] = hook_events
+    if hook_annotations:
+        result["hook_annotations"] = hook_annotations
+    return result
 
 
 def score_deterministic_tools_by_category(route_results: list[dict | None], examples: list[dict]) -> dict:

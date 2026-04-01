@@ -13,12 +13,43 @@ ROUTE_DETERMINISTIC_TOOL = "deterministic_tool"
 ROUTE_DRAWING_SHEET = "drawing_sheet"
 ROUTE_MIXED = "mixed"
 
+CONTEXT_PROVIDER_MEMORY = "memory"
+CONTEXT_PROVIDER_RETRIEVAL = "retrieval"
+
+HOOK_STAGE_PRE_ROUTE = "pre_route"
+HOOK_STAGE_POST_ROUTE = "post_route"
+HOOK_STAGE_PRE_CONTEXT_PROVIDER = "pre_context_provider"
+HOOK_STAGE_POST_CONTEXT_PROVIDER = "post_context_provider"
+HOOK_STAGE_PRE_DETERMINISTIC_TOOL = "pre_deterministic_tool"
+HOOK_STAGE_POST_DETERMINISTIC_TOOL = "post_deterministic_tool"
+
+HOOK_ACTION_ANNOTATE = "annotate"
+HOOK_ACTION_DENY = "deny"
+HOOK_ACTION_SET_FIELDS = "set_fields"
+
 KNOWN_ROUTES = {
     ROUTE_TEXT,
     ROUTE_RETRIEVAL,
     ROUTE_DETERMINISTIC_TOOL,
     ROUTE_DRAWING_SHEET,
     ROUTE_MIXED,
+}
+KNOWN_CONTEXT_PROVIDERS = {
+    CONTEXT_PROVIDER_MEMORY,
+    CONTEXT_PROVIDER_RETRIEVAL,
+}
+KNOWN_HOOK_STAGES = {
+    HOOK_STAGE_PRE_ROUTE,
+    HOOK_STAGE_POST_ROUTE,
+    HOOK_STAGE_PRE_CONTEXT_PROVIDER,
+    HOOK_STAGE_POST_CONTEXT_PROVIDER,
+    HOOK_STAGE_PRE_DETERMINISTIC_TOOL,
+    HOOK_STAGE_POST_DETERMINISTIC_TOOL,
+}
+KNOWN_HOOK_ACTIONS = {
+    HOOK_ACTION_ANNOTATE,
+    HOOK_ACTION_DENY,
+    HOOK_ACTION_SET_FIELDS,
 }
 MULTIMODAL_ROUTES = {ROUTE_DRAWING_SHEET, ROUTE_MIXED}
 FAIL_ROUTE_FALLBACK = "fail"
@@ -49,6 +80,39 @@ def normalize_route(value: object, label: str = "route") -> str:
         choices = ", ".join(sorted(KNOWN_ROUTES))
         raise ValueError(f"{label} must be one of: {choices}")
     return route
+
+
+def normalize_context_provider(value: object, label: str = "context provider") -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} must be a non-empty string")
+
+    provider = value.strip().lower()
+    if provider not in KNOWN_CONTEXT_PROVIDERS:
+        choices = ", ".join(sorted(KNOWN_CONTEXT_PROVIDERS))
+        raise ValueError(f"{label} must be one of: {choices}")
+    return provider
+
+
+def normalize_hook_stage(value: object, label: str = "hook stage") -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} must be a non-empty string")
+
+    stage = value.strip().lower()
+    if stage not in KNOWN_HOOK_STAGES:
+        choices = ", ".join(sorted(KNOWN_HOOK_STAGES))
+        raise ValueError(f"{label} must be one of: {choices}")
+    return stage
+
+
+def normalize_hook_action(value: object, label: str = "hook action") -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} must be a non-empty string")
+
+    action = value.strip().lower()
+    if action not in KNOWN_HOOK_ACTIONS:
+        choices = ", ".join(sorted(KNOWN_HOOK_ACTIONS))
+        raise ValueError(f"{label} must be one of: {choices}")
+    return action
 
 
 def normalize_route_fallback(value: object, label: str) -> str:

@@ -195,12 +195,21 @@ def build_context_augmented_prompt(
     *,
     memory_context: str = "",
     retrieved_context: str = "",
+    context_sections: list[tuple[str, str]] | None = None,
 ) -> str:
     sections: list[str] = []
-    if memory_context.strip():
-        sections.append(f"### Memory Hints:\n{memory_context}")
-    if retrieved_context.strip():
-        sections.append(f"### Retrieved Context:\n{retrieved_context}")
+    if context_sections is not None:
+        for title, context in context_sections:
+            if not isinstance(title, str):
+                continue
+            cleaned_context = str(context or "").strip()
+            if cleaned_context:
+                sections.append(f"### {title}:\n{cleaned_context}")
+    else:
+        if memory_context.strip():
+            sections.append(f"### Memory Hints:\n{memory_context}")
+        if retrieved_context.strip():
+            sections.append(f"### Retrieved Context:\n{retrieved_context}")
 
     if not sections:
         return prompt

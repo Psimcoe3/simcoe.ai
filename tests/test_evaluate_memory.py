@@ -30,6 +30,10 @@ def _cfg(tmp_path) -> dict:
             "max_context_chars": 1600,
             "min_score": 1,
         },
+        "context_providers": {
+            "order": ["memory", "retrieval"],
+            "max_workers": 4,
+        },
         "memory": {
             "enabled": True,
             "provider": "file",
@@ -53,6 +57,18 @@ def _cfg(tmp_path) -> dict:
             "allowed_kinds": ["operator_note", "verified_fact", "decision", "exception"],
             "exclude_statuses": ["stale", "retracted"],
             "consolidation_min_events": 2,
+        },
+        "hooks": {
+            "enabled": True,
+            "rules": [
+                {
+                    "name": "annotate_retrieval_provider",
+                    "stage": "post_context_provider",
+                    "action": "annotate",
+                    "match": {"provider": "retrieval"},
+                    "fields": {"policy": "grounded"},
+                }
+            ],
         },
     }
 
@@ -89,6 +105,15 @@ def test_prepare_prompts_with_retrieval_merges_memory_hints(tmp_path) -> None:
     assert metadata["per_example"][0]["memory_used"] is True
     assert metadata["per_example"][0]["memory_request_id"]
     assert metadata["per_example"][0]["memory_results"]
+    assert metadata["context_providers"]["order"] == ["memory", "retrieval"]
+    assert [
+        provider["provider"]
+        for provider in metadata["context_providers"]["per_example"][0]["providers"]
+    ] == ["memory", "retrieval"]
+    assert (
+        metadata["per_example"][0]["context_providers"][1]["hook_annotations"]["policy"]
+        == "grounded"
+    )
     assert (
         metadata["memory"]["per_example"][0]["request_id"]
         == metadata["per_example"][0]["memory_request_id"]

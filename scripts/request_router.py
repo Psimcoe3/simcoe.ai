@@ -8,23 +8,27 @@ import argparse
 import json
 
 from config_validation import (
+    validate_orchestration_config,
     load_config,
     validate_architecture_config,
     validate_deterministic_tools_config,
-    validate_memory_config,
     validate_multimodal_config,
     validate_retrieval_config,
     validate_routing_config,
 )
 from data_contracts import infer_asset_kind, is_drawing_asset
+from hook_runtime import apply_hook_stage
 from runtime_contracts import (
     FAIL_ROUTE_FALLBACK,
+    HOOK_STAGE_POST_ROUTE,
+    HOOK_STAGE_PRE_ROUTE,
     ROUTE_DETERMINISTIC_TOOL,
     ROUTE_DRAWING_SHEET,
     ROUTE_MIXED,
     ROUTE_RETRIEVAL,
     ROUTE_TEXT,
     default_runtime_owner_for_route,
+    normalize_route,
 )
 
 
@@ -152,6 +156,55 @@ def _attachment_suggests_drawing(attachments: list[str] | None) -> bool:
     return False
 
 
+def _finalize_route_decision(decision: dict, latency_budgets: dict) -> dict:
+    requested_route = normalize_route(
+        decision.get("requested_route") or ROUTE_TEXT,
+        "route decision requested_route",
+    )
+    resolved_route = normalize_route(
+        decision.get("resolved_route") or requested_route,
+        "route decision resolved_route",
+    )
+    fallback_chain = decision.get("fallback_chain")
+    if isinstance(fallback_chain, list) and fallback_chain:
+        normalized_chain = [
+            normalize_route(route_name, "route decision fallback_chain")
+            for route_name in fallback_chain
+        ]
+    else:
+        normalized_chain = [requested_route]
+        if resolved_route != requested_route:
+            normalized_chain.append(resolved_route)
+
+    attachments = decision.get("attachments")
+    normalized_attachments = []
+    if isinstance(attachments, list):
+        normalized_attachments = [
+            str(attachment).strip()
+            for attachment in attachments
+            if isinstance(attachment, str) and str(attachment).strip()
+        ]
+
+    reasons = decision.get("reasons")
+    normalized_reasons = []
+    if isinstance(reasons, list):
+        normalized_reasons = [
+            str(reason).strip()
+            for reason in reasons
+            if isinstance(reason, str) and str(reason).strip()
+        ]
+
+    decision["requested_route"] = requested_route
+    decision["resolved_route"] = resolved_route
+    decision["runtime_owner"] = default_runtime_owner_for_route(resolved_route)
+    decision["latency_budget_ms"] = int(latency_budgets.get(resolved_route, 0) or 0)
+    decision["fallback_chain"] = normalized_chain
+    decision["fallback_applied"] = resolved_route != requested_route
+    decision["attachments"] = normalized_attachments
+    decision["reasons"] = normalized_reasons
+    return decision
+
+
 def route_request(
     cfg: dict,
     instruction: str,
@@ -169,6 +222,49 @@ def route_request(
         routing_cfg.get("latency_budgets_ms")
         if isinstance(routing_cfg.get("latency_budgets_ms"), dict)
         else {}
+    )
+
+    pre_hook = apply_hook_stage(
+        cfg,
+        HOOK_STAGE_PRE_ROUTE,
+        {
+            "instruction": instruction,
+            "context": context,
+            "source": source,
+            "section": section,
+            "attachments": list(attachments or []),
+            "tool_name": tool_name,
+            "explicit_route": explicit_route,
+        },
+    )
+    hook_events = list(pre_hook["events"])
+    if pre_hook["denied"]:
+        raise ValueError(pre_hook["deny_reason"] or "Request denied by pre_route hook")
+
+    hook_payload = pre_hook["payload"]
+    hook_annotations = dict(pre_hook["annotations"])
+    instruction = str(hook_payload.get("instruction") or instruction)
+    context = (
+        hook_payload.get("context") if isinstance(hook_payload.get("context"), str) else context
+    )
+    source = hook_payload.get("source") if isinstance(hook_payload.get("source"), str) else source
+    section = (
+        hook_payload.get("section") if isinstance(hook_payload.get("section"), str) else section
+    )
+    attachments = (
+        list(hook_payload.get("attachments"))
+        if isinstance(hook_payload.get("attachments"), list)
+        else list(attachments or [])
+    )
+    tool_name = (
+        hook_payload.get("tool_name")
+        if isinstance(hook_payload.get("tool_name"), str)
+        else tool_name
+    )
+    explicit_route = (
+        hook_payload.get("explicit_route")
+        if isinstance(hook_payload.get("explicit_route"), str)
+        else explicit_route
     )
 
     normalized_instruction = _normalized_text(instruction)
@@ -208,7 +304,7 @@ def route_request(
         reasons.append("routing.default_route")
 
     resolved_route, fallback_chain = _resolve_route(requested_route, cfg)
-    return {
+    decision = {
         "requested_route": requested_route,
         "resolved_route": resolved_route,
         "runtime_owner": default_runtime_owner_for_route(resolved_route),
@@ -218,6 +314,22 @@ def route_request(
         "attachments": list(attachments or []),
         "reasons": reasons,
     }
+    if hook_annotations:
+        decision["hook_annotations"] = hook_annotations
+
+    post_hook = apply_hook_stage(cfg, HOOK_STAGE_POST_ROUTE, decision)
+    hook_events.extend(post_hook["events"])
+    if post_hook["denied"]:
+        raise ValueError(post_hook["deny_reason"] or "Request denied by post_route hook")
+
+    finalized_decision = _finalize_route_decision(post_hook["payload"], latency_budgets)
+    if post_hook["annotations"]:
+        finalized_decision["hook_annotations"] = dict(post_hook["annotations"])
+    else:
+        finalized_decision.pop("hook_annotations", None)
+    if hook_events:
+        finalized_decision["hook_events"] = hook_events
+    return finalized_decision
 
 
 def parse_args() -> argparse.Namespace:
@@ -246,7 +358,7 @@ def main() -> int:
     validate_routing_config(cfg)
     validate_multimodal_config(cfg)
     validate_retrieval_config(cfg)
-    validate_memory_config(cfg)
+    validate_orchestration_config(cfg)
     validate_deterministic_tools_config(cfg)
 
     decision = route_request(

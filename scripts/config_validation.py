@@ -8,10 +8,15 @@ import sys
 
 from data_contracts import REVIEW_STATES
 from runtime_contracts import (
+    CONTEXT_PROVIDER_RETRIEVAL,
     FAIL_ROUTE_FALLBACK,
+    KNOWN_CONTEXT_PROVIDERS,
+    KNOWN_HOOK_ACTIONS,
+    KNOWN_HOOK_STAGES,
     KNOWN_ROUTES,
     MULTIMODAL_ROUTES,
     normalize_route,
+    normalize_context_provider,
     normalize_route_fallback,
     route_requires_multimodal,
 )
@@ -838,6 +843,87 @@ def validate_memory_config(cfg: dict) -> None:
         fail("memory.import_max_records cannot be smaller than memory.default_top_k")
 
 
+def validate_context_providers_config(cfg: dict) -> None:
+    context_providers = cfg.get("context_providers")
+    if context_providers is None:
+        return
+
+    if not isinstance(context_providers, dict):
+        fail("context_providers must be a mapping when present")
+
+    require_keys(
+        context_providers,
+        "context_providers",
+        {"order", "max_workers"},
+    )
+
+    order = require_string_list(context_providers["order"], "context_providers.order")
+    normalized_order = [
+        normalize_context_provider(provider, "context_providers.order") for provider in order
+    ]
+    if len(normalized_order) != len(set(normalized_order)):
+        fail("context_providers.order must not contain duplicate providers")
+    if CONTEXT_PROVIDER_RETRIEVAL not in normalized_order:
+        fail("context_providers.order must include 'retrieval'")
+
+    unknown_providers = sorted(set(normalized_order) - KNOWN_CONTEXT_PROVIDERS)
+    if unknown_providers:
+        fail(
+            "context_providers.order contains unsupported values: "
+            f"{', '.join(unknown_providers)}"
+        )
+
+    require_positive_int(context_providers["max_workers"], "context_providers.max_workers")
+
+
+def validate_hooks_config(cfg: dict) -> None:
+    hooks = cfg.get("hooks")
+    if hooks is None:
+        return
+
+    if not isinstance(hooks, dict):
+        fail("hooks must be a mapping when present")
+
+    require_keys(hooks, "hooks", {"enabled", "rules"})
+    require_bool(hooks["enabled"], "hooks.enabled")
+
+    rules = hooks.get("rules")
+    if not isinstance(rules, list):
+        fail("hooks.rules must be a list")
+
+    for index, rule in enumerate(rules):
+        if not isinstance(rule, dict):
+            fail(f"hooks.rules[{index}] must be a mapping")
+
+        require_keys(rule, f"hooks.rules[{index}]", {"name", "stage", "action"})
+        require_non_empty_string(rule["name"], f"hooks.rules[{index}].name")
+        require_choice(rule["stage"], f"hooks.rules[{index}].stage", KNOWN_HOOK_STAGES)
+        action = require_choice(rule["action"], f"hooks.rules[{index}].action", KNOWN_HOOK_ACTIONS)
+        require_optional_bool(rule.get("enabled"), f"hooks.rules[{index}].enabled")
+
+        match = rule.get("match")
+        if match is not None:
+            require_mapping(match, f"hooks.rules[{index}].match")
+
+        reason = rule.get("reason")
+        if reason is not None:
+            require_optional_string(reason, f"hooks.rules[{index}].reason")
+
+        fields = rule.get("fields")
+        if action in {"annotate", "set_fields"}:
+            resolved_fields = require_mapping(fields, f"hooks.rules[{index}].fields")
+            if not resolved_fields:
+                fail(f"hooks.rules[{index}].fields must not be empty")
+        elif fields is not None:
+            fail(f"hooks.rules[{index}].fields is only valid for annotate or set_fields hooks")
+
+
+def validate_orchestration_config(cfg: dict) -> None:
+    validate_memory_config(cfg)
+    validate_context_providers_config(cfg)
+    validate_hooks_config(cfg)
+
+
 def validate_prepare_data_config(cfg: dict) -> None:
     data = require_section(cfg, "data")
     model = require_section(cfg, "model")
@@ -847,7 +933,7 @@ def validate_prepare_data_config(cfg: dict) -> None:
     validate_multimodal_config(cfg)
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
-    validate_memory_config(cfg)
+    validate_orchestration_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
     validate_deterministic_tools_config(cfg)
@@ -874,7 +960,7 @@ def validate_train_config(cfg: dict) -> None:
     validate_multimodal_config(cfg)
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
-    validate_memory_config(cfg)
+    validate_orchestration_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
     validate_deterministic_tools_config(cfg)
@@ -935,7 +1021,7 @@ def validate_export_config(cfg: dict) -> None:
     validate_multimodal_config(cfg)
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
-    validate_memory_config(cfg)
+    validate_orchestration_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
     validate_deterministic_tools_config(cfg)
@@ -1031,7 +1117,7 @@ def validate_evaluate_config(cfg: dict, num_examples: int) -> None:
     validate_multimodal_config(cfg)
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
-    validate_memory_config(cfg)
+    validate_orchestration_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
 
@@ -1046,7 +1132,7 @@ def validate_release_artifact_config(cfg: dict) -> None:
     validate_routing_config(cfg)
     validate_multimodal_config(cfg)
     validate_release_config(cfg)
-    validate_memory_config(cfg)
+    validate_orchestration_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
 
@@ -1114,5 +1200,5 @@ def validate_release_artifact_config(cfg: dict) -> None:
 
     if judge_concurrency is not None and judge_concurrency < 1:
         fail("evaluation.judge_concurrency must be a positive integer")
-    validate_memory_config(cfg)
+    validate_orchestration_config(cfg)
     validate_deterministic_tools_config(cfg)

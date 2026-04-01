@@ -87,3 +87,51 @@ def test_route_request_allows_drawing_sheet_when_multimodal_is_enabled() -> None
     assert decision["requested_route"] == "drawing_sheet"
     assert decision["resolved_route"] == "drawing_sheet"
     assert decision["runtime_owner"] == "multimodal"
+
+
+def test_route_request_applies_post_route_annotation_hook() -> None:
+    cfg = _base_cfg()
+    cfg["hooks"] = {
+        "enabled": True,
+        "rules": [
+            {
+                "name": "annotate_grounded_route",
+                "stage": "post_route",
+                "action": "annotate",
+                "match": {"resolved_route": "retrieval"},
+                "fields": {"policy": "grounded"},
+            }
+        ],
+    }
+
+    decision = route_request(
+        cfg,
+        "Summarize the electrical construction reference source Module Nine.",
+        source="NCCER Electrical Guides / NCCER Level 1 Trainee Guide",
+    )
+
+    assert decision["hook_annotations"]["policy"] == "grounded"
+    assert decision["hook_events"][0]["name"] == "annotate_grounded_route"
+
+
+def test_route_request_can_be_denied_by_pre_route_hook() -> None:
+    cfg = _base_cfg()
+    cfg["hooks"] = {
+        "enabled": True,
+        "rules": [
+            {
+                "name": "block_source",
+                "stage": "pre_route",
+                "action": "deny",
+                "match": {"source": "Blocked Source"},
+                "reason": "blocked by route policy",
+            }
+        ],
+    }
+
+    with pytest.raises(ValueError, match="blocked by route policy"):
+        route_request(
+            cfg,
+            "Summarize the electrical construction reference source Module Nine.",
+            source="Blocked Source",
+        )
