@@ -49,6 +49,13 @@ from retrieval_utils import (
     load_jsonl,
     retrieve_documents,
 )
+from runtime_contracts import (
+    ROUTE_DETERMINISTIC_TOOL,
+    ROUTE_MIXED,
+    ROUTE_RETRIEVAL,
+    ROUTE_TEXT,
+    validate_route_contract,
+)
 from tokenizer_utils import load_tokenizer_with_compat
 from transformers import AutoModelForCausalLM, GenerationConfig, pipeline
 
@@ -57,6 +64,11 @@ try:
     _scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
 except ImportError:
     _scorer = None
+
+
+SUPPORTED_TEXT_GENERATION_ROUTES = {ROUTE_TEXT, ROUTE_RETRIEVAL}
+SUPPORTED_EVALUATION_ROUTES = SUPPORTED_TEXT_GENERATION_ROUTES | {ROUTE_DETERMINISTIC_TOOL}
+UNIMPLEMENTED_EVALUATION_ROUTES = {ROUTE_MIXED, "drawing_sheet"}
 
 
 # ── Text normalisation ────────────────────────────────────────────────────────
@@ -119,11 +131,22 @@ def build_example_from_text(text: str) -> dict:
     }
 
 
-def build_example_from_benchmark_row(row: dict) -> dict:
+def build_example_from_benchmark_row(row: dict, multimodal_enabled: bool) -> dict:
     instruction = str(row.get("instruction", "")).strip()
     context = row.get("input")
     reference = str(row.get("response") or row.get("output") or "").strip()
-    route = str(row.get("route") or "text").strip().lower() or "text"
+    benchmark_id = str(row.get("benchmark_id") or "benchmark_row").strip() or "benchmark_row"
+    try:
+        route, runtime_owner = validate_route_contract(
+            row.get("route") or ROUTE_TEXT,
+            row.get("runtime_owner"),
+            multimodal_enabled=multimodal_enabled,
+            route_label=f"benchmark[{benchmark_id}].route",
+            runtime_owner_label=f"benchmark[{benchmark_id}].runtime_owner",
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
     return {
         "prompt": build_prompt(instruction, context if isinstance(context, str) else None),
         "reference": reference,
@@ -132,7 +155,7 @@ def build_example_from_benchmark_row(row: dict) -> dict:
         "source": row.get("source"),
         "section": row.get("section"),
         "route": route,
-        "runtime_owner": row.get("runtime_owner"),
+        "runtime_owner": runtime_owner,
         "tool_name": row.get("tool_name"),
         "tool_request": row.get("tool_request") if isinstance(row.get("tool_request"), dict) else None,
         "tool_expectation": row.get("tool_expectation") if isinstance(row.get("tool_expectation"), dict) else None,
@@ -141,11 +164,13 @@ def build_example_from_benchmark_row(row: dict) -> dict:
 
 def load_evaluation_examples(cfg: dict, settings: dict) -> tuple[list[dict], dict]:
     benchmark_path = cfg["evaluation"].get("golden_benchmark_path")
+    architecture = cfg.get("architecture") if isinstance(cfg.get("architecture"), dict) else {}
+    multimodal_enabled = bool(architecture.get("multimodal_runtime_enabled", False))
     if settings["mode"] != "quick" and benchmark_path:
         benchmark_rows = load_jsonl(benchmark_path)
         example_count = min(settings["num_examples"], len(benchmark_rows))
         selected_rows = benchmark_rows[:example_count]
-        examples = [build_example_from_benchmark_row(row) for row in selected_rows]
+        examples = [build_example_from_benchmark_row(row, multimodal_enabled) for row in selected_rows]
         return examples, {
             "kind": "golden_benchmark",
             "path": os.path.abspath(benchmark_path),
@@ -168,14 +193,25 @@ def load_evaluation_examples(cfg: dict, settings: dict) -> tuple[list[dict], dic
 
 def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: dict) -> tuple[list[str], dict]:
     retrieval_cfg = cfg.get("retrieval") if isinstance(cfg.get("retrieval"), dict) else None
-    if not retrieval_cfg:
-        return [example["prompt"] for example in examples], {"enabled": False}
+    route_forces_retrieval = any(_route_name(example) == ROUTE_RETRIEVAL for example in examples)
+    requested_retrieval = bool(settings["use_retrieval"] or route_forces_retrieval)
 
-    use_retrieval = settings["use_retrieval"]
-    if not use_retrieval:
+    if not retrieval_cfg:
+        if requested_retrieval:
+            raise SystemExit("Evaluation examples require retrieval, but config.retrieval is not defined")
+        return [example["prompt"] for example in examples], {"enabled": False, "used": False}
+
+    retrieval_enabled = bool(retrieval_cfg.get("enabled", False))
+    if not retrieval_enabled:
+        if requested_retrieval:
+            raise SystemExit("Evaluation examples require retrieval, but retrieval.enabled is false")
+        return [example["prompt"] for example in examples], {"enabled": False, "used": False}
+
+    if not requested_retrieval:
         return [example["prompt"] for example in examples], {
-            "enabled": bool(retrieval_cfg.get("enabled", False)),
+            "enabled": True,
             "used": False,
+            "forced_by_routes": False,
         }
 
     corpus_path = retrieval_cfg["corpus_path"]
@@ -186,43 +222,55 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
 
     prompts: list[str] = []
     traces: list[dict] = []
+    retrieval_usage_count = 0
     for example in examples:
         query = extract_instruction_text(example["prompt"])
-        retrieved = retrieve_documents(
-            query,
-            corpus,
-            top_k=top_k,
-            min_score=min_score,
-            preferred_source=example.get("source"),
-            preferred_section=example.get("section"),
-        )
-        retrieved_context = format_retrieved_context(retrieved, max_context_chars=max_context_chars)
-        prompts.append(build_retrieval_augmented_prompt(example["prompt"], retrieved_context))
-        traces.append(
-            {
-                "query": query,
-                "preferred_source": example.get("source"),
-                "preferred_section": example.get("section"),
-                "results": [
-                    {
-                        "id": item.get("id"),
-                        "source": item.get("source"),
-                        "section": item.get("section"),
-                        "score": item.get("score"),
-                    }
-                    for item in retrieved
-                ],
-            }
-        )
+        should_retrieve = bool(settings["use_retrieval"] or _route_name(example) == ROUTE_RETRIEVAL)
+        trace = {
+            "route": _route_name(example),
+            "query": query,
+            "preferred_source": example.get("source"),
+            "preferred_section": example.get("section"),
+            "used": should_retrieve,
+            "results": [],
+        }
+
+        if should_retrieve:
+            retrieved = retrieve_documents(
+                query,
+                corpus,
+                top_k=top_k,
+                min_score=min_score,
+                preferred_source=example.get("source"),
+                preferred_section=example.get("section"),
+            )
+            retrieved_context = format_retrieved_context(retrieved, max_context_chars=max_context_chars)
+            prompts.append(build_retrieval_augmented_prompt(example["prompt"], retrieved_context))
+            trace["results"] = [
+                {
+                    "id": item.get("id"),
+                    "source": item.get("source"),
+                    "section": item.get("section"),
+                    "score": item.get("score"),
+                }
+                for item in retrieved
+            ]
+            retrieval_usage_count += 1
+        else:
+            prompts.append(example["prompt"])
+
+        traces.append(trace)
 
     return prompts, {
         "enabled": True,
-        "used": True,
+        "used": retrieval_usage_count > 0,
+        "forced_by_routes": route_forces_retrieval,
         "corpus_path": os.path.abspath(corpus_path),
         "corpus_size": len(corpus),
         "top_k": top_k,
         "max_context_chars": max_context_chars,
         "min_score": min_score,
+        "retrieval_example_count": retrieval_usage_count,
         "per_example": traces,
     }
 
@@ -281,7 +329,7 @@ def _route_name(example: dict) -> str:
 
 
 def _is_deterministic_tool_example(example: dict) -> bool:
-    return _route_name(example) == "deterministic_tool" or bool(example.get("tool_name"))
+    return _route_name(example) == ROUTE_DETERMINISTIC_TOOL or bool(example.get("tool_name"))
 
 
 def _is_grounded_example(example: dict) -> bool:
@@ -290,6 +338,20 @@ def _is_grounded_example(example: dict) -> bool:
     return any(
         isinstance(example.get(field_name), str) and example.get(field_name).strip()
         for field_name in ("source", "section")
+    )
+
+
+def _ensure_supported_evaluation_routes(examples: list[dict]) -> None:
+    unsupported_routes = sorted(
+        {_route_name(example) for example in examples if _route_name(example) not in SUPPORTED_EVALUATION_ROUTES}
+    )
+    if not unsupported_routes:
+        return
+
+    raise SystemExit(
+        "Evaluation does not yet implement these routes: "
+        f"{', '.join(unsupported_routes)}. "
+        "Keep architecture.multimodal_runtime_enabled=false for now or add the multimodal sidecar runtime first."
     )
 
 
@@ -1238,6 +1300,7 @@ def main() -> None:
 
     # ── Load evaluation data ──────────────────────────────────────────────────
     examples, evaluation_source = load_evaluation_examples(cfg, settings)
+    _ensure_supported_evaluation_routes(examples)
     print(f"\n📂  Loading evaluation rows from: {evaluation_source['path']}")
     print(f"    Dataset kind: {evaluation_source['kind']}")
     print(f"    Evaluating on {len(examples)} examples.")

@@ -52,7 +52,7 @@ GOLDEN_SOURCE      ?= $(RETRIEVAL_SOURCE)
 GOLDEN_SPEC        ?= evals/golden_electrician_spec.json
 GOLDEN_OUT         ?= evals/golden_electrician.jsonl
 GOLDEN_MANIFEST    ?= evals/golden_electrician.manifest.json
-QUALITY_PATHS      ?= scripts/check_env.py scripts/deterministic_tool_utils.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/train.py scripts/validate_release_artifacts.py scripts/package_release_bundle.py tests
+QUALITY_PATHS      ?= scripts/check_env.py scripts/deterministic_tool_utils.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/runtime_contracts.py scripts/train.py scripts/validate_release_artifacts.py scripts/package_release_bundle.py tests
 TEST_PATHS         ?= tests
 ARGS               ?=
 
@@ -139,6 +139,7 @@ retrieval-corpus: ## Build a deduplicated retrieval corpus from source-grounded 
 
 golden-benchmark: ## Build the curated golden benchmark from the checked-in spec
 	$(PYTHON) scripts/build_golden_benchmark.py \
+		--config $(CONFIG) \
 		--source $(GOLDEN_SOURCE) \
 		--spec $(GOLDEN_SPEC) \
 		--out $(GOLDEN_OUT) \

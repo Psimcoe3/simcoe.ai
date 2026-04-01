@@ -6,8 +6,16 @@ import argparse
 import json
 import os
 
+from config_validation import (
+    load_config,
+    validate_architecture_config,
+    validate_managed_sources_config,
+    validate_multimodal_config,
+    validate_routing_config,
+)
 from manifest_utils import current_utc_timestamp, sha256_file, write_json_file
 from retrieval_utils import parse_reference_response
+from runtime_contracts import ROUTE_DETERMINISTIC_TOOL, ROUTE_TEXT, validate_route_contract
 
 
 def load_json(path: str) -> object:
@@ -22,7 +30,35 @@ def _optional_string(value: object) -> str | None:
     return cleaned or None
 
 
-def _direct_tool_row_from_spec(spec: dict, index: int, benchmark_id: str, category: str) -> dict:
+def _resolve_route_fields(
+    spec: dict,
+    *,
+    index: int,
+    default_route: str,
+    multimodal_enabled: bool,
+) -> tuple[str, str]:
+    route_value = _optional_string(spec.get("route")) or default_route
+    runtime_owner_value = _optional_string(spec.get("runtime_owner"))
+    try:
+        return validate_route_contract(
+            route_value,
+            runtime_owner_value,
+            multimodal_enabled=multimodal_enabled,
+            route_label=f"spec[{index}].route",
+            runtime_owner_label=f"spec[{index}].runtime_owner",
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
+def _direct_tool_row_from_spec(
+    spec: dict,
+    index: int,
+    benchmark_id: str,
+    category: str,
+    *,
+    multimodal_enabled: bool,
+) -> dict:
     instruction = _optional_string(spec.get("instruction"))
     tool_name = _optional_string(spec.get("tool_name"))
     if instruction is None or tool_name is None:
@@ -37,11 +73,18 @@ def _direct_tool_row_from_spec(spec: dict, index: int, benchmark_id: str, catego
     if not isinstance(tool_expectation, dict) or not tool_expectation:
         raise SystemExit(f"Spec entry {index} must define a non-empty tool_expectation mapping")
 
+    route, runtime_owner = _resolve_route_fields(
+        spec,
+        index=index,
+        default_route=ROUTE_DETERMINISTIC_TOOL,
+        multimodal_enabled=multimodal_enabled,
+    )
+
     return {
         "benchmark_id": benchmark_id,
         "category": category,
-        "route": _optional_string(spec.get("route")) or "deterministic_tool",
-        "runtime_owner": _optional_string(spec.get("runtime_owner")) or "geometry_rules",
+        "route": route,
+        "runtime_owner": runtime_owner,
         "tool_name": tool_name,
         "tool_request": tool_request,
         "tool_expectation": tool_expectation,
@@ -55,11 +98,20 @@ def _direct_tool_row_from_spec(spec: dict, index: int, benchmark_id: str, catego
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build a curated golden benchmark from a spec file.")
+    parser.add_argument("--config", default="config.yaml", help="Config file used to validate route contracts.")
     parser.add_argument("--source", required=True, help="Source example JSONL file.")
     parser.add_argument("--spec", required=True, help="Benchmark spec JSON file.")
     parser.add_argument("--out", required=True, help="Golden benchmark JSONL output path.")
     parser.add_argument("--manifest", required=True, help="Golden benchmark manifest JSON output path.")
     args = parser.parse_args()
+
+    cfg = load_config(args.config)
+    validate_architecture_config(cfg)
+    validate_routing_config(cfg)
+    validate_managed_sources_config(cfg)
+    validate_multimodal_config(cfg)
+    architecture = cfg.get("architecture") if isinstance(cfg.get("architecture"), dict) else {}
+    multimodal_enabled = bool(architecture.get("multimodal_runtime_enabled", False))
 
     spec_rows = load_json(args.spec)
     if not isinstance(spec_rows, list) or not spec_rows:
@@ -82,7 +134,15 @@ def main() -> None:
 
         tool_name = _optional_string(spec.get("tool_name"))
         if tool_name is not None:
-            benchmark_rows.append(_direct_tool_row_from_spec(spec, index, benchmark_id, category))
+            benchmark_rows.append(
+                _direct_tool_row_from_spec(
+                    spec,
+                    index,
+                    benchmark_id,
+                    category,
+                    multimodal_enabled=multimodal_enabled,
+                )
+            )
             continue
 
         if not all(isinstance(value, str) and value.strip() for value in (instruction, source_match, category)):
@@ -110,11 +170,18 @@ def main() -> None:
                 f"Could not find benchmark row for instruction='{instruction}' source='{source_match}'"
             )
 
+        route, runtime_owner = _resolve_route_fields(
+            spec,
+            index=index,
+            default_route=ROUTE_TEXT,
+            multimodal_enabled=multimodal_enabled,
+        )
+
         benchmark_rows.append({
             "benchmark_id": benchmark_id,
             "category": category,
-            "route": _optional_string(spec.get("route")) or "text",
-            "runtime_owner": _optional_string(spec.get("runtime_owner")) or "text",
+            "route": route,
+            "runtime_owner": runtime_owner,
             "tool_name": None,
             "tool_request": None,
             "tool_expectation": None,

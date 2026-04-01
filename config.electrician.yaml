@@ -8,6 +8,21 @@ architecture:
   geometry_rules_enabled: false
   grounded_answers_require_retrieval: true
 
+routing:
+  default_route: "text"
+  route_fallbacks:
+    text: "fail"
+    retrieval: "text"
+    deterministic_tool: "text"
+    drawing_sheet: "fail"
+    mixed: "fail"
+  latency_budgets_ms:
+    text: 1800
+    retrieval: 2600
+    deterministic_tool: 1200
+    drawing_sheet: 5000
+    mixed: 6500
+
 source_registry:
   root: "/mnt/c/Users/Paul/OneDrive/Desktop/ElectricalAi Docs"
   manifest_path: "data/registry/electricalai_docs_registry.json"
@@ -26,9 +41,23 @@ managed_sources:
   estimating_har_dir: "sources/managed/electricalai_docs/manual_review/other/estimating/RSmeans"
   code_training_reference_root: "sources/managed/electricalai_docs/retrieval/document/Electrical Code_Training"
   drawings_reference_root: "sources/managed/electricalai_docs/retrieval/document/Drawings"
+  drawings_multimodal_root: "sources/managed/electricalai_docs/multimodal/image/Drawings"
   revit_reference_root: "sources/managed/electricalai_docs/retrieval/document/Revit"
   revit_family_dir: "sources/managed/electricalai_docs/geometry_rules/cad_bim/Revit/Families"
   structured_root: "sources/managed/electricalai_docs/manual_review/tabular"
+
+multimodal:
+  enabled_routes:
+    - drawing_sheet
+    - mixed
+  drawing_asset_root: "sources/managed/electricalai_docs/multimodal/image/Drawings"
+  observation_mode: "ocr_plus_layout"
+  ocr_enabled: true
+  max_pages_per_document: 6
+  max_images_per_request: 12
+  max_observation_chars: 6000
+  model_name: null
+  processor_name: null
 
 model:
   name: "unsloth/Meta-Llama-3.1-8B-bnb-4bit"

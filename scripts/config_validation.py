@@ -3,9 +3,18 @@ Shared config and prerequisite validation helpers for pipeline entry points.
 """
 
 import os
+from pathlib import Path
 import sys
 
 from data_contracts import REVIEW_STATES
+from runtime_contracts import (
+    FAIL_ROUTE_FALLBACK,
+    KNOWN_ROUTES,
+    MULTIMODAL_ROUTES,
+    normalize_route,
+    normalize_route_fallback,
+    route_requires_multimodal,
+)
 import yaml
 
 
@@ -160,6 +169,16 @@ def require_environment_variables(variable_names: list[str]) -> None:
         )
 
 
+def _resolved_path_for_comparison(path: str) -> Path:
+    return Path(path).expanduser().resolve()
+
+
+def _paths_overlap(first_path: str, second_path: str) -> bool:
+    first = _resolved_path_for_comparison(first_path)
+    second = _resolved_path_for_comparison(second_path)
+    return first == second or first in second.parents or second in first.parents
+
+
 def validate_architecture_config(cfg: dict) -> None:
     architecture = cfg.get("architecture")
     if architecture is None:
@@ -182,7 +201,7 @@ def validate_architecture_config(cfg: dict) -> None:
     )
 
     require_non_empty_string(architecture["system_type"], "architecture.system_type")
-    require_choice(
+    primary_runtime = require_choice(
         architecture["primary_runtime"],
         "architecture.primary_runtime",
         {"text", "multimodal"},
@@ -191,7 +210,7 @@ def validate_architecture_config(cfg: dict) -> None:
         architecture["retrieval_layer_enabled"],
         "architecture.retrieval_layer_enabled",
     )
-    require_bool(
+    multimodal_runtime_enabled = require_bool(
         architecture["multimodal_runtime_enabled"],
         "architecture.multimodal_runtime_enabled",
     )
@@ -208,10 +227,207 @@ def validate_architecture_config(cfg: dict) -> None:
             "architecture.grounded_answers_require_retrieval cannot be true when "
             "architecture.retrieval_layer_enabled is false"
         )
+    if primary_runtime == "multimodal" and not multimodal_runtime_enabled:
+        fail(
+            "architecture.primary_runtime cannot be 'multimodal' when "
+            "architecture.multimodal_runtime_enabled is false"
+        )
 
     retrieval = cfg.get("retrieval")
     if isinstance(retrieval, dict) and retrieval.get("enabled") and not retrieval_layer_enabled:
         fail("retrieval.enabled cannot be true when architecture.retrieval_layer_enabled is false")
+
+
+def validate_routing_config(cfg: dict) -> None:
+    routing = cfg.get("routing")
+    if routing is None:
+        return
+
+    if not isinstance(routing, dict):
+        fail("routing must be a mapping when present")
+
+    require_keys(
+        routing,
+        "routing",
+        {"default_route", "route_fallbacks", "latency_budgets_ms"},
+    )
+
+    architecture = cfg.get("architecture") if isinstance(cfg.get("architecture"), dict) else {}
+    multimodal_enabled = bool(architecture.get("multimodal_runtime_enabled", False))
+
+    try:
+        default_route = normalize_route(routing["default_route"], "routing.default_route")
+    except ValueError as exc:
+        fail(str(exc))
+
+    if route_requires_multimodal(default_route) and not multimodal_enabled:
+        fail(
+            "routing.default_route cannot require the multimodal runtime when "
+            "architecture.multimodal_runtime_enabled is false"
+        )
+
+    route_fallbacks = require_mapping(routing["route_fallbacks"], "routing.route_fallbacks")
+    fallback_keys = set(route_fallbacks.keys())
+    missing_fallbacks = sorted(KNOWN_ROUTES - fallback_keys)
+    extra_fallbacks = sorted(fallback_keys - KNOWN_ROUTES)
+    if missing_fallbacks:
+        fail(
+            "routing.route_fallbacks is missing routes: "
+            f"{', '.join(missing_fallbacks)}"
+        )
+    if extra_fallbacks:
+        fail(
+            "routing.route_fallbacks contains unsupported routes: "
+            f"{', '.join(extra_fallbacks)}"
+        )
+
+    for route_name in sorted(KNOWN_ROUTES):
+        try:
+            fallback = normalize_route_fallback(
+                route_fallbacks.get(route_name),
+                f"routing.route_fallbacks.{route_name}",
+            )
+        except ValueError as exc:
+            fail(str(exc))
+
+        if fallback != FAIL_ROUTE_FALLBACK and fallback == route_name:
+            fail(f"routing.route_fallbacks.{route_name} cannot point to itself")
+        if fallback != FAIL_ROUTE_FALLBACK and route_requires_multimodal(fallback) and not multimodal_enabled:
+            fail(
+                f"routing.route_fallbacks.{route_name} cannot target '{fallback}' when "
+                "architecture.multimodal_runtime_enabled is false"
+            )
+
+    latency_budgets = require_mapping(routing["latency_budgets_ms"], "routing.latency_budgets_ms")
+    budget_keys = set(latency_budgets.keys())
+    missing_budgets = sorted(KNOWN_ROUTES - budget_keys)
+    extra_budgets = sorted(budget_keys - KNOWN_ROUTES)
+    if missing_budgets:
+        fail(
+            "routing.latency_budgets_ms is missing routes: "
+            f"{', '.join(missing_budgets)}"
+        )
+    if extra_budgets:
+        fail(
+            "routing.latency_budgets_ms contains unsupported routes: "
+            f"{', '.join(extra_budgets)}"
+        )
+
+    for route_name in sorted(KNOWN_ROUTES):
+        require_positive_int(
+            latency_budgets.get(route_name),
+            f"routing.latency_budgets_ms.{route_name}",
+        )
+
+
+def validate_multimodal_config(cfg: dict) -> None:
+    architecture = cfg.get("architecture") if isinstance(cfg.get("architecture"), dict) else {}
+    multimodal_enabled = bool(architecture.get("multimodal_runtime_enabled", False))
+    multimodal = cfg.get("multimodal")
+
+    if multimodal is None:
+        if multimodal_enabled:
+            fail(
+                "multimodal config is required when architecture.multimodal_runtime_enabled is true"
+            )
+        return
+
+    if not isinstance(multimodal, dict):
+        fail("multimodal must be a mapping when present")
+
+    require_keys(
+        multimodal,
+        "multimodal",
+        {
+            "enabled_routes",
+            "drawing_asset_root",
+            "observation_mode",
+            "ocr_enabled",
+            "max_pages_per_document",
+            "max_images_per_request",
+            "max_observation_chars",
+        },
+    )
+
+    enabled_routes = require_string_list(multimodal["enabled_routes"], "multimodal.enabled_routes")
+    normalized_routes: list[str] = []
+    for route_name in enabled_routes:
+        try:
+            normalized_route = normalize_route(route_name, "multimodal.enabled_routes")
+        except ValueError as exc:
+            fail(str(exc))
+        if normalized_route not in MULTIMODAL_ROUTES:
+            choices = ", ".join(sorted(MULTIMODAL_ROUTES))
+            fail(f"multimodal.enabled_routes entries must be one of: {choices}")
+        normalized_routes.append(normalized_route)
+    if len(set(normalized_routes)) != len(normalized_routes):
+        fail("multimodal.enabled_routes must not contain duplicate routes")
+
+    drawing_asset_root = require_non_empty_string(
+        multimodal["drawing_asset_root"],
+        "multimodal.drawing_asset_root",
+    )
+    require_choice(
+        multimodal["observation_mode"],
+        "multimodal.observation_mode",
+        {"ocr_text", "ocr_plus_layout"},
+    )
+    require_bool(multimodal["ocr_enabled"], "multimodal.ocr_enabled")
+    require_positive_int(
+        multimodal["max_pages_per_document"],
+        "multimodal.max_pages_per_document",
+    )
+    require_positive_int(
+        multimodal["max_images_per_request"],
+        "multimodal.max_images_per_request",
+    )
+    require_positive_int(
+        multimodal["max_observation_chars"],
+        "multimodal.max_observation_chars",
+    )
+    model_name = require_optional_string(multimodal.get("model_name"), "multimodal.model_name")
+    require_optional_string(multimodal.get("processor_name"), "multimodal.processor_name")
+
+    if multimodal_enabled and model_name is None:
+        fail(
+            "multimodal.model_name is required when architecture.multimodal_runtime_enabled is true"
+        )
+
+    managed_sources = cfg.get("managed_sources") if isinstance(cfg.get("managed_sources"), dict) else None
+    if managed_sources is None:
+        if multimodal_enabled:
+            fail(
+                "managed_sources is required when architecture.multimodal_runtime_enabled is true"
+            )
+        return
+
+    drawings_multimodal_root = require_optional_string(
+        managed_sources.get("drawings_multimodal_root"),
+        "managed_sources.drawings_multimodal_root",
+    )
+    drawings_reference_root = require_optional_string(
+        managed_sources.get("drawings_reference_root"),
+        "managed_sources.drawings_reference_root",
+    )
+
+    if drawings_multimodal_root is None:
+        if multimodal_enabled:
+            fail(
+                "managed_sources.drawings_multimodal_root is required when "
+                "architecture.multimodal_runtime_enabled is true"
+            )
+        return
+
+    if drawings_reference_root is not None and _paths_overlap(drawings_reference_root, drawings_multimodal_root):
+        fail(
+            "managed_sources.drawings_reference_root and managed_sources.drawings_multimodal_root "
+            "must be separate, non-overlapping paths"
+        )
+
+    if _resolved_path_for_comparison(drawings_multimodal_root) != _resolved_path_for_comparison(drawing_asset_root):
+        fail(
+            "multimodal.drawing_asset_root must match managed_sources.drawings_multimodal_root"
+        )
 
 
 def validate_source_registry_config(cfg: dict) -> None:
@@ -271,11 +487,30 @@ def validate_managed_sources_config(cfg: dict) -> None:
         "estimating_har_dir",
         "code_training_reference_root",
         "drawings_reference_root",
+        "drawings_multimodal_root",
         "revit_reference_root",
         "revit_family_dir",
         "structured_root",
     ):
         require_optional_string(managed_sources.get(key), f"managed_sources.{key}")
+
+    drawings_reference_root = require_optional_string(
+        managed_sources.get("drawings_reference_root"),
+        "managed_sources.drawings_reference_root",
+    )
+    drawings_multimodal_root = require_optional_string(
+        managed_sources.get("drawings_multimodal_root"),
+        "managed_sources.drawings_multimodal_root",
+    )
+    if (
+        drawings_reference_root is not None
+        and drawings_multimodal_root is not None
+        and _paths_overlap(drawings_reference_root, drawings_multimodal_root)
+    ):
+        fail(
+            "managed_sources.drawings_reference_root and managed_sources.drawings_multimodal_root "
+            "must be separate, non-overlapping paths"
+        )
 
 
 def validate_deterministic_tools_config(cfg: dict) -> None:
@@ -469,6 +704,8 @@ def validate_prepare_data_config(cfg: dict) -> None:
     model = require_section(cfg, "model")
 
     validate_architecture_config(cfg)
+    validate_routing_config(cfg)
+    validate_multimodal_config(cfg)
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
     validate_source_registry_config(cfg)
@@ -493,6 +730,8 @@ def validate_train_config(cfg: dict) -> None:
     data = require_section(cfg, "data")
 
     validate_architecture_config(cfg)
+    validate_routing_config(cfg)
+    validate_multimodal_config(cfg)
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
     validate_source_registry_config(cfg)
@@ -551,6 +790,8 @@ def validate_export_config(cfg: dict) -> None:
     export = require_section(cfg, "export")
 
     validate_architecture_config(cfg)
+    validate_routing_config(cfg)
+    validate_multimodal_config(cfg)
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
     validate_source_registry_config(cfg)
@@ -644,6 +885,8 @@ def validate_evaluate_config(cfg: dict, num_examples: int) -> None:
         fail("evaluation.judge_concurrency must be a positive integer")
 
     validate_architecture_config(cfg)
+    validate_routing_config(cfg)
+    validate_multimodal_config(cfg)
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
     validate_source_registry_config(cfg)
@@ -657,7 +900,11 @@ def validate_release_artifact_config(cfg: dict) -> None:
     evaluation = require_section(cfg, "evaluation")
 
     validate_architecture_config(cfg)
+    validate_routing_config(cfg)
+    validate_multimodal_config(cfg)
     validate_release_config(cfg)
+    validate_source_registry_config(cfg)
+    validate_managed_sources_config(cfg)
 
     require_keys(data, "data", {"processed_dir"})
     require_keys(training, "training", {"output_dir"})
