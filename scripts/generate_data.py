@@ -13,6 +13,7 @@ Usage (local, fully private):
 
 Using OpenAI instead:
     python scripts/generate_data.py --topics topics.yaml --out data/raw/generated.jsonl --model openai/gpt-4o
+    python scripts/generate_data.py --config config.yaml --topics topics.yaml --out data/raw/generated.jsonl --count 20
 
 Then merge into your main dataset:
     cat data/raw/generated.jsonl >> data/raw/dataset.jsonl
@@ -31,6 +32,12 @@ import time
 
 import yaml
 from dotenv import load_dotenv
+
+from config_validation import load_config, validate_system_prompts_config
+from prompt_templates import (
+    SYSTEM_PROMPT_SURFACE_GENERATE_DATA,
+    resolve_configured_system_prompt,
+)
 
 load_dotenv()
 
@@ -51,11 +58,31 @@ Rules:
 """
 
 
+def resolve_generation_system_prompt(cfg: dict | None = None) -> tuple[str, dict]:
+    default_prompt = _SYSTEM_PROMPT.rstrip("\n")
+    if not isinstance(cfg, dict):
+        return default_prompt, {
+            "surface": SYSTEM_PROMPT_SURFACE_GENERATE_DATA,
+            "configured": False,
+            "source": "default",
+            "template_id": None,
+            "variables": {},
+            "library_path": None,
+        }
+
+    return resolve_configured_system_prompt(
+        cfg,
+        SYSTEM_PROMPT_SURFACE_GENERATE_DATA,
+        default_prompt,
+    )
+
+
 def generate_batch(
     client,
     model: str,
     topic: dict,
     count: int,
+    system_prompt: str,
 ) -> list[dict]:
     """Ask the LLM to produce `count` examples for a single topic."""
     topic_name = topic["name"]
@@ -73,7 +100,7 @@ def generate_batch(
     response = client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
         temperature=0.8,
@@ -173,6 +200,11 @@ def main() -> None:
         description="Generate synthetic training examples from topic descriptions."
     )
     parser.add_argument(
+        "--config",
+        default=None,
+        help="Optional config file used for runtime system prompt template selection.",
+    )
+    parser.add_argument(
         "--topics",
         required=True,
         help="Path to a YAML file describing topics to generate examples for.",
@@ -194,6 +226,25 @@ def main() -> None:
         help="Model to use: Ollama model name (default: simcoe) or 'openai/<model>' for OpenAI API.",
     )
     args = parser.parse_args()
+
+    system_prompt = _SYSTEM_PROMPT.rstrip("\n")
+    system_prompt_info = {
+        "surface": SYSTEM_PROMPT_SURFACE_GENERATE_DATA,
+        "configured": False,
+        "source": "default",
+        "template_id": None,
+        "variables": {},
+        "library_path": None,
+    }
+    if args.config:
+        cfg = load_config(args.config)
+        validate_system_prompts_config(cfg)
+        system_prompt, system_prompt_info = resolve_generation_system_prompt(cfg)
+        if system_prompt_info["configured"]:
+            print(
+                "Using generation system prompt template "
+                f"'{system_prompt_info['template_id']}'"
+            )
 
     use_openai = args.model.startswith("openai/")
 
@@ -235,7 +286,13 @@ def main() -> None:
 
             for attempt in range(1, max_retries + 1):
                 try:
-                    examples = generate_batch(client, model_name, topic, args.count)
+                    examples = generate_batch(
+                        client,
+                        model_name,
+                        topic,
+                        args.count,
+                        system_prompt,
+                    )
                     for ex in examples:
                         out_file.write(json.dumps(ex, ensure_ascii=False) + "\n")
                     total_generated += len(examples)

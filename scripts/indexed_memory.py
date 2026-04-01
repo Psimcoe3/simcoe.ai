@@ -6,19 +6,22 @@ and an append-only event log.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 from typing import Protocol
 
 import yaml
 
-from config_validation import load_config, validate_memory_config
+from config_validation import load_config, validate_dream_config, validate_memory_config
 from data_contracts import stable_identifier
 from manifest_utils import current_utc_timestamp, read_json_file, write_json_file
 from retrieval_utils import score_document
 
 
 MEMORY_SCHEMA_VERSION = 1
+DREAM_SCHEMA_VERSION = 1
 MEMORY_KINDS = {"operator_note", "verified_fact", "decision", "exception"}
 MEMORY_STATUSES = {"active", "stale", "retracted"}
 MEMORY_VERIFICATION_STATUSES = {"verified", "unverified", "disputed"}
@@ -54,6 +57,27 @@ def _memory_cfg(cfg: dict) -> dict:
     }
 
 
+def _dream_cfg(cfg: dict) -> dict:
+    section = cfg.get("dream") if isinstance(cfg.get("dream"), dict) else {}
+    memory_root = Path(_memory_cfg(cfg)["root_dir"])
+    root_dir = Path(str(section.get("root_dir") or (memory_root / "dream")))
+    return {
+        "enabled": bool(section.get("enabled", False)),
+        "root_dir": str(root_dir),
+        "state_path": str(Path(str(section.get("state_path") or (root_dir / "state.json")))),
+        "lock_path": str(Path(str(section.get("lock_path") or (root_dir / "consolidation.lock")))),
+        "log_dir": str(Path(str(section.get("log_dir") or (root_dir / "daily_logs")))),
+        "minimum_hours_between_runs": int(section.get("minimum_hours_between_runs", 24) or 24),
+        "minimum_sessions_between_runs": int(section.get("minimum_sessions_between_runs", 5) or 5),
+        "lock_timeout_seconds": int(section.get("lock_timeout_seconds", 900) or 900),
+        "max_recent_logs": int(section.get("max_recent_logs", 200) or 200),
+        "max_persistable_entries_per_run": int(
+            section.get("max_persistable_entries_per_run", 32) or 32
+        ),
+        "brief_summary_chars": int(section.get("brief_summary_chars", 160) or 160),
+    }
+
+
 def _ensure_layout(settings: dict) -> None:
     root_dir = Path(settings["root_dir"])
     topics_dir = Path(settings["topics_dir"])
@@ -78,6 +102,250 @@ def _ensure_layout(settings: dict) -> None:
                 "topics": [],
             },
         )
+
+
+def _coerce_datetime(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            dt = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _coerce_now(value: object | None = None) -> datetime:
+    if value is None:
+        return datetime.now(timezone.utc)
+    dt = _coerce_datetime(value)
+    if dt is None:
+        raise ValueError("Dream timestamps must be ISO-8601 strings or timezone-aware datetimes")
+    return dt
+
+
+def _datetime_to_timestamp(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat()
+
+
+def _default_dream_state() -> dict:
+    timestamp = current_utc_timestamp()
+    return {
+        "schema_version": DREAM_SCHEMA_VERSION,
+        "generated_at": timestamp,
+        "updated_at": timestamp,
+        "dream_count": 0,
+        "session_count": 0,
+        "last_session_at": None,
+        "last_session_id": None,
+        "last_dream_at": None,
+        "last_dream_session_count": 0,
+        "last_processed_log_at": None,
+        "last_processed_log_entry_id": None,
+        "last_run": None,
+    }
+
+
+def _ensure_dream_layout(settings: dict) -> None:
+    root_dir = Path(settings["root_dir"])
+    state_path = Path(settings["state_path"])
+    lock_path = Path(settings["lock_path"])
+    log_dir = Path(settings["log_dir"])
+
+    root_dir.mkdir(parents=True, exist_ok=True)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    if not state_path.exists():
+        write_json_file(str(state_path), _default_dream_state())
+
+
+def _load_dream_state(settings: dict) -> dict:
+    _ensure_dream_layout(settings)
+    state_path = Path(settings["state_path"])
+    try:
+        payload = read_json_file(str(state_path))
+    except (FileNotFoundError, json.JSONDecodeError):
+        payload = _default_dream_state()
+        write_json_file(str(state_path), payload)
+
+    if not isinstance(payload, dict):
+        payload = _default_dream_state()
+        write_json_file(str(state_path), payload)
+    return payload
+
+
+def _write_dream_state(settings: dict, state: dict) -> dict:
+    payload = _default_dream_state()
+    payload.update(state)
+    payload["schema_version"] = DREAM_SCHEMA_VERSION
+    payload.setdefault("generated_at", current_utc_timestamp())
+    payload["updated_at"] = current_utc_timestamp()
+    write_json_file(settings["state_path"], payload)
+    return payload
+
+
+def _dream_log_path(settings: dict, generated_at: str) -> Path:
+    generated_dt = _coerce_datetime(generated_at) or datetime.now(timezone.utc)
+    return Path(settings["log_dir"]) / f"{generated_dt.strftime('%Y-%m-%d')}.jsonl"
+
+
+def _append_dream_log_row(settings: dict, payload: dict) -> None:
+    _ensure_dream_layout(settings)
+    log_path = _dream_log_path(settings, str(payload["generated_at"]))
+    with open(log_path, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, sort_keys=True) + "\n")
+
+
+def _load_dream_log_entries(
+    settings: dict,
+    *,
+    since_generated_at: str | None = None,
+    since_entry_id: str | None = None,
+) -> list[dict]:
+    _ensure_dream_layout(settings)
+    since_dt = _coerce_datetime(since_generated_at)
+    cleaned_since_entry_id = (
+        since_entry_id.strip()
+        if isinstance(since_entry_id, str) and since_entry_id.strip()
+        else None
+    )
+    entries: list[dict] = []
+
+    for log_path in sorted(Path(settings["log_dir"]).glob("*.jsonl")):
+        with open(log_path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                payload = json.loads(stripped)
+                if not isinstance(payload, dict):
+                    continue
+                generated_dt = _coerce_datetime(payload.get("generated_at"))
+                entry_id = str(payload.get("entry_id") or "")
+                if since_dt is not None and generated_dt is not None:
+                    if generated_dt < since_dt:
+                        continue
+                    if (
+                        generated_dt == since_dt
+                        and cleaned_since_entry_id is not None
+                        and entry_id <= cleaned_since_entry_id
+                    ):
+                        continue
+                elif since_dt is not None and generated_dt is None:
+                    continue
+                payload["log_path"] = str(log_path.resolve())
+                entries.append(payload)
+
+    entries.sort(
+        key=lambda item: (str(item.get("generated_at") or ""), str(item.get("entry_id") or ""))
+    )
+    return entries
+
+
+def _normalize_persist_memory_entry(settings: dict, log_entry: dict) -> dict | None:
+    persist_memory = log_entry.get("persist_memory")
+    if not isinstance(persist_memory, dict):
+        return None
+    if bool(persist_memory.get("derivable", False)):
+        return None
+
+    topic = str(persist_memory.get("topic") or "").strip()
+    content = str(persist_memory.get("content") or persist_memory.get("body") or "").strip()
+    if not topic or not content:
+        return None
+
+    summary = str(persist_memory.get("summary") or log_entry.get("summary") or "").strip()
+    if not summary:
+        summary = _truncate(content, settings["brief_summary_chars"])
+
+    source = str(
+        persist_memory.get("source")
+        or f"dream_log:{str(log_entry.get('source') or 'unknown').strip() or 'unknown'}"
+    ).strip()
+    return {
+        "topic": topic,
+        "summary": summary,
+        "content": content,
+        "kind": str(persist_memory.get("kind") or "operator_note"),
+        "status": str(persist_memory.get("status") or "active"),
+        "verification_status": str(persist_memory.get("verification_status") or "unverified"),
+        "source": source,
+        "tags": persist_memory.get("tags") or [],
+        "supersedes": persist_memory.get("supersedes"),
+        "contradicts": persist_memory.get("contradicts"),
+        "generated_at": str(
+            persist_memory.get("generated_at")
+            or log_entry.get("generated_at")
+            or current_utc_timestamp()
+        ),
+    }
+
+
+def _load_dream_lock_info(settings: dict, now: datetime) -> dict:
+    _ensure_dream_layout(settings)
+    lock_path = Path(settings["lock_path"])
+    payload: dict | None = None
+    if lock_path.exists():
+        try:
+            payload = read_json_file(str(lock_path))
+        except (FileNotFoundError, json.JSONDecodeError):
+            payload = {"schema_version": DREAM_SCHEMA_VERSION}
+
+    acquired_at = (
+        _coerce_datetime(payload.get("acquired_at")) if isinstance(payload, dict) else None
+    )
+    age_seconds = None
+    stale = False
+    if lock_path.exists():
+        if acquired_at is None:
+            stale = True
+        else:
+            age_seconds = max((now - acquired_at).total_seconds(), 0.0)
+            stale = age_seconds >= float(settings["lock_timeout_seconds"])
+
+    return {
+        "path": str(lock_path.resolve()),
+        "exists": lock_path.exists(),
+        "active": lock_path.exists() and not stale,
+        "stale": stale,
+        "age_seconds": round(age_seconds, 4) if age_seconds is not None else None,
+        "timeout_seconds": int(settings["lock_timeout_seconds"]),
+        "payload": payload,
+    }
+
+
+def _acquire_dream_lock(settings: dict, now: datetime) -> dict:
+    _ensure_dream_layout(settings)
+    lock_info = _load_dream_lock_info(settings, now)
+    lock_path = Path(settings["lock_path"])
+    if lock_info["stale"] and lock_path.exists():
+        lock_path.unlink(missing_ok=True)
+    elif lock_info["active"]:
+        raise RuntimeError("dream lock is already held")
+
+    payload = {
+        "schema_version": DREAM_SCHEMA_VERSION,
+        "acquired_at": _datetime_to_timestamp(now),
+        "pid": os.getpid(),
+    }
+    try:
+        with open(lock_path, "x", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+    except FileExistsError as exc:
+        raise RuntimeError("dream lock is already held") from exc
+    return payload
+
+
+def _release_dream_lock(settings: dict) -> None:
+    Path(settings["lock_path"]).unlink(missing_ok=True)
 
 
 def _normalized_text(value: str | None) -> str:
@@ -1012,6 +1280,330 @@ def query_memory(
     )
 
 
+def append_dream_log_entry(
+    cfg: dict,
+    *,
+    category: str,
+    summary: str,
+    details: str | None = None,
+    source: str = "manual",
+    session_id: str | None = None,
+    request_id: str | None = None,
+    metadata: dict | None = None,
+    persist_memory: dict | None = None,
+    generated_at: str | datetime | None = None,
+) -> dict:
+    settings = _dream_cfg(cfg)
+    timestamp = _datetime_to_timestamp(_coerce_now(generated_at))
+    cleaned_category = " ".join(category.split())
+    if not cleaned_category:
+        raise ValueError("Dream log category must be a non-empty string")
+
+    cleaned_summary = " ".join(summary.split())
+    cleaned_details = str(details or "").strip()
+    if not cleaned_summary:
+        cleaned_summary = _truncate(
+            cleaned_details or cleaned_category, settings["brief_summary_chars"]
+        )
+
+    cleaned_source = " ".join(source.split()) or "manual"
+    payload = {
+        "schema_version": DREAM_SCHEMA_VERSION,
+        "entry_id": stable_identifier(
+            "dream_log",
+            cleaned_category,
+            cleaned_source,
+            cleaned_summary,
+            cleaned_details,
+            session_id or "",
+            request_id or "",
+            timestamp,
+        ),
+        "generated_at": timestamp,
+        "category": cleaned_category,
+        "source": cleaned_source,
+        "summary": _truncate(cleaned_summary, settings["brief_summary_chars"]),
+        "details": cleaned_details,
+        "session_id": session_id,
+        "request_id": request_id,
+    }
+    if isinstance(metadata, dict) and metadata:
+        payload["metadata"] = dict(metadata)
+    if isinstance(persist_memory, dict) and persist_memory:
+        payload["persist_memory"] = dict(persist_memory)
+
+    _append_dream_log_row(settings, payload)
+    return payload
+
+
+def record_dream_session(
+    cfg: dict,
+    *,
+    source: str,
+    summary: str | None = None,
+    details: str | None = None,
+    metadata: dict | None = None,
+    generated_at: str | datetime | None = None,
+) -> dict:
+    settings = _dream_cfg(cfg)
+    state = _load_dream_state(settings)
+    timestamp = _datetime_to_timestamp(_coerce_now(generated_at))
+    next_session_count = int(state.get("session_count", 0) or 0) + 1
+    cleaned_source = " ".join(source.split()) or "session"
+    session_id = stable_identifier(
+        "dream_session",
+        cleaned_source,
+        next_session_count,
+        timestamp,
+    )
+    log_entry = append_dream_log_entry(
+        cfg,
+        category="session",
+        summary=summary or f"{cleaned_source} session {next_session_count}",
+        details=details,
+        source=cleaned_source,
+        session_id=session_id,
+        metadata=metadata,
+        generated_at=timestamp,
+    )
+    state["session_count"] = next_session_count
+    state["last_session_at"] = timestamp
+    state["last_session_id"] = session_id
+    state = _write_dream_state(settings, state)
+    return {
+        "schema_version": DREAM_SCHEMA_VERSION,
+        "enabled": settings["enabled"],
+        "recorded": True,
+        "session_id": session_id,
+        "session_count": next_session_count,
+        "state_path": str(Path(settings["state_path"]).resolve()),
+        "log_entry": log_entry,
+        "state": state,
+    }
+
+
+def assess_memory_dream(cfg: dict, *, now: str | datetime | None = None) -> dict:
+    settings = _dream_cfg(cfg)
+    state = _load_dream_state(settings)
+    now_dt = _coerce_now(now)
+    last_dream_dt = _coerce_datetime(state.get("last_dream_at"))
+    lock_info = _load_dream_lock_info(settings, now_dt)
+    pending_logs = _load_dream_log_entries(
+        settings,
+        since_generated_at=state.get("last_processed_log_at"),
+        since_entry_id=state.get("last_processed_log_entry_id"),
+    )
+    recent_logs = pending_logs[-settings["max_recent_logs"] :]
+    session_count = int(state.get("session_count", 0) or 0)
+    sessions_since_last_dream = max(
+        0,
+        session_count - int(state.get("last_dream_session_count", 0) or 0),
+    )
+    hours_since_last_dream = None
+    time_gate_passed = last_dream_dt is None
+    if last_dream_dt is not None:
+        hours_since_last_dream = max((now_dt - last_dream_dt).total_seconds() / 3600.0, 0.0)
+        time_gate_passed = hours_since_last_dream >= float(settings["minimum_hours_between_runs"])
+
+    session_gate_passed = sessions_since_last_dream >= int(
+        settings["minimum_sessions_between_runs"]
+    )
+    lock_gate_passed = not bool(lock_info["active"])
+    pending_persistable_count = sum(
+        1 for entry in recent_logs if _normalize_persist_memory_entry(settings, entry) is not None
+    )
+    eligible = (
+        bool(settings["enabled"]) and time_gate_passed and session_gate_passed and lock_gate_passed
+    )
+    status = "eligible" if eligible else "waiting"
+    if not settings["enabled"]:
+        status = "disabled"
+
+    return {
+        "schema_version": DREAM_SCHEMA_VERSION,
+        "generated_at": _datetime_to_timestamp(now_dt),
+        "enabled": settings["enabled"],
+        "eligible": eligible,
+        "status": status,
+        "state_path": str(Path(settings["state_path"]).resolve()),
+        "log_dir": str(Path(settings["log_dir"]).resolve()),
+        "state": {
+            "dream_count": int(state.get("dream_count", 0) or 0),
+            "session_count": session_count,
+            "last_session_at": state.get("last_session_at"),
+            "last_session_id": state.get("last_session_id"),
+            "last_dream_at": state.get("last_dream_at"),
+            "last_dream_session_count": int(state.get("last_dream_session_count", 0) or 0),
+            "last_processed_log_at": state.get("last_processed_log_at"),
+            "last_processed_log_entry_id": state.get("last_processed_log_entry_id"),
+        },
+        "gates": {
+            "time": {
+                "passed": time_gate_passed,
+                "minimum_hours_between_runs": int(settings["minimum_hours_between_runs"]),
+                "hours_since_last_dream": round(hours_since_last_dream, 4)
+                if hours_since_last_dream is not None
+                else None,
+            },
+            "session": {
+                "passed": session_gate_passed,
+                "minimum_sessions_between_runs": int(settings["minimum_sessions_between_runs"]),
+                "sessions_since_last_dream": sessions_since_last_dream,
+            },
+            "lock": {
+                "passed": lock_gate_passed,
+                **lock_info,
+            },
+        },
+        "pending_log_count": len(pending_logs),
+        "pending_persistable_log_count": pending_persistable_count,
+        "recent_log_categories": sorted(
+            {str(entry.get("category") or "") for entry in recent_logs if entry.get("category")}
+        ),
+    }
+
+
+def run_memory_dream(
+    cfg: dict,
+    *,
+    force: bool = False,
+    now: str | datetime | None = None,
+) -> dict:
+    settings = _dream_cfg(cfg)
+    assessment = assess_memory_dream(cfg, now=now)
+    if not force and not assessment["eligible"]:
+        return {
+            "schema_version": DREAM_SCHEMA_VERSION,
+            "generated_at": assessment["generated_at"],
+            "enabled": settings["enabled"],
+            "status": "skipped",
+            "forced": force,
+            "reason": "dream gates not satisfied",
+            "assessment": assessment,
+        }
+
+    now_dt = _coerce_now(now)
+    try:
+        _acquire_dream_lock(settings, now_dt)
+    except RuntimeError as exc:
+        return {
+            "schema_version": DREAM_SCHEMA_VERSION,
+            "generated_at": _datetime_to_timestamp(now_dt),
+            "enabled": settings["enabled"],
+            "status": "locked",
+            "forced": force,
+            "reason": str(exc),
+            "assessment": assess_memory_dream(cfg, now=now_dt),
+        }
+
+    try:
+        state = _load_dream_state(settings)
+        memory_settings = _memory_cfg(cfg)
+        index_before = _load_index_payload(memory_settings)
+        events_before = _load_events(memory_settings)
+        pending_logs = _load_dream_log_entries(
+            settings,
+            since_generated_at=state.get("last_processed_log_at"),
+            since_entry_id=state.get("last_processed_log_entry_id"),
+        )
+        logs_to_process = pending_logs[: settings["max_recent_logs"]]
+
+        persistable_entries: list[dict] = []
+        skipped_persistable_entry_ids: list[str] = []
+        for log_entry in logs_to_process:
+            normalized_entry = _normalize_persist_memory_entry(settings, log_entry)
+            if normalized_entry is None:
+                continue
+            if len(persistable_entries) >= settings["max_persistable_entries_per_run"]:
+                skipped_persistable_entry_ids.append(str(log_entry.get("entry_id") or ""))
+                continue
+            persistable_entries.append(normalized_entry)
+
+        imported_events: list[dict] = []
+        if persistable_entries:
+            imported_events = record_memory_entries(cfg, persistable_entries)
+
+        consolidation = consolidate_memory(cfg)
+        index_after = _load_index_payload(memory_settings)
+        events_after = _load_events(memory_settings)
+        last_processed_log_at = state.get("last_processed_log_at")
+        last_processed_log_entry_id = state.get("last_processed_log_entry_id")
+        if logs_to_process:
+            last_processed_log_at = logs_to_process[-1].get("generated_at")
+            last_processed_log_entry_id = logs_to_process[-1].get("entry_id")
+
+        updated_state = _write_dream_state(
+            settings,
+            {
+                **state,
+                "dream_count": int(state.get("dream_count", 0) or 0) + 1,
+                "last_dream_at": _datetime_to_timestamp(now_dt),
+                "last_dream_session_count": int(state.get("session_count", 0) or 0),
+                "last_processed_log_at": last_processed_log_at,
+                "last_processed_log_entry_id": last_processed_log_entry_id,
+                "last_run": {
+                    "generated_at": _datetime_to_timestamp(now_dt),
+                    "forced": force,
+                    "processed_log_count": len(logs_to_process),
+                    "persisted_memory_count": len(imported_events),
+                    "skipped_persistable_entry_count": len(skipped_persistable_entry_ids),
+                },
+            },
+        )
+
+        return {
+            "schema_version": DREAM_SCHEMA_VERSION,
+            "generated_at": _datetime_to_timestamp(now_dt),
+            "enabled": settings["enabled"],
+            "status": "succeeded",
+            "forced": force,
+            "assessment": assessment,
+            "phases": {
+                "orient": {
+                    "memory_event_count": len(events_before),
+                    "memory_topic_count": int(index_before.get("topic_count", 0) or 0),
+                    "current_session_count": int(state.get("session_count", 0) or 0),
+                    "memory_index_path": str(Path(memory_settings["index_path"]).resolve()),
+                },
+                "gather_recent_signal": {
+                    "pending_log_count": len(pending_logs),
+                    "processed_log_count": len(logs_to_process),
+                    "persistable_log_count": len(persistable_entries),
+                    "recent_categories": sorted(
+                        {
+                            str(log_entry.get("category") or "")
+                            for log_entry in logs_to_process
+                            if log_entry.get("category")
+                        }
+                    ),
+                },
+                "consolidate": {
+                    "persisted_memory_count": len(imported_events),
+                    "imported_event_ids": [event["event_id"] for event in imported_events],
+                    "skipped_persistable_entry_ids": [
+                        entry_id for entry_id in skipped_persistable_entry_ids if entry_id
+                    ],
+                },
+                "prune_and_index": {
+                    **consolidation,
+                    "memory_event_count_after": len(events_after),
+                    "memory_topic_count_after": int(index_after.get("topic_count", 0) or 0),
+                },
+            },
+            "state": {
+                "dream_count": int(updated_state.get("dream_count", 0) or 0),
+                "last_dream_at": updated_state.get("last_dream_at"),
+                "last_dream_session_count": int(
+                    updated_state.get("last_dream_session_count", 0) or 0
+                ),
+                "last_processed_log_at": updated_state.get("last_processed_log_at"),
+                "last_processed_log_entry_id": updated_state.get("last_processed_log_entry_id"),
+            },
+        }
+    finally:
+        _release_dream_lock(settings)
+
+
 def format_memory_context(results: list[dict], max_context_chars: int) -> str:
     chunks: list[str] = []
     current_length = 0
@@ -1092,6 +1684,68 @@ def parse_args() -> argparse.Namespace:
         "--source-label", help="Optional source label stored on imported rows"
     )
 
+    dream_log_parser = subparsers.add_parser(
+        "dream-log", help="Append an entry to the dream daily log"
+    )
+    dream_log_parser.add_argument("--category", required=True, help="Dream log category")
+    dream_log_parser.add_argument("--summary", required=True, help="Brief dream log summary")
+    dream_log_parser.add_argument("--details", help="Optional dream log details")
+    dream_log_parser.add_argument("--source", default="manual", help="Log source label")
+    dream_log_parser.add_argument("--session-id", help="Optional session identifier")
+    dream_log_parser.add_argument("--request-id", help="Optional request identifier")
+    dream_log_parser.add_argument("--persist-topic", help="Optional memory topic to persist")
+    dream_log_parser.add_argument(
+        "--persist-summary",
+        help="Optional memory summary for a persistable dream log entry",
+    )
+    dream_log_parser.add_argument(
+        "--persist-content",
+        help="Optional memory content for a persistable dream log entry",
+    )
+    dream_log_parser.add_argument(
+        "--persist-kind",
+        default="operator_note",
+        help="Optional memory kind for a persistable dream log entry",
+    )
+    dream_log_parser.add_argument(
+        "--persist-status",
+        default="active",
+        help="Optional memory status for a persistable dream log entry",
+    )
+    dream_log_parser.add_argument(
+        "--persist-verification-status",
+        default="unverified",
+        help="Optional memory verification state for a persistable dream log entry",
+    )
+    dream_log_parser.add_argument(
+        "--persist-tag",
+        action="append",
+        default=[],
+        help="Optional memory tag for a persistable dream log entry. Can be repeated.",
+    )
+
+    dream_session_parser = subparsers.add_parser(
+        "dream-session", help="Record a session for dream gating"
+    )
+    dream_session_parser.add_argument(
+        "--source",
+        default="manual",
+        help="Session source label",
+    )
+    dream_session_parser.add_argument("--summary", help="Optional brief session summary")
+    dream_session_parser.add_argument("--details", help="Optional session details")
+
+    dream_run_parser = subparsers.add_parser(
+        "dream-run", help="Run a dream consolidation pass when gates allow it"
+    )
+    dream_run_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Bypass dream eligibility gates for the current run",
+    )
+
+    subparsers.add_parser("dream-status", help="Inspect current dream eligibility and state")
+
     subparsers.add_parser(
         "consolidate", help="Rebuild topic files from the append-only memory event log"
     )
@@ -1105,6 +1759,7 @@ def main() -> int:
     args = parse_args()
     cfg = load_config(args.config)
     validate_memory_config(cfg)
+    validate_dream_config(cfg)
 
     if args.command == "add":
         payload = record_memory_entry(
@@ -1135,6 +1790,39 @@ def main() -> int:
             args.source_file,
             source_label=args.source_label,
         )
+    elif args.command == "dream-log":
+        persist_memory = None
+        if args.persist_topic or args.persist_summary or args.persist_content or args.persist_tag:
+            persist_memory = {
+                "topic": args.persist_topic,
+                "summary": args.persist_summary,
+                "content": args.persist_content,
+                "kind": args.persist_kind,
+                "status": args.persist_status,
+                "verification_status": args.persist_verification_status,
+                "tags": args.persist_tag,
+            }
+        payload = append_dream_log_entry(
+            cfg,
+            category=args.category,
+            summary=args.summary,
+            details=args.details,
+            source=args.source,
+            session_id=args.session_id,
+            request_id=args.request_id,
+            persist_memory=persist_memory,
+        )
+    elif args.command == "dream-session":
+        payload = record_dream_session(
+            cfg,
+            source=args.source,
+            summary=args.summary,
+            details=args.details,
+        )
+    elif args.command == "dream-run":
+        payload = run_memory_dream(cfg, force=args.force)
+    elif args.command == "dream-status":
+        payload = assess_memory_dream(cfg)
     elif args.command == "consolidate":
         payload = consolidate_memory(cfg)
     else:

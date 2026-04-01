@@ -10,8 +10,13 @@ from retrieval_utils import format_retrieved_context, load_jsonl, retrieve_docum
 from runtime_contracts import (
     CONTEXT_PROVIDER_MEMORY,
     CONTEXT_PROVIDER_RETRIEVAL,
+    EXECUTION_STATUS_DENIED,
+    EXECUTION_STATUS_SKIPPED,
+    EXECUTION_STATUS_SUCCEEDED,
+    EXECUTION_SUBJECT_CONTEXT_PROVIDER,
     HOOK_STAGE_POST_CONTEXT_PROVIDER,
     HOOK_STAGE_PRE_CONTEXT_PROVIDER,
+    build_execution_envelope,
     normalize_context_provider,
 )
 
@@ -104,6 +109,27 @@ def _finalize_provider_result(
         trace["hook_annotations"] = copy.deepcopy(annotations)
     if events:
         trace["hook_events"] = copy.deepcopy(events)
+    if denied:
+        execution_status = EXECUTION_STATUS_DENIED
+    elif trace.get("queried") is False and not trace.get("used", False):
+        execution_status = EXECUTION_STATUS_SKIPPED
+    else:
+        execution_status = EXECUTION_STATUS_SUCCEEDED
+
+    envelope_details = {
+        key: copy.deepcopy(value)
+        for key, value in trace.items()
+        if key not in {"provider", "hook_annotations", "hook_events", "execution_envelope"}
+    }
+    trace["execution_envelope"] = build_execution_envelope(
+        EXECUTION_SUBJECT_CONTEXT_PROVIDER,
+        provider_name,
+        execution_status,
+        owner=provider_name,
+        details=envelope_details,
+        hook_annotations=annotations,
+        hook_events=events,
+    )
 
     return {
         "provider": provider_name,

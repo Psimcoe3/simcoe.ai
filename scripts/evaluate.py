@@ -45,7 +45,12 @@ from config_validation import load_config, validate_evaluate_config
 from deterministic_tool_utils import build_tool_request
 from estimate_lookup import TOOL_NAME as ESTIMATE_LOOKUP_TOOL_NAME, run_estimate_lookup_request
 from hook_runtime import apply_hook_stage
+from indexed_memory import append_dream_log_entry, record_dream_session, run_memory_dream
 from manifest_utils import current_utc_timestamp, read_json_file, write_json_file
+from prompt_templates import (
+    SYSTEM_PROMPT_SURFACE_EVALUATION_JUDGE,
+    resolve_configured_system_prompt,
+)
 from request_router import route_request
 from revit_entity_lookup import TOOL_NAME as REVIT_ENTITY_LOOKUP_TOOL_NAME, run_revit_entity_lookup_request
 from retrieval_utils import (
@@ -56,12 +61,22 @@ from retrieval_utils import (
 from runtime_contracts import (
     CONTEXT_PROVIDER_MEMORY,
     CONTEXT_PROVIDER_RETRIEVAL,
+    EXECUTION_ENVELOPE_SCHEMA_VERSION,
+    EXECUTION_STATUS_DENIED,
+    EXECUTION_STATUS_FAILED,
+    EXECUTION_STATUS_SKIPPED,
+    EXECUTION_STATUS_SUCCEEDED,
+    EXECUTION_SUBJECT_DETERMINISTIC_TOOL,
+    EXECUTION_SUBJECT_ROUTE,
     HOOK_STAGE_POST_DETERMINISTIC_TOOL,
     HOOK_STAGE_PRE_DETERMINISTIC_TOOL,
     ROUTE_DETERMINISTIC_TOOL,
     ROUTE_MIXED,
     ROUTE_RETRIEVAL,
     ROUTE_TEXT,
+    build_execution_envelope,
+    default_runtime_owner_for_route,
+    summarize_execution_envelopes,
     validate_route_contract,
 )
 
@@ -410,6 +425,15 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
 
     context_provider_metadata = {
         **provider_metadata,
+        "execution_summary": summarize_execution_envelopes(
+            [
+                provider_trace.get("execution_envelope")
+                for provider_group in provider_trace_groups
+                for provider_trace in provider_group["providers"]
+                if isinstance(provider_trace, dict)
+                and isinstance(provider_trace.get("execution_envelope"), dict)
+            ]
+        ),
         "per_example": provider_trace_groups,
     }
     return prompts, {
@@ -512,6 +536,146 @@ def _ensure_supported_evaluation_routes(examples: list[dict]) -> None:
         f"{', '.join(unsupported_routes)}. "
         "Keep architecture.multimodal_runtime_enabled=false for now or add the multimodal sidecar runtime first."
     )
+
+
+def _route_execution_envelope_for_example(example: dict) -> dict:
+    routing_decision = example.get("routing_decision")
+    if isinstance(routing_decision, dict):
+        existing_envelope = routing_decision.get("execution_envelope")
+        if isinstance(existing_envelope, dict):
+            return copy.deepcopy(existing_envelope)
+
+        route_name = str(routing_decision.get("resolved_route") or _route_name(example)).strip().lower()
+        owner = routing_decision.get("runtime_owner")
+        details = {
+            "requested_route": routing_decision.get("requested_route") or route_name,
+            "resolved_route": route_name,
+            "fallback_chain": copy.deepcopy(routing_decision.get("fallback_chain", [route_name])),
+            "fallback_applied": bool(routing_decision.get("fallback_applied", False)),
+            "latency_budget_ms": int(routing_decision.get("latency_budget_ms", 0) or 0),
+            "attachments": copy.deepcopy(routing_decision.get("attachments", [])),
+            "reasons": copy.deepcopy(routing_decision.get("reasons", [])),
+        }
+        return build_execution_envelope(
+            EXECUTION_SUBJECT_ROUTE,
+            route_name,
+            EXECUTION_STATUS_SUCCEEDED,
+            owner=(
+                owner
+                if isinstance(owner, str) and owner.strip()
+                else default_runtime_owner_for_route(route_name)
+            ),
+            details=details,
+            hook_annotations=(
+                routing_decision.get("hook_annotations")
+                if isinstance(routing_decision.get("hook_annotations"), dict)
+                else None
+            ),
+            hook_events=(
+                routing_decision.get("hook_events")
+                if isinstance(routing_decision.get("hook_events"), list)
+                else None
+            ),
+        )
+
+    route_name = _route_name(example)
+    attachments = example.get("attachment_paths") if isinstance(example.get("attachment_paths"), list) else []
+    details = {
+        "requested_route": route_name,
+        "resolved_route": route_name,
+        "fallback_chain": [route_name],
+        "fallback_applied": False,
+        "attachments": copy.deepcopy(attachments),
+    }
+    if isinstance(example.get("source"), str) and example.get("source").strip():
+        details["source"] = example.get("source")
+    if isinstance(example.get("section"), str) and example.get("section").strip():
+        details["section"] = example.get("section")
+    owner = example.get("runtime_owner")
+    return build_execution_envelope(
+        EXECUTION_SUBJECT_ROUTE,
+        route_name,
+        EXECUTION_STATUS_SUCCEEDED,
+        owner=(
+            owner
+            if isinstance(owner, str) and owner.strip()
+            else default_runtime_owner_for_route(route_name)
+        ),
+        details=details,
+    )
+
+
+def _context_provider_execution_envelopes(trace: dict | None) -> list[dict]:
+    if not isinstance(trace, dict):
+        return []
+
+    providers = trace.get("context_providers")
+    if not isinstance(providers, list):
+        return []
+
+    envelopes: list[dict] = []
+    for provider_trace in providers:
+        if not isinstance(provider_trace, dict):
+            continue
+        envelope = provider_trace.get("execution_envelope")
+        if isinstance(envelope, dict):
+            envelopes.append(copy.deepcopy(envelope))
+    return envelopes
+
+
+def _deterministic_tool_execution_envelope(example: dict, route_result: dict | None) -> dict | None:
+    if isinstance(route_result, dict):
+        envelope = route_result.get("execution_envelope")
+        if isinstance(envelope, dict):
+            return copy.deepcopy(envelope)
+
+    if not _is_deterministic_tool_example(example):
+        return None
+
+    tool_name = str(example.get("tool_name") or "unknown").strip().lower() or "unknown"
+    return build_execution_envelope(
+        EXECUTION_SUBJECT_DETERMINISTIC_TOOL,
+        tool_name,
+        EXECUTION_STATUS_SKIPPED,
+        owner=default_runtime_owner_for_route(ROUTE_DETERMINISTIC_TOOL),
+        details={"reason": "tool result missing"},
+    )
+
+
+def build_execution_artifact(
+    examples: list[dict],
+    retrieval_traces: list[dict | None],
+    route_results: list[dict | None],
+) -> dict:
+    all_envelopes: list[dict] = []
+    per_example: list[dict] = []
+
+    for index, example in enumerate(examples):
+        route_envelope = _route_execution_envelope_for_example(example)
+        provider_envelopes = _context_provider_execution_envelopes(
+            retrieval_traces[index] if index < len(retrieval_traces) else None
+        )
+        tool_envelope = _deterministic_tool_execution_envelope(
+            example,
+            route_results[index] if index < len(route_results) else None,
+        )
+
+        example_execution = {
+            "route": route_envelope,
+            "context_providers": provider_envelopes,
+            "deterministic_tool": tool_envelope,
+        }
+        per_example.append(example_execution)
+        all_envelopes.append(route_envelope)
+        all_envelopes.extend(provider_envelopes)
+        if tool_envelope is not None:
+            all_envelopes.append(tool_envelope)
+
+    return {
+        "schema_version": EXECUTION_ENVELOPE_SCHEMA_VERSION,
+        "summary": summarize_execution_envelopes(all_envelopes),
+        "per_example": per_example,
+    }
 
 
 def _format_release_actual(actual: object) -> str:
@@ -982,11 +1146,13 @@ def _build_deterministic_tool_failure(
     example: dict,
     tool_name: object,
     *,
+    request: dict | None,
     checks: list[dict],
     error: str,
     response: dict | None,
     hook_events: list[dict],
     hook_annotations: dict,
+    status: str,
 ) -> dict:
     result = {
         "route": _route_name(example),
@@ -999,6 +1165,23 @@ def _build_deterministic_tool_failure(
         "error": error,
         "response": response,
     }
+    result["execution_envelope"] = build_execution_envelope(
+        EXECUTION_SUBJECT_DETERMINISTIC_TOOL,
+        str(tool_name or "unknown"),
+        status,
+        owner=default_runtime_owner_for_route(ROUTE_DETERMINISTIC_TOOL),
+        details={
+            "passed": False,
+            "passed_checks": 0,
+            "total_checks": len(checks),
+            "request": copy.deepcopy(request),
+            "response": copy.deepcopy(response),
+            "checks": copy.deepcopy(checks),
+            "error": error,
+        },
+        hook_annotations=hook_annotations,
+        hook_events=hook_events,
+    )
     if hook_events:
         result["hook_events"] = hook_events
     if hook_annotations:
@@ -1040,6 +1223,7 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
         return _build_deterministic_tool_failure(
             example,
             tool_name,
+            request=request,
             checks=[
                 {
                     "path": "tool_execution",
@@ -1052,6 +1236,7 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
             response=None,
             hook_events=hook_events,
             hook_annotations=hook_annotations,
+            status=EXECUTION_STATUS_DENIED,
         )
 
     hook_payload = pre_hook["payload"]
@@ -1077,6 +1262,7 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
             return _build_deterministic_tool_failure(
                 example,
                 tool_name,
+                request=request,
                 checks=[
                     {
                         "path": "tool_name",
@@ -1089,6 +1275,7 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
                 response=None,
                 hook_events=hook_events,
                 hook_annotations=hook_annotations,
+                status=EXECUTION_STATUS_FAILED,
             )
 
         post_hook = apply_hook_stage(
@@ -1108,6 +1295,7 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
             return _build_deterministic_tool_failure(
                 example,
                 tool_name,
+                request=request,
                 checks=[
                     {
                         "path": "tool_execution",
@@ -1120,6 +1308,7 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
                 response=None,
                 hook_events=hook_events,
                 hook_annotations=hook_annotations,
+                status=EXECUTION_STATUS_DENIED,
             )
 
         tool_payload = post_hook["payload"]
@@ -1147,6 +1336,7 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
         return _build_deterministic_tool_failure(
             example,
             tool_name,
+            request=request,
             checks=[
                 {
                     "path": "tool_execution",
@@ -1159,6 +1349,7 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
             response=None,
             hook_events=hook_events,
             hook_annotations=hook_annotations,
+            status=EXECUTION_STATUS_FAILED,
         )
 
     total_checks = len(checks)
@@ -1185,6 +1376,24 @@ def execute_deterministic_tool_example(cfg: dict, example: dict) -> dict:
         result["hook_events"] = hook_events
     if hook_annotations:
         result["hook_annotations"] = hook_annotations
+    result["execution_envelope"] = build_execution_envelope(
+        EXECUTION_SUBJECT_DETERMINISTIC_TOOL,
+        str(tool_name or "unknown"),
+        EXECUTION_STATUS_SUCCEEDED if passed else EXECUTION_STATUS_FAILED,
+        owner=default_runtime_owner_for_route(ROUTE_DETERMINISTIC_TOOL),
+        details={
+            "passed": passed,
+            "match_score": match_score,
+            "passed_checks": passed_checks,
+            "total_checks": total_checks,
+            "request": copy.deepcopy(request),
+            "response": copy.deepcopy(response),
+            "checks": copy.deepcopy(checks),
+            "warnings": copy.deepcopy(response.get("warnings", [])),
+        },
+        hook_annotations=hook_annotations,
+        hook_events=hook_events,
+    )
     return result
 
 
@@ -1254,6 +1463,14 @@ _JUDGE_SYSTEM_PROMPT = (
     "  1 = Unacceptable: wrong, incoherent, or irrelevant\n\n"
     "Respond with ONLY a JSON object: {\"score\": <int 1-5>, \"rationale\": \"<brief explanation>\"}"
 )
+
+
+def resolve_judge_system_prompt(cfg: dict) -> tuple[str, dict]:
+    return resolve_configured_system_prompt(
+        cfg,
+        SYSTEM_PROMPT_SURFACE_EVALUATION_JUDGE,
+        _JUDGE_SYSTEM_PROMPT,
+    )
 
 
 def _build_judge_message(prompt: str, prediction: str, reference: str) -> str:
@@ -1360,6 +1577,7 @@ def _get_judge_client_factory(judge_model: str):
 def _score_single_judgement(
     create_client,
     model_name: str,
+    system_prompt: str,
     prompt: str,
     prediction: str,
     reference: str,
@@ -1369,7 +1587,7 @@ def _score_single_judgement(
         response = client.chat.completions.create(
             model=model_name,
             messages=[
-                {"role": "system", "content": _JUDGE_SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
                     "content": _build_judge_message(prompt, prediction, reference),
@@ -1395,6 +1613,7 @@ def llm_judge(
     prompts: list[str],
     predictions: list[str],
     references: list[str],
+    system_prompt: str,
     concurrency: int = 1,
 ) -> list[dict]:
     """
@@ -1433,7 +1652,16 @@ def llm_judge(
         total = len(predictions)
         if concurrency <= 1 or total <= 1:
             for i, (prompt, pred, ref) in enumerate(zip(prompts, predictions, references)):
-                results.append(_score_single_judgement(create_client, model_name, prompt, pred, ref))
+                results.append(
+                    _score_single_judgement(
+                        create_client,
+                        model_name,
+                        system_prompt,
+                        prompt,
+                        pred,
+                        ref,
+                    )
+                )
                 if (i + 1) % 10 == 0 or (i + 1) == total:
                     print(f"    Judged {i + 1}/{total} examples …")
             return results
@@ -1446,6 +1674,7 @@ def llm_judge(
                     _score_single_judgement,
                     create_client,
                     model_name,
+                    system_prompt,
                     prompts[i],
                     predictions[i],
                     references[i],
@@ -1530,6 +1759,14 @@ def main() -> None:
     cfg = load_config(args.config)
     settings = resolve_evaluation_settings(cfg, args)
     validate_evaluate_config(cfg, settings["num_examples"])
+    judge_system_prompt, judge_system_prompt_info = resolve_judge_system_prompt(cfg)
+    dream_cfg = cfg.get("dream") if isinstance(cfg.get("dream"), dict) else {}
+    dream_enabled = bool(dream_cfg.get("enabled", False))
+    dream_session = None
+    dream_result: dict[str, Any] = {
+        "enabled": dream_enabled,
+        "status": "disabled" if not dream_enabled else "not_run",
+    }
 
     model_dir = cfg["export"]["merged_16bit_dir"]
     results_path = cfg["evaluation"]["results_path"]
@@ -1537,6 +1774,32 @@ def main() -> None:
     max_seq_length = cfg["model"]["max_seq_length"]
     total_start = time.perf_counter()
     processed_manifest = load_processed_manifest(cfg["data"]["processed_dir"])
+
+    if dream_enabled:
+        try:
+            dream_session = record_dream_session(
+                cfg,
+                source="evaluate",
+                summary=f"Evaluation session started ({settings['mode']})",
+                details=(
+                    f"num_examples={settings['num_examples']} "
+                    f"use_retrieval={settings['use_retrieval']} "
+                    f"release_mode={settings['release_mode']}"
+                ),
+                metadata={
+                    "mode": settings["mode"],
+                    "num_examples": settings["num_examples"],
+                    "use_retrieval": settings["use_retrieval"],
+                    "release_mode": settings["release_mode"],
+                },
+            )
+        except Exception as exc:
+            dream_result = {
+                "enabled": True,
+                "status": "session_error",
+                "error": str(exc),
+            }
+            print(f"  ⚠️   Dream session logging failed ({exc}).")
 
     print(
         "\n⚙️   Evaluation settings: "
@@ -1660,6 +1923,7 @@ def main() -> None:
                 text_prompts,
                 text_predictions,
                 text_references,
+                judge_system_prompt,
                 concurrency=settings["judge_concurrency"],
             )
             judge_seconds = time.perf_counter() - judge_start
@@ -1693,6 +1957,7 @@ def main() -> None:
         examples=examples,
         retrieval_info=retrieval_info,
     )
+    execution_artifact = build_execution_artifact(examples, retrieval_traces, route_results)
 
     if release_gate["configured"]:
         print(
@@ -1707,6 +1972,51 @@ def main() -> None:
             )
         if release_gate["failure_count"] > 5:
             print(f"    ... {release_gate['failure_count'] - 5} more blocking checks")
+
+    if dream_enabled:
+        try:
+            append_dream_log_entry(
+                cfg,
+                category="evaluation_result",
+                summary=f"Evaluation finished ({settings['mode']})",
+                details=(
+                    f"examples={len(examples)} "
+                    f"release_gate={'pass' if release_gate['passed'] else 'fail'} "
+                    f"retrieval_used={retrieval_info.get('used', False)}"
+                ),
+                source="evaluate",
+                session_id=(
+                    dream_session.get("session_id")
+                    if isinstance(dream_session, dict)
+                    else None
+                ),
+                metadata={
+                    "mode": settings["mode"],
+                    "num_examples": len(examples),
+                    "release_gate_passed": release_gate["passed"],
+                    "retrieval_used": retrieval_info.get("used", False),
+                    "memory_used": retrieval_info.get("memory", {}).get("used", False),
+                    "judge_model": judge_model,
+                },
+            )
+            dream_result = run_memory_dream(cfg)
+            if dream_result.get("status") == "succeeded":
+                print(
+                    "\n💤  Dream completed: "
+                    f"persisted={dream_result['phases']['consolidate']['persisted_memory_count']}, "
+                    f"topics={dream_result['phases']['prune_and_index']['memory_topic_count_after']}"
+                )
+            elif dream_result.get("status") == "skipped":
+                print("\n💤  Dream waiting on eligibility gates.")
+            elif dream_result.get("status") == "locked":
+                print("\n💤  Dream skipped because another run holds the lock.")
+        except Exception as exc:
+            dream_result = {
+                "enabled": True,
+                "status": "failed",
+                "error": str(exc),
+            }
+            print(f"\n  ⚠️   Dream execution failed ({exc}).")
 
     # ── Save results ──────────────────────────────────────────────────────────
     results = {
@@ -1732,6 +2042,14 @@ def main() -> None:
         "evaluation_source": evaluation_source,
         "retrieval": retrieval_info,
         "memory": retrieval_info.get("memory", {"enabled": False, "used": False}),
+        "dream": dream_result,
+        "system_prompts": {
+            "evaluation_judge": judge_system_prompt_info,
+        },
+        "execution": {
+            "schema_version": execution_artifact["schema_version"],
+            "summary": execution_artifact["summary"],
+        },
         "data_manifest": processed_manifest,
         "release_gate": release_gate,
         "timings_sec": {
@@ -1761,6 +2079,7 @@ def main() -> None:
                 "source": examples[i].get("source"),
                 "section": examples[i].get("section"),
                 "retrieval": retrieval_traces[i],
+                "execution": execution_artifact["per_example"][i],
             }
             for i in range(len(examples))
         ],

@@ -1,0 +1,94 @@
+schema_version: 1
+workflows:
+  memory-seed:
+    description: Import curated operator memory rows and rebuild memory projections.
+    tags:
+      - memory
+      - curation
+    required_vars:
+      - source_file
+    defaults:
+      source_label: operator_seed
+    steps:
+      - name: import curated memory
+        argv:
+          - "{python}"
+          - "scripts/indexed_memory.py"
+          - "--config"
+          - "{config}"
+          - "import"
+          - "--source-file"
+          - "{source_file}"
+          - "--source-label"
+          - "{source_label}"
+      - name: consolidate memory projections
+        argv:
+          - "{python}"
+          - "scripts/indexed_memory.py"
+          - "--config"
+          - "{config}"
+          - "consolidate"
+      - name: rebuild memory pointer index
+        argv:
+          - "{python}"
+          - "scripts/indexed_memory.py"
+          - "--config"
+          - "{config}"
+          - "rebuild-index"
+  retrieval-refresh:
+    description: Rebuild the local retrieval corpus from the current grounded example set.
+    tags:
+      - retrieval
+      - corpus
+    defaults:
+      source: data/raw/electrician_reference_examples.jsonl
+      out: data/retrieval/electrician_reference_corpus.jsonl
+      manifest: data/retrieval/electrician_reference_corpus.manifest.json
+    steps:
+      - name: rebuild retrieval corpus
+        argv:
+          - "{python}"
+          - "scripts/build_retrieval_corpus.py"
+          - "--source"
+          - "{source}"
+          - "--out"
+          - "{out}"
+          - "--manifest"
+          - "{manifest}"
+  benchmark-refresh:
+    description: Rebuild the curated golden benchmark from the configured spec and source corpus.
+    tags:
+      - benchmark
+      - evaluation
+    defaults:
+      source: data/raw/electrician_reference_examples.jsonl
+      spec: evals/golden_electrician_spec.json
+      out: evals/golden_electrician.jsonl
+      manifest: evals/golden_electrician.manifest.json
+    steps:
+      - name: rebuild golden benchmark
+        argv:
+          - "{python}"
+          - "scripts/build_golden_benchmark.py"
+          - "--config"
+          - "{config}"
+          - "--source"
+          - "{source}"
+          - "--spec"
+          - "{spec}"
+          - "--out"
+          - "{out}"
+          - "--manifest"
+          - "{manifest}"
+  release-verify:
+    description: Validate saved release artifacts and release results without rerunning training or inference.
+    tags:
+      - release
+      - verification
+    steps:
+      - name: validate release artifacts
+        argv:
+          - "{python}"
+          - "scripts/validate_release_artifacts.py"
+          - "--config"
+          - "{config}"

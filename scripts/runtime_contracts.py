@@ -4,6 +4,8 @@ Shared route/runtime contract helpers for text, retrieval, tools, and multimodal
 
 from __future__ import annotations
 
+import copy
+
 from data_contracts import RUNTIME_OWNERS
 
 
@@ -26,6 +28,16 @@ HOOK_STAGE_POST_DETERMINISTIC_TOOL = "post_deterministic_tool"
 HOOK_ACTION_ANNOTATE = "annotate"
 HOOK_ACTION_DENY = "deny"
 HOOK_ACTION_SET_FIELDS = "set_fields"
+
+EXECUTION_ENVELOPE_SCHEMA_VERSION = 1
+EXECUTION_SUBJECT_ROUTE = "route"
+EXECUTION_SUBJECT_CONTEXT_PROVIDER = "context_provider"
+EXECUTION_SUBJECT_DETERMINISTIC_TOOL = "deterministic_tool"
+
+EXECUTION_STATUS_SUCCEEDED = "succeeded"
+EXECUTION_STATUS_FAILED = "failed"
+EXECUTION_STATUS_SKIPPED = "skipped"
+EXECUTION_STATUS_DENIED = "denied"
 
 KNOWN_ROUTES = {
     ROUTE_TEXT,
@@ -50,6 +62,17 @@ KNOWN_HOOK_ACTIONS = {
     HOOK_ACTION_ANNOTATE,
     HOOK_ACTION_DENY,
     HOOK_ACTION_SET_FIELDS,
+}
+KNOWN_EXECUTION_SUBJECTS = {
+    EXECUTION_SUBJECT_ROUTE,
+    EXECUTION_SUBJECT_CONTEXT_PROVIDER,
+    EXECUTION_SUBJECT_DETERMINISTIC_TOOL,
+}
+KNOWN_EXECUTION_STATUSES = {
+    EXECUTION_STATUS_SUCCEEDED,
+    EXECUTION_STATUS_FAILED,
+    EXECUTION_STATUS_SKIPPED,
+    EXECUTION_STATUS_DENIED,
 }
 MULTIMODAL_ROUTES = {ROUTE_DRAWING_SHEET, ROUTE_MIXED}
 FAIL_ROUTE_FALLBACK = "fail"
@@ -113,6 +136,97 @@ def normalize_hook_action(value: object, label: str = "hook action") -> str:
         choices = ", ".join(sorted(KNOWN_HOOK_ACTIONS))
         raise ValueError(f"{label} must be one of: {choices}")
     return action
+
+
+def normalize_execution_subject(value: object, label: str = "execution subject") -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} must be a non-empty string")
+
+    subject = value.strip().lower()
+    if subject not in KNOWN_EXECUTION_SUBJECTS:
+        choices = ", ".join(sorted(KNOWN_EXECUTION_SUBJECTS))
+        raise ValueError(f"{label} must be one of: {choices}")
+    return subject
+
+
+def normalize_execution_status(value: object, label: str = "execution status") -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} must be a non-empty string")
+
+    status = value.strip().lower()
+    if status not in KNOWN_EXECUTION_STATUSES:
+        choices = ", ".join(sorted(KNOWN_EXECUTION_STATUSES))
+        raise ValueError(f"{label} must be one of: {choices}")
+    return status
+
+
+def build_execution_envelope(
+    subject_type: object,
+    subject_name: object,
+    status: object,
+    *,
+    owner: object | None = None,
+    details: dict | None = None,
+    hook_annotations: dict | None = None,
+    hook_events: list[dict] | None = None,
+) -> dict:
+    if not isinstance(subject_name, str) or not subject_name.strip():
+        raise ValueError("execution subject_name must be a non-empty string")
+
+    envelope = {
+        "schema_version": EXECUTION_ENVELOPE_SCHEMA_VERSION,
+        "subject_type": normalize_execution_subject(subject_type),
+        "subject_name": subject_name.strip().lower(),
+        "status": normalize_execution_status(status),
+    }
+    if owner is not None:
+        if not isinstance(owner, str) or not owner.strip():
+            raise ValueError("execution owner must be a non-empty string when present")
+        envelope["owner"] = owner.strip().lower()
+    if details:
+        envelope["details"] = copy.deepcopy(details)
+    if hook_annotations:
+        envelope["hook_annotations"] = copy.deepcopy(hook_annotations)
+    if hook_events:
+        envelope["hook_events"] = copy.deepcopy(hook_events)
+    return envelope
+
+
+def summarize_execution_envelopes(envelopes: list[dict | None]) -> dict:
+    summary = {
+        "total": 0,
+        "by_status": {},
+        "by_subject_type": {},
+        "by_subject": {},
+        "by_owner": {},
+    }
+
+    for envelope in envelopes:
+        if not isinstance(envelope, dict):
+            continue
+
+        subject_type = envelope.get("subject_type")
+        subject_name = envelope.get("subject_name")
+        status = envelope.get("status")
+        owner = envelope.get("owner")
+        if (
+            not isinstance(subject_type, str)
+            or not isinstance(subject_name, str)
+            or not isinstance(status, str)
+        ):
+            continue
+
+        summary["total"] += 1
+        summary["by_status"][status] = summary["by_status"].get(status, 0) + 1
+        summary["by_subject_type"][subject_type] = (
+            summary["by_subject_type"].get(subject_type, 0) + 1
+        )
+        subject_key = f"{subject_type}:{subject_name}"
+        summary["by_subject"][subject_key] = summary["by_subject"].get(subject_key, 0) + 1
+        if isinstance(owner, str) and owner.strip():
+            summary["by_owner"][owner] = summary["by_owner"].get(owner, 0) + 1
+
+    return summary
 
 
 def normalize_route_fallback(value: object, label: str) -> str:

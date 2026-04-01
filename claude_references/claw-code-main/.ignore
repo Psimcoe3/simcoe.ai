@@ -1,0 +1,13 @@
+# Search noise inside the claw-code reference copy
+.claude/sessions/
+rust/.claude/sessions/
+rust/.omc/
+rust/.sandbox-home/
+assets/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.zip
+*:Zone.Identifier

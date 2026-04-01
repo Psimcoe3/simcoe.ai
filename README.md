@@ -19,8 +19,9 @@ release-gated evaluation.
 5. [Pipeline Walkthrough](#pipeline-walkthrough)
 6. [Inference Workflows](#inference-workflows)
 7. [Developer Workflow](#developer-workflow)
-8. [What Else Would I Do Next?](#what-else-would-i-do-next)
-9. [LoRA vs QLoRA vs Full Fine-Tuning](#lora-vs-qlora-vs-full-fine-tuning)
+8. [Prompt Engineering Library](#prompt-engineering-library)
+9. [What Else Would I Do Next?](#what-else-would-i-do-next)
+10. [LoRA vs QLoRA vs Full Fine-Tuning](#lora-vs-qlora-vs-full-fine-tuning)
 
 ---
 
@@ -79,6 +80,9 @@ simcoe.ai/
 ├── requirements-dev.txt   # CPU-safe dev/test tooling
 ├── .pre-commit-config.yaml # Local quality hooks
 ├── topics.yaml            # Topic definitions for synthetic data generation
+├── prompts/
+│   ├── README.md          # System prompt playbook for internal prompt engineers
+│   └── system_prompt_templates.yaml # Guidance-first template catalog
 ├── .env.example           # Secret template (copy to .env, never commit .env)
 ├── requirements.txt       # Pinned working versions for Python 3.12 / CUDA 12.4
 ├── .github/
@@ -96,6 +100,7 @@ simcoe.ai/
 │   └── gguf/              # Q4_K_M GGUF + Ollama Modelfile
 │
 ├── scripts/
+│   ├── agent_shell.py     # Local interactive shell backed by routing, context providers, and deterministic tools
 │   ├── check_env.py       # Pre-flight validator
 │   ├── build_estimate_index.py # Build lookup-ready RSMeans estimate records
 │   ├── build_catalog_data.py # Turn structured product/reference data into training rows
@@ -203,6 +208,7 @@ Key sections:
 | `release` | `fail_on_threshold_breach`, quick/full thresholds, category thresholds, smoke-test requirements |
 | `retrieval` | `enabled`, corpus path, benchmark-time retrieval settings |
 | `memory` | `enabled`, file-backed memory paths, pointer-index limits, and skeptical retrieval settings |
+| `agent_shell` | local shell provider/model, session persistence paths, output budget, and text-route context policy |
 | `architecture` | primary runtime, retrieval requirement, multimodal/geometry feature flags |
 | `source_registry` | external source root, registry manifest path, review-safe defaults |
 | `managed_sources` | repo-owned mirror paths used as defaults by PDF, folder-ingest, and estimate-index workflows |
@@ -262,6 +268,7 @@ Key sections:
 - Retrieval and memory context assembly now runs through a named context-provider registry. Provider ordering is config-driven via `context_providers.order`, and evaluation traces serialize provider-level results separately from the flattened retrieval and memory fields kept for compatibility.
 - Retrieval and memory context assembly still prefetches in parallel during evaluation, and memory queries read the maintained pointer index rather than rebuilding it on every lookup.
 - Route decisions, context providers, and deterministic-tool execution now expose optional pre/post hook stages. Hooks are local config rules for audit, deny, annotate, or field rewrites; they are disabled by default.
+- Evaluation outputs now also carry structured execution envelopes: a top-level `execution.summary` plus per-example `execution` blocks that normalize route, context-provider, and deterministic-tool traces without removing the older compatibility fields.
 - Supports mixed-route golden benchmarks where some rows are evaluated through deterministic tools instead of text generation.
 - Reports deterministic-tool success and match-score metrics separately so text and tool regressions are visible independently.
 
@@ -284,9 +291,31 @@ make memory-query CONFIG=config.electrician.yaml ARGS='--query "grounding guidan
 make memory-import CONFIG=config.electrician.yaml ARGS='--source-file data/raw/curated_memory.jsonl --source-label operator_seed'
 
 make memory-consolidate CONFIG=config.electrician.yaml
+
+make workflow-list CONFIG=config.electrician.yaml
+
+make workflow-show CONFIG=config.electrician.yaml WORKFLOW=memory-seed
+
+make workflow-run CONFIG=config.electrician.yaml WORKFLOW=memory-seed ARGS='--var source_file=data/raw/curated_memory.jsonl --dry-run'
+
+make inspect-hooks CONFIG=config.electrician.yaml
+
+make inspect-providers CONFIG=config.electrician.yaml
+
+make inspect-execution CONFIG=config.electrician.yaml
+
+make inspect-shell CONFIG=config.yaml
+make inspect-shell CONFIG=config.yaml ARGS='--session-id agent-shell-123456789abc --tail 3'
 ```
 - Emits release-gate results from the optional `release` section, including per-category threshold checks, and can fail non-zero when thresholds are breached.
 - Saves results to `evals/results.json`.
+
+### 5A. Workflow Registry And Inspection
+
+- `workflows/registry.yaml` is a checked-in local workflow manifest for repeatable operator jobs such as memory seeding, retrieval corpus refresh, benchmark refresh, and release verification.
+- `scripts/workflow_registry.py` can list, validate, show, dry-run, and execute those workflows using the current Python environment and selected config.
+- `scripts/orchestration_inspect.py` exposes operator inspection views for hook rules, provider ordering, saved execution summaries from evaluation results, and persisted local agent shell sessions.
+- These surfaces are intentionally local and config-driven. They are not a plugin marketplace and do not fetch remote tools or instructions.
 
 ### 5. Build Retrieval And Benchmark Assets
 
@@ -328,6 +357,14 @@ make release-verify # validate release manifests/results without rerunning evalu
 make evaluate     # evaluate (requires exported model)
 make evaluate-quick # faster metrics-only evaluation
 make evaluate-release # fail if configured release thresholds are missed
+make agent-shell  # start the local routed shell or run a one-shot prompt
+make workflow-list # list checked-in operator workflows
+make workflow-show WORKFLOW=memory-seed # inspect one workflow
+make workflow-validate # validate the checked-in workflow manifest
+make workflow-run WORKFLOW=memory-seed ARGS='--var source_file=data/raw/curated_memory.jsonl --dry-run' # run or preview one workflow
+make inspect-hooks # inspect configured hook rules
+make inspect-providers # inspect configured provider ordering and active providers
+make inspect-execution # inspect saved execution summary from evaluation results
 make source-registry # build the configured external source registry manifest
 make source-materialize # copy selected external assets into sources/managed/
 make retrieval-corpus # build the local retrieval corpus
@@ -364,6 +401,17 @@ make release-verify CONFIG=config.electrician.yaml
 `make release-verify` is the lightweight follow-up check. It only reads the processed data manifest, training manifest, export manifest, and saved release results to confirm the lineage chain is coherent and the last saved release gate passed. It does not rerun training, export, smoke tests, or model evaluation.
 
 `make release-bundle` packages the minimal artifact set needed for that lightweight verification on another machine. By default it keeps the bundle small by replacing the GGUF binary with a placeholder file at the same repo-relative path; pass `INCLUDE_GGUF=1` if you want the real GGUF copied into the bundle. `dist/` is ignored, so write the bundle under `.github/release-bundles/` when you want the release-candidate workflow to run from a pushed commit.
+
+For local operator workflows and inspection:
+
+```bash
+make workflow-list CONFIG=config.electrician.yaml
+make workflow-show CONFIG=config.electrician.yaml WORKFLOW=retrieval-refresh
+make workflow-run CONFIG=config.electrician.yaml WORKFLOW=benchmark-refresh ARGS='--dry-run'
+make inspect-hooks CONFIG=config.electrician.yaml
+make inspect-providers CONFIG=config.electrician.yaml
+make inspect-execution CONFIG=config.electrician.yaml
+```
 
 The repo now also includes a GitHub Actions workflow, [.github/workflows/release-candidate-verify.yml](.github/workflows/release-candidate-verify.yml), which restores a checked-in bundle or downloads one from a URL and then runs `make quality-release` against it. The repo-backed flow is:
 
@@ -427,6 +475,33 @@ ollama run simcoe
 
 `scripts/export.py` writes the `Modelfile` automatically and prints the same registration commands after export. If you only want to re-run smoke tests against existing artifacts, use `make export-verify`.
 
+### 3. Use the local agent shell
+
+The repo now includes `scripts/agent_shell.py`, a local operator-facing shell that reuses the existing fast router, context-provider registry, deterministic lookup runtimes, workflow registry, and prompt-template system.
+
+Start an interactive session:
+
+```bash
+make agent-shell CONFIG=config.yaml
+```
+
+Run a single routed prompt and exit:
+
+```bash
+make agent-shell CONFIG=config.yaml ARGS='--prompt "Find the estimate lookup for EMT conduit."'
+```
+
+Resume or inspect a saved session:
+
+```bash
+make agent-shell CONFIG=config.yaml ARGS='--session-id agent-shell-123456789abc'
+make agent-shell CONFIG=config.yaml ARGS='--show-session --session-id agent-shell-123456789abc'
+make inspect-shell CONFIG=config.yaml
+make inspect-shell CONFIG=config.yaml ARGS='--session-id agent-shell-123456789abc --tail 3'
+```
+
+Shell sessions persist under `agent_shell.root_dir` and keep a JSON session summary plus a JSONL transcript per session. Inside the shell, `/help` shows the initial command surface: `/session`, `/route`, `/providers`, and `/workflow list|show`.
+
 ---
 
 ## Developer Workflow
@@ -442,6 +517,43 @@ make quality
 The quality gate intentionally stays off the GPU-heavy training stack. It covers the deterministic lookup and retrieval core with Ruff plus pytest, while full training/export/evaluation remain manual or release-job workflows.
 
 If a machine already has release artifacts on disk, use `make quality-release CONFIG=config.electrician.yaml` to combine the CPU-safe quality gate with lightweight release artifact validation.
+
+---
+
+## Prompt Engineering Library
+
+The repo now includes a guidance-first prompt engineering library under `prompts/`.
+It is aimed at internal prompt engineers who want reusable system prompt patterns
+that match the current runtime rather than accidentally conflicting with it.
+
+- `prompts/system_prompt_templates.yaml` catalogs reusable system prompts with purpose, use and avoid conditions, variable slots, anti-patterns, and expected failure modes.
+- `prompts/README.md` explains the conditioning levers behind those templates and maps them to the repo's current prompt stack.
+- `system_prompts.*` in the checked-in configs now lets runtime surfaces select template ids for synthetic generation, judge scoring, and the exported Ollama `SYSTEM` block.
+
+Use the library when you need to control stable model behavior such as:
+
+- domain scope
+- evidence discipline
+- insufficient-context behavior
+- standards and compliance framing
+
+Do not use the library as a substitute for retrieval or deterministic tools.
+Facts that change over time, source text that needs attribution, and lookup-owned
+values such as prices or entity metadata should stay outside the system prompt.
+
+The current runtime stack is still the source of truth:
+
+1. Optional system prompt from chat-completions or the Ollama `SYSTEM` block.
+2. `### Instruction:` content.
+3. Optional `### Input:` content.
+4. Optional `### Memory Hints:`.
+5. Optional `### Retrieved Context:`.
+6. `### Response:` generation boundary.
+
+The checked-in configs currently point those runtime surfaces at behavior-equivalent
+template ids, so the library is active without changing the existing prompt intent.
+You can swap to stronger grounding templates later by changing `system_prompts.*`
+and supplying any required variables.
 
 ---
 

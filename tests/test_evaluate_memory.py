@@ -106,10 +106,18 @@ def test_prepare_prompts_with_retrieval_merges_memory_hints(tmp_path) -> None:
     assert metadata["per_example"][0]["memory_request_id"]
     assert metadata["per_example"][0]["memory_results"]
     assert metadata["context_providers"]["order"] == ["memory", "retrieval"]
+    assert (
+        metadata["context_providers"]["execution_summary"]["by_subject_type"]["context_provider"]
+        == 2
+    )
     assert [
         provider["provider"]
         for provider in metadata["context_providers"]["per_example"][0]["providers"]
     ] == ["memory", "retrieval"]
+    assert (
+        metadata["per_example"][0]["context_providers"][0]["execution_envelope"]["subject_type"]
+        == "context_provider"
+    )
     assert (
         metadata["per_example"][0]["context_providers"][1]["hook_annotations"]["policy"]
         == "grounded"

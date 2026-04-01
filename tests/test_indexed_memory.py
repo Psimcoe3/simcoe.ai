@@ -3,10 +3,14 @@ from __future__ import annotations
 import json
 
 from indexed_memory import (
+    append_dream_log_entry,
+    assess_memory_dream,
     consolidate_memory,
     import_memory_entries,
     query_memory,
+    record_dream_session,
     record_memory_entry,
+    run_memory_dream,
 )
 from manifest_utils import read_json_file
 
@@ -37,7 +41,20 @@ def _cfg(tmp_path) -> dict:
             "allowed_kinds": ["operator_note", "verified_fact", "decision", "exception"],
             "exclude_statuses": ["stale", "retracted"],
             "consolidation_min_events": 2,
-        }
+        },
+        "dream": {
+            "enabled": True,
+            "root_dir": str(root_dir / "dream"),
+            "state_path": str(root_dir / "dream" / "state.json"),
+            "lock_path": str(root_dir / "dream" / "consolidation.lock"),
+            "log_dir": str(root_dir / "dream" / "daily_logs"),
+            "minimum_hours_between_runs": 24,
+            "minimum_sessions_between_runs": 5,
+            "lock_timeout_seconds": 900,
+            "max_recent_logs": 32,
+            "max_persistable_entries_per_run": 8,
+            "brief_summary_chars": 120,
+        },
     }
 
 
@@ -225,3 +242,109 @@ def test_import_memory_entries_loads_curated_rows(tmp_path) -> None:
     assert payload["imported_count"] == 1
     assert result["results"]
     assert result["results"][0]["topic"] == "Bonding guidance"
+
+
+def test_record_dream_session_updates_state_and_daily_log(tmp_path) -> None:
+    cfg = _cfg(tmp_path)
+
+    payload = record_dream_session(
+        cfg,
+        source="evaluate",
+        summary="Evaluation session started",
+        generated_at="2026-04-01T10:00:00+00:00",
+    )
+
+    state = read_json_file(cfg["dream"]["state_path"])
+    log_path = tmp_path / "memory" / "dream" / "daily_logs" / "2026-04-01.jsonl"
+
+    assert payload["session_count"] == 1
+    assert state["session_count"] == 1
+    assert state["last_session_id"] == payload["session_id"]
+    assert log_path.exists()
+    assert payload["log_entry"]["category"] == "session"
+
+
+def test_assess_memory_dream_requires_minimum_session_gate(tmp_path) -> None:
+    cfg = _cfg(tmp_path)
+    for index in range(4):
+        record_dream_session(
+            cfg,
+            source="evaluate",
+            summary=f"Session {index + 1}",
+            generated_at=f"2026-04-01T0{index}:00:00+00:00",
+        )
+
+    waiting = assess_memory_dream(cfg, now="2026-04-01T12:00:00+00:00")
+
+    assert waiting["eligible"] is False
+    assert waiting["gates"]["time"]["passed"] is True
+    assert waiting["gates"]["session"]["passed"] is False
+    assert waiting["gates"]["session"]["sessions_since_last_dream"] == 4
+
+    record_dream_session(
+        cfg,
+        source="evaluate",
+        summary="Session 5",
+        generated_at="2026-04-01T13:00:00+00:00",
+    )
+    eligible = assess_memory_dream(cfg, now="2026-04-01T13:05:00+00:00")
+
+    assert eligible["eligible"] is True
+    assert eligible["gates"]["session"]["passed"] is True
+
+
+def test_run_memory_dream_persists_curated_log_entries(tmp_path) -> None:
+    cfg = _cfg(tmp_path)
+    for index in range(5):
+        record_dream_session(
+            cfg,
+            source="evaluate",
+            summary=f"Session {index + 1}",
+            generated_at=f"2026-04-01T0{index}:00:00+00:00",
+        )
+
+    append_dream_log_entry(
+        cfg,
+        category="observation",
+        summary="Persist bonding guidance",
+        source="evaluate",
+        generated_at="2026-04-01T10:00:00+00:00",
+        persist_memory={
+            "topic": "Bonding guidance",
+            "summary": "Use verified bonding notes",
+            "content": "Prefer verified bonding notes before generic guidance.",
+            "verification_status": "verified",
+            "tags": ["bonding"],
+        },
+    )
+
+    dream_result = run_memory_dream(cfg, now="2026-04-01T12:00:00+00:00")
+    memory_result = query_memory(cfg, "bonding guidance")
+    state = read_json_file(cfg["dream"]["state_path"])
+
+    assert dream_result["status"] == "succeeded"
+    assert dream_result["phases"]["consolidate"]["persisted_memory_count"] == 1
+    assert state["dream_count"] == 1
+    assert state["last_dream_session_count"] == 5
+    assert memory_result["results"]
+    assert memory_result["results"][0]["topic"] == "Bonding guidance"
+
+
+def test_run_memory_dream_reports_active_lock(tmp_path) -> None:
+    cfg = _cfg(tmp_path)
+    lock_path = tmp_path / "memory" / "dream" / "consolidation.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text(
+        '{"schema_version": 1, "acquired_at": "2026-04-01T10:00:00+00:00", "pid": 42}\n',
+        encoding="utf-8",
+    )
+
+    assessment = assess_memory_dream(cfg, now="2026-04-01T10:05:00+00:00")
+    dream_result = run_memory_dream(
+        cfg,
+        force=True,
+        now="2026-04-01T10:05:00+00:00",
+    )
+
+    assert assessment["gates"]["lock"]["passed"] is False
+    assert dream_result["status"] == "locked"

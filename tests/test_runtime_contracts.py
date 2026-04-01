@@ -3,14 +3,20 @@ from __future__ import annotations
 import pytest
 
 from runtime_contracts import (
+    EXECUTION_STATUS_SUCCEEDED,
+    EXECUTION_SUBJECT_ROUTE,
     HOOK_ACTION_ANNOTATE,
     HOOK_STAGE_POST_CONTEXT_PROVIDER,
     FAIL_ROUTE_FALLBACK,
+    build_execution_envelope,
     normalize_context_provider,
+    normalize_execution_status,
+    normalize_execution_subject,
     normalize_hook_action,
     normalize_hook_stage,
     ROUTE_RETRIEVAL,
     normalize_route_fallback,
+    summarize_execution_envelopes,
     validate_route_contract,
 )
 
@@ -47,3 +53,29 @@ def test_normalize_context_provider_accepts_memory() -> None:
 def test_normalize_hook_stage_and_action_accept_known_values() -> None:
     assert normalize_hook_stage("post_context_provider") == HOOK_STAGE_POST_CONTEXT_PROVIDER
     assert normalize_hook_action("annotate") == HOOK_ACTION_ANNOTATE
+
+
+def test_normalize_execution_subject_and_status_accept_known_values() -> None:
+    assert normalize_execution_subject("route") == EXECUTION_SUBJECT_ROUTE
+    assert normalize_execution_status("succeeded") == EXECUTION_STATUS_SUCCEEDED
+
+
+def test_build_execution_envelope_and_summary_are_stable() -> None:
+    envelope = build_execution_envelope(
+        "route",
+        "retrieval",
+        "succeeded",
+        owner="retrieval",
+        details={"resolved_route": "retrieval"},
+    )
+
+    summary = summarize_execution_envelopes([envelope, None])
+
+    assert envelope["schema_version"] == 1
+    assert envelope["subject_type"] == "route"
+    assert envelope["subject_name"] == "retrieval"
+    assert envelope["status"] == "succeeded"
+    assert summary["total"] == 1
+    assert summary["by_subject_type"]["route"] == 1
+    assert summary["by_subject"]["route:retrieval"] == 1
+    assert summary["by_owner"]["retrieval"] == 1

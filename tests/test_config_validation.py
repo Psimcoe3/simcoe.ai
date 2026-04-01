@@ -5,11 +5,15 @@ from copy import deepcopy
 import pytest
 
 from config_validation import (
+    validate_agent_shell_config,
     validate_context_providers_config,
+    validate_dream_config,
     validate_hooks_config,
     validate_memory_config,
     validate_multimodal_config,
     validate_routing_config,
+    validate_system_prompts_config,
+    validate_workflow_registry_config,
 )
 
 
@@ -260,6 +264,89 @@ def test_validate_memory_config_rejects_unknown_provider(
     assert "memory.provider must be one of" in captured.out
 
 
+def test_validate_dream_config_accepts_scaffold() -> None:
+    validate_dream_config(
+        {
+            "memory": {
+                "enabled": True,
+            },
+            "dream": {
+                "enabled": True,
+                "root_dir": "data/memory/dream",
+                "state_path": "data/memory/dream/state.json",
+                "lock_path": "data/memory/dream/consolidation.lock",
+                "log_dir": "data/memory/dream/daily_logs",
+                "minimum_hours_between_runs": 24,
+                "minimum_sessions_between_runs": 5,
+                "lock_timeout_seconds": 900,
+                "max_recent_logs": 200,
+                "max_persistable_entries_per_run": 32,
+                "brief_summary_chars": 160,
+            },
+        }
+    )
+
+
+def test_validate_dream_config_requires_enabled_memory(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        validate_dream_config(
+            {
+                "memory": {
+                    "enabled": False,
+                },
+                "dream": {
+                    "enabled": True,
+                    "root_dir": "data/memory/dream",
+                    "state_path": "data/memory/dream/state.json",
+                    "lock_path": "data/memory/dream/consolidation.lock",
+                    "log_dir": "data/memory/dream/daily_logs",
+                    "minimum_hours_between_runs": 24,
+                    "minimum_sessions_between_runs": 5,
+                    "lock_timeout_seconds": 900,
+                    "max_recent_logs": 200,
+                    "max_persistable_entries_per_run": 32,
+                    "brief_summary_chars": 160,
+                },
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert "dream.enabled requires memory.enabled to be true" in captured.out
+
+
+def test_validate_dream_config_rejects_persist_limit_above_recent_logs(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        validate_dream_config(
+            {
+                "memory": {
+                    "enabled": True,
+                },
+                "dream": {
+                    "enabled": False,
+                    "root_dir": "data/memory/dream",
+                    "state_path": "data/memory/dream/state.json",
+                    "lock_path": "data/memory/dream/consolidation.lock",
+                    "log_dir": "data/memory/dream/daily_logs",
+                    "minimum_hours_between_runs": 24,
+                    "minimum_sessions_between_runs": 5,
+                    "lock_timeout_seconds": 900,
+                    "max_recent_logs": 8,
+                    "max_persistable_entries_per_run": 32,
+                    "brief_summary_chars": 160,
+                },
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert (
+        "dream.max_persistable_entries_per_run cannot exceed dream.max_recent_logs" in captured.out
+    )
+
+
 def test_validate_context_providers_config_accepts_scaffold() -> None:
     validate_context_providers_config(
         {
@@ -329,3 +416,157 @@ def test_validate_hooks_config_rejects_unknown_stage(
 
     captured = capsys.readouterr()
     assert "hooks.rules[0].stage must be one of" in captured.out
+
+
+def test_validate_workflow_registry_config_accepts_scaffold(tmp_path) -> None:
+    manifest_path = tmp_path / "registry.yaml"
+    manifest_path.write_text(
+        "schema_version: 1\nworkflows: {demo: {description: Demo, steps: [{name: noop, argv: [python, --version]}]}}\n",
+        encoding="utf-8",
+    )
+
+    validate_workflow_registry_config(
+        {
+            "workflow_registry": {
+                "enabled": True,
+                "manifest_path": str(manifest_path),
+            }
+        }
+    )
+
+
+def test_validate_workflow_registry_config_rejects_missing_manifest(
+    capsys: pytest.CaptureFixture[str], tmp_path
+) -> None:
+    with pytest.raises(SystemExit):
+        validate_workflow_registry_config(
+            {
+                "workflow_registry": {
+                    "enabled": True,
+                    "manifest_path": str(tmp_path / "missing.yaml"),
+                }
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert "Workflow registry manifest not found" in captured.out
+
+
+def test_validate_agent_shell_config_accepts_scaffold() -> None:
+    validate_agent_shell_config(
+        {
+            "memory": {"enabled": False},
+            "retrieval": {"enabled": False},
+            "agent_shell": {
+                "enabled": True,
+                "provider": "ollama",
+                "model": "simcoe",
+                "root_dir": "data/agent_shell",
+                "sessions_dir": "data/agent_shell/sessions",
+                "transcripts_dir": "data/agent_shell/transcripts",
+                "max_turns": 40,
+                "temperature": 0.2,
+                "max_output_tokens": 512,
+                "ollama_base_url": "http://localhost:11434/v1",
+                "openai_api_key_env": "OPENAI_API_KEY",
+                "include_memory_in_text_routes": False,
+                "include_retrieval_in_text_routes": False,
+                "persist_context_sections": True,
+            },
+        }
+    )
+
+
+def test_validate_agent_shell_config_rejects_unknown_provider(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        validate_agent_shell_config(
+            {
+                "memory": {"enabled": False},
+                "retrieval": {"enabled": False},
+                "agent_shell": {
+                    "enabled": True,
+                    "provider": "vertex",
+                    "model": "simcoe",
+                    "root_dir": "data/agent_shell",
+                    "sessions_dir": "data/agent_shell/sessions",
+                    "transcripts_dir": "data/agent_shell/transcripts",
+                    "max_turns": 40,
+                    "temperature": 0.2,
+                    "max_output_tokens": 512,
+                    "ollama_base_url": "http://localhost:11434/v1",
+                    "openai_api_key_env": "OPENAI_API_KEY",
+                    "include_memory_in_text_routes": False,
+                    "include_retrieval_in_text_routes": False,
+                    "persist_context_sections": True,
+                },
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert "agent_shell.provider must be one of" in captured.out
+
+
+def test_validate_agent_shell_config_requires_retrieval_for_text_route_injection(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        validate_agent_shell_config(
+            {
+                "retrieval": {"enabled": False},
+                "memory": {"enabled": False},
+                "agent_shell": {
+                    "enabled": True,
+                    "provider": "ollama",
+                    "model": "simcoe",
+                    "root_dir": "data/agent_shell",
+                    "sessions_dir": "data/agent_shell/sessions",
+                    "transcripts_dir": "data/agent_shell/transcripts",
+                    "max_turns": 40,
+                    "temperature": 0.2,
+                    "max_output_tokens": 512,
+                    "ollama_base_url": "http://localhost:11434/v1",
+                    "openai_api_key_env": "OPENAI_API_KEY",
+                    "include_memory_in_text_routes": False,
+                    "include_retrieval_in_text_routes": True,
+                    "persist_context_sections": True,
+                },
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert "agent_shell.include_retrieval_in_text_routes requires retrieval.enabled" in captured.out
+
+
+def test_validate_system_prompts_config_accepts_builtin_templates() -> None:
+    validate_system_prompts_config(
+        {
+            "system_prompts": {
+                "library_path": "prompts/system_prompt_templates.yaml",
+                "agent_shell": {"template_id": "interactive-grounded-operator"},
+                "generate_data": {"template_id": "synthetic-data-generator"},
+                "evaluation_judge": {"template_id": "evaluation-rubric-judge"},
+                "export_modelfile": {"template_id": "runtime-helpful-assistant"},
+            }
+        }
+    )
+
+
+def test_validate_system_prompts_config_rejects_missing_required_variables(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        validate_system_prompts_config(
+            {
+                "system_prompts": {
+                    "library_path": "prompts/system_prompt_templates.yaml",
+                    "export_modelfile": {
+                        "template_id": "grounded-domain-baseline",
+                    },
+                }
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert "missing required variables: domain" in captured.out

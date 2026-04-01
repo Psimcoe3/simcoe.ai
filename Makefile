@@ -52,11 +52,12 @@ GOLDEN_SOURCE      ?= $(RETRIEVAL_SOURCE)
 GOLDEN_SPEC        ?= evals/golden_electrician_spec.json
 GOLDEN_OUT         ?= evals/golden_electrician.jsonl
 GOLDEN_MANIFEST    ?= evals/golden_electrician.manifest.json
-QUALITY_PATHS      ?= scripts/check_env.py scripts/context_providers.py scripts/deterministic_tool_utils.py scripts/hook_runtime.py scripts/indexed_memory.py scripts/request_router.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/runtime_contracts.py scripts/train.py scripts/validate_release_artifacts.py scripts/package_release_bundle.py tests
+QUALITY_PATHS      ?= scripts/agent_shell.py scripts/check_env.py scripts/context_providers.py scripts/deterministic_tool_utils.py scripts/hook_runtime.py scripts/indexed_memory.py scripts/orchestration_inspect.py scripts/prompt_templates.py scripts/request_router.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/runtime_contracts.py scripts/train.py scripts/validate_release_artifacts.py scripts/package_release_bundle.py scripts/workflow_registry.py tests
 TEST_PATHS         ?= tests
 ARGS               ?=
+WORKFLOW           ?=
 
-.PHONY: all quality quality-release release-bundle release-verify lint test check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release route-request memory-add memory-query memory-import memory-consolidate memory-rebuild-index source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest revit-lookup estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
+.PHONY: all quality quality-release release-bundle release-verify lint test check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release agent-shell route-request memory-add memory-query memory-import memory-consolidate memory-rebuild-index workflow-list workflow-show workflow-validate workflow-run inspect-hooks inspect-providers inspect-execution inspect-shell source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest revit-lookup estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -125,6 +126,9 @@ evaluate-quick: ## Run a faster metrics-only evaluation profile
 evaluate-release: ## Evaluate and fail if configured release thresholds are not met
 	$(PYTHON) scripts/evaluate.py --config $(CONFIG) --release
 
+agent-shell: ## Start the local agent shell (pass one-shot prompts or session args via ARGS)
+	$(PYTHON) scripts/agent_shell.py --config $(CONFIG) $(ARGS)
+
 route-request: ## Classify a single request into text/retrieval/tool/drawing routes (pass inputs via ARGS)
 	$(PYTHON) scripts/request_router.py --config $(CONFIG) $(ARGS)
 
@@ -142,6 +146,38 @@ memory-consolidate: ## Rebuild topic files from the append-only memory event log
 
 memory-rebuild-index: ## Rebuild the pointer-only memory index from topic records
 	$(PYTHON) scripts/indexed_memory.py --config $(CONFIG) rebuild-index
+
+workflow-list: ## List checked-in operator workflows from the registry manifest
+	$(PYTHON) scripts/workflow_registry.py --config $(CONFIG) list
+
+workflow-show: ## Show one checked-in operator workflow (set WORKFLOW=name)
+	@if [[ -z "$(WORKFLOW)" ]]; then \
+		echo "Usage: make workflow-show WORKFLOW=name CONFIG=config.yaml"; \
+		exit 1; \
+	fi
+	$(PYTHON) scripts/workflow_registry.py --config $(CONFIG) show $(WORKFLOW)
+
+workflow-validate: ## Validate the checked-in workflow registry manifest
+	$(PYTHON) scripts/workflow_registry.py --config $(CONFIG) validate
+
+workflow-run: ## Run one checked-in operator workflow (set WORKFLOW=name and pass vars via ARGS)
+	@if [[ -z "$(WORKFLOW)" ]]; then \
+		echo "Usage: make workflow-run WORKFLOW=name CONFIG=config.yaml ARGS='--var key=value'"; \
+		exit 1; \
+	fi
+	$(PYTHON) scripts/workflow_registry.py --config $(CONFIG) run $(WORKFLOW) $(ARGS)
+
+inspect-hooks: ## Inspect configured hooks for the selected config
+	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) hooks
+
+inspect-providers: ## Inspect configured context providers for the selected config
+	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) providers
+
+inspect-execution: ## Inspect saved execution summary from evaluation results (pass --results via ARGS if needed)
+	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) execution $(ARGS)
+
+inspect-shell: ## Inspect saved local agent shell sessions (pass --session-id via ARGS for detail)
+	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) shell $(ARGS)
 
 source-registry: ## Build a registry manifest for the configured external source root
 	$(PYTHON) scripts/build_source_registry.py --config $(CONFIG)
@@ -164,7 +200,7 @@ golden-benchmark: ## Build the curated golden benchmark from the checked-in spec
 		--manifest $(GOLDEN_MANIFEST)
 
 generate: ## Generate synthetic training data using Ollama
-	$(PYTHON) scripts/generate_data.py --topics topics.yaml \
+	$(PYTHON) scripts/generate_data.py --config $(CONFIG) --topics topics.yaml \
 		--out data/raw/generated.jsonl --count 10
 	@echo "✅  Generated data saved to data/raw/generated.jsonl"
 	@echo "    To merge: cat data/raw/generated.jsonl >> data/raw/dataset.jsonl"

@@ -19,6 +19,8 @@ from config_validation import (
 from data_contracts import infer_asset_kind, is_drawing_asset
 from hook_runtime import apply_hook_stage
 from runtime_contracts import (
+    EXECUTION_STATUS_SUCCEEDED,
+    EXECUTION_SUBJECT_ROUTE,
     FAIL_ROUTE_FALLBACK,
     HOOK_STAGE_POST_ROUTE,
     HOOK_STAGE_PRE_ROUTE,
@@ -27,6 +29,7 @@ from runtime_contracts import (
     ROUTE_MIXED,
     ROUTE_RETRIEVAL,
     ROUTE_TEXT,
+    build_execution_envelope,
     default_runtime_owner_for_route,
     normalize_route,
 )
@@ -329,6 +332,23 @@ def route_request(
         finalized_decision.pop("hook_annotations", None)
     if hook_events:
         finalized_decision["hook_events"] = hook_events
+    finalized_decision["execution_envelope"] = build_execution_envelope(
+        EXECUTION_SUBJECT_ROUTE,
+        finalized_decision["resolved_route"],
+        EXECUTION_STATUS_SUCCEEDED,
+        owner=finalized_decision["runtime_owner"],
+        details={
+            "requested_route": finalized_decision["requested_route"],
+            "resolved_route": finalized_decision["resolved_route"],
+            "fallback_chain": finalized_decision["fallback_chain"],
+            "fallback_applied": finalized_decision["fallback_applied"],
+            "latency_budget_ms": finalized_decision["latency_budget_ms"],
+            "attachments": finalized_decision["attachments"],
+            "reasons": finalized_decision["reasons"],
+        },
+        hook_annotations=finalized_decision.get("hook_annotations"),
+        hook_events=hook_events,
+    )
     return finalized_decision
 
 

@@ -52,6 +52,8 @@ def test_route_request_uses_retrieval_for_grounded_reference_queries() -> None:
     assert decision["requested_route"] == "retrieval"
     assert decision["resolved_route"] == "retrieval"
     assert decision["runtime_owner"] == "retrieval"
+    assert decision["execution_envelope"]["subject_type"] == "route"
+    assert decision["execution_envelope"]["owner"] == "retrieval"
 
 
 def test_route_request_uses_deterministic_tool_for_lookup_queries() -> None:

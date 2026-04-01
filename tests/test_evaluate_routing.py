@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 
 import evaluate
-from evaluate import build_example_from_benchmark_row
+from evaluate import build_example_from_benchmark_row, build_execution_artifact
+from runtime_contracts import build_execution_envelope
 
 
 def _base_cfg() -> dict:
@@ -123,3 +124,65 @@ def test_execute_deterministic_tool_example_applies_hooks(monkeypatch: pytest.Mo
     assert captured["request"]["query"] == "rewritten emt conduit"
     assert result["passed"] is True
     assert result["hook_annotations"]["policy"] == "audited"
+    assert result["execution_envelope"]["subject_type"] == "deterministic_tool"
+    assert result["execution_envelope"]["status"] == "succeeded"
+
+
+def test_build_execution_artifact_collects_structured_envelopes() -> None:
+    examples = [
+        {
+            "route": "retrieval",
+            "runtime_owner": "retrieval",
+            "routing_decision": {
+                "execution_envelope": build_execution_envelope(
+                    "route",
+                    "retrieval",
+                    "succeeded",
+                    owner="retrieval",
+                    details={"resolved_route": "retrieval"},
+                )
+            },
+        },
+        {
+            "route": "deterministic_tool",
+            "runtime_owner": "geometry_rules",
+            "tool_name": "estimate_lookup",
+        },
+    ]
+    retrieval_traces = [
+        {
+            "context_providers": [
+                {
+                    "execution_envelope": build_execution_envelope(
+                        "context_provider",
+                        "memory",
+                        "succeeded",
+                        owner="memory",
+                        details={"used": True},
+                    )
+                }
+            ]
+        },
+        None,
+    ]
+    route_results = [
+        None,
+        {
+            "execution_envelope": build_execution_envelope(
+                "deterministic_tool",
+                "estimate_lookup",
+                "succeeded",
+                owner="geometry_rules",
+                details={"passed": True},
+            )
+        },
+    ]
+
+    artifact = build_execution_artifact(examples, retrieval_traces, route_results)
+
+    assert artifact["schema_version"] == 1
+    assert artifact["summary"]["total"] == 4
+    assert artifact["summary"]["by_subject_type"]["route"] == 2
+    assert artifact["summary"]["by_subject_type"]["context_provider"] == 1
+    assert artifact["summary"]["by_subject_type"]["deterministic_tool"] == 1
+    assert artifact["per_example"][1]["deterministic_tool"]["subject_name"] == "estimate_lookup"

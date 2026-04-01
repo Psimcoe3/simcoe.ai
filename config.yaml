@@ -60,6 +60,17 @@ multimodal:
   model_name: null
   processor_name: null
 
+system_prompts:
+  library_path: "prompts/system_prompt_templates.yaml"
+  generate_data:
+    template_id: "synthetic-data-generator"
+  evaluation_judge:
+    template_id: "evaluation-rubric-judge"
+  export_modelfile:
+    template_id: "runtime-helpful-assistant"
+  agent_shell:
+    template_id: "interactive-grounded-operator"
+
 # ── Model ─────────────────────────────────────────────────────────────────
 model:
   name: "unsloth/Meta-Llama-3.1-8B-bnb-4bit"   # HF hub id or local path
@@ -190,9 +201,42 @@ memory:
     - retracted
   consolidation_min_events: 8
 
+dream:
+  enabled: false
+  root_dir: "data/memory/dream"
+  state_path: "data/memory/dream/state.json"
+  lock_path: "data/memory/dream/consolidation.lock"
+  log_dir: "data/memory/dream/daily_logs"
+  minimum_hours_between_runs: 24
+  minimum_sessions_between_runs: 5
+  lock_timeout_seconds: 900
+  max_recent_logs: 200
+  max_persistable_entries_per_run: 32
+  brief_summary_chars: 160
+
 hooks:
   enabled: false
   rules: []
+
+workflow_registry:
+  enabled: true
+  manifest_path: "workflows/registry.yaml"
+
+agent_shell:
+  enabled: true
+  provider: "ollama"
+  model: "simcoe"
+  root_dir: "data/agent_shell"
+  sessions_dir: "data/agent_shell/sessions"
+  transcripts_dir: "data/agent_shell/transcripts"
+  max_turns: 40
+  temperature: 0.2
+  max_output_tokens: 512
+  ollama_base_url: "http://localhost:11434/v1"
+  openai_api_key_env: "OPENAI_API_KEY"
+  include_memory_in_text_routes: false
+  include_retrieval_in_text_routes: false
+  persist_context_sections: true
 
 deterministic_tools:
   estimate_lookup:

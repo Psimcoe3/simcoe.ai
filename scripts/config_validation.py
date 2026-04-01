@@ -7,6 +7,11 @@ from pathlib import Path
 import sys
 
 from data_contracts import REVIEW_STATES
+from prompt_templates import (
+    KNOWN_SYSTEM_PROMPT_SURFACES,
+    resolve_system_prompt_library_path,
+    validate_system_prompt_template_selection,
+)
 from runtime_contracts import (
     CONTEXT_PROVIDER_RETRIEVAL,
     FAIL_ROUTE_FALLBACK,
@@ -27,6 +32,11 @@ MEMORY_KINDS = {"operator_note", "verified_fact", "decision", "exception"}
 MEMORY_STATUSES = {"active", "stale", "retracted"}
 MEMORY_CONTRADICTION_POLICIES = {"mark_stale", "track_only"}
 MEMORY_PROVIDERS = {"file"}
+AGENT_SHELL_PROVIDERS = {"ollama", "openai"}
+
+
+def _coerce_path(value: str) -> Path:
+    return Path(value).expanduser().resolve()
 
 
 def fail(message: str) -> None:
@@ -180,6 +190,16 @@ def require_environment_variables(variable_names: list[str]) -> None:
         )
 
 
+def _require_optional_scalar(value: object, label: str) -> object:
+    if value is None:
+        return None
+    if isinstance(value, (str, int, float, bool)):
+        if isinstance(value, str) and not value.strip():
+            fail(f"{label} must not be an empty string")
+        return value
+    fail(f"{label} must be a scalar value when present")
+
+
 def _resolved_path_for_comparison(path: str) -> Path:
     return Path(path).expanduser().resolve()
 
@@ -188,6 +208,12 @@ def _paths_overlap(first_path: str, second_path: str) -> bool:
     first = _resolved_path_for_comparison(first_path)
     second = _resolved_path_for_comparison(second_path)
     return first == second or first in second.parents or second in first.parents
+
+
+def _path_is_within(root_path: str, candidate_path: str) -> bool:
+    root = _resolved_path_for_comparison(root_path)
+    candidate = _resolved_path_for_comparison(candidate_path)
+    return candidate == root or root in candidate.parents
 
 
 def validate_architecture_config(cfg: dict) -> None:
@@ -247,6 +273,71 @@ def validate_architecture_config(cfg: dict) -> None:
     retrieval = cfg.get("retrieval")
     if isinstance(retrieval, dict) and retrieval.get("enabled") and not retrieval_layer_enabled:
         fail("retrieval.enabled cannot be true when architecture.retrieval_layer_enabled is false")
+
+
+def validate_system_prompts_config(cfg: dict) -> None:
+    system_prompts = cfg.get("system_prompts")
+    if system_prompts is None:
+        return
+
+    if not isinstance(system_prompts, dict):
+        fail("system_prompts must be a mapping when present")
+
+    library_path_value = require_optional_string(
+        system_prompts.get("library_path"),
+        "system_prompts.library_path",
+    )
+    resolved_library_path: str | None = None
+    if library_path_value is not None:
+        resolved_library_path = str(resolve_system_prompt_library_path(library_path_value))
+        require_file(resolved_library_path, "System prompt library")
+
+    unknown_keys = sorted(
+        key
+        for key in system_prompts
+        if key not in KNOWN_SYSTEM_PROMPT_SURFACES and key != "library_path"
+    )
+    if unknown_keys:
+        fail(
+            "system_prompts contains unsupported keys: "
+            f"{', '.join(unknown_keys)}"
+        )
+
+    for surface in sorted(KNOWN_SYSTEM_PROMPT_SURFACES):
+        surface_cfg = system_prompts.get(surface)
+        if surface_cfg is None:
+            continue
+        if not isinstance(surface_cfg, dict):
+            fail(f"system_prompts.{surface} must be a mapping when present")
+
+        template_id = require_optional_string(
+            surface_cfg.get("template_id"),
+            f"system_prompts.{surface}.template_id",
+        )
+        variables = surface_cfg.get("variables")
+        if variables is not None:
+            require_mapping(variables, f"system_prompts.{surface}.variables")
+            for variable_name, variable_value in variables.items():
+                if not isinstance(variable_name, str) or not variable_name.strip():
+                    fail(
+                        f"system_prompts.{surface}.variables keys must be non-empty strings"
+                    )
+                _require_optional_scalar(
+                    variable_value,
+                    f"system_prompts.{surface}.variables.{variable_name}",
+                )
+
+        if template_id is None:
+            continue
+
+        try:
+            validate_system_prompt_template_selection(
+                template_id,
+                variables=variables if isinstance(variables, dict) else None,
+                library_path=resolved_library_path or library_path_value,
+            )
+        except ValueError as exc:
+            fail(f"system_prompts.{surface} is invalid: {exc}")
 
 
 def validate_routing_config(cfg: dict) -> None:
@@ -843,6 +934,91 @@ def validate_memory_config(cfg: dict) -> None:
         fail("memory.import_max_records cannot be smaller than memory.default_top_k")
 
 
+def validate_dream_config(cfg: dict) -> None:
+    dream = cfg.get("dream")
+    if dream is None:
+        return
+
+    if not isinstance(dream, dict):
+        fail("dream must be a mapping when present")
+
+    require_keys(
+        dream,
+        "dream",
+        {
+            "enabled",
+            "root_dir",
+            "state_path",
+            "lock_path",
+            "log_dir",
+            "minimum_hours_between_runs",
+            "minimum_sessions_between_runs",
+            "lock_timeout_seconds",
+            "max_recent_logs",
+            "max_persistable_entries_per_run",
+            "brief_summary_chars",
+        },
+    )
+
+    enabled = require_bool(dream["enabled"], "dream.enabled")
+    root_dir = require_non_empty_string(dream["root_dir"], "dream.root_dir")
+    state_path = require_non_empty_string(dream["state_path"], "dream.state_path")
+    lock_path = require_non_empty_string(dream["lock_path"], "dream.lock_path")
+    log_dir = require_non_empty_string(dream["log_dir"], "dream.log_dir")
+    minimum_hours_between_runs = require_positive_int(
+        dream["minimum_hours_between_runs"],
+        "dream.minimum_hours_between_runs",
+    )
+    minimum_sessions_between_runs = require_positive_int(
+        dream["minimum_sessions_between_runs"],
+        "dream.minimum_sessions_between_runs",
+    )
+    lock_timeout_seconds = require_positive_int(
+        dream["lock_timeout_seconds"],
+        "dream.lock_timeout_seconds",
+    )
+    max_recent_logs = require_positive_int(dream["max_recent_logs"], "dream.max_recent_logs")
+    max_persistable_entries_per_run = require_positive_int(
+        dream["max_persistable_entries_per_run"],
+        "dream.max_persistable_entries_per_run",
+    )
+    brief_summary_chars = require_positive_int(
+        dream["brief_summary_chars"],
+        "dream.brief_summary_chars",
+    )
+
+    root_path = _coerce_path(root_dir)
+    state_resolved = _coerce_path(state_path)
+    lock_resolved = _coerce_path(lock_path)
+    log_resolved = _coerce_path(log_dir)
+
+    if state_resolved == lock_resolved:
+        fail("dream.state_path and dream.lock_path must be different files")
+    if log_resolved == state_resolved.parent or log_resolved == lock_resolved.parent:
+        fail("dream.log_dir must be separate from the directories holding dream state and lock files")
+    if not str(state_resolved).startswith(str(root_path)):
+        fail("dream.state_path must live under dream.root_dir")
+    if not str(lock_resolved).startswith(str(root_path)):
+        fail("dream.lock_path must live under dream.root_dir")
+    if not str(log_resolved).startswith(str(root_path)):
+        fail("dream.log_dir must live under dream.root_dir")
+    if max_persistable_entries_per_run > max_recent_logs:
+        fail(
+            "dream.max_persistable_entries_per_run cannot exceed dream.max_recent_logs"
+        )
+    if lock_timeout_seconds < 60:
+        fail("dream.lock_timeout_seconds must be at least 60 seconds")
+    if brief_summary_chars > 1_000:
+        fail("dream.brief_summary_chars must be 1000 characters or less")
+
+    if enabled:
+        memory = cfg.get("memory")
+        if not isinstance(memory, dict):
+            fail("dream.enabled requires a memory config section")
+        if not bool(memory.get("enabled", False)):
+            fail("dream.enabled requires memory.enabled to be true")
+
+
 def validate_context_providers_config(cfg: dict) -> None:
     context_providers = cfg.get("context_providers")
     if context_providers is None:
@@ -918,10 +1094,123 @@ def validate_hooks_config(cfg: dict) -> None:
             fail(f"hooks.rules[{index}].fields is only valid for annotate or set_fields hooks")
 
 
+def validate_workflow_registry_config(cfg: dict) -> None:
+    workflow_registry = cfg.get("workflow_registry")
+    if workflow_registry is None:
+        return
+
+    if not isinstance(workflow_registry, dict):
+        fail("workflow_registry must be a mapping when present")
+
+    require_keys(workflow_registry, "workflow_registry", {"enabled", "manifest_path"})
+    require_bool(workflow_registry["enabled"], "workflow_registry.enabled")
+    manifest_path = require_non_empty_string(
+        workflow_registry["manifest_path"],
+        "workflow_registry.manifest_path",
+    )
+    require_file(manifest_path, "Workflow registry manifest")
+
+
+def validate_agent_shell_config(cfg: dict) -> None:
+    agent_shell = cfg.get("agent_shell")
+    if agent_shell is None:
+        return
+
+    if not isinstance(agent_shell, dict):
+        fail("agent_shell must be a mapping when present")
+
+    require_keys(
+        agent_shell,
+        "agent_shell",
+        {
+            "enabled",
+            "provider",
+            "model",
+            "root_dir",
+            "sessions_dir",
+            "transcripts_dir",
+            "max_turns",
+            "temperature",
+            "max_output_tokens",
+            "ollama_base_url",
+            "openai_api_key_env",
+            "include_memory_in_text_routes",
+            "include_retrieval_in_text_routes",
+            "persist_context_sections",
+        },
+    )
+
+    require_bool(agent_shell["enabled"], "agent_shell.enabled")
+    require_choice(agent_shell["provider"], "agent_shell.provider", AGENT_SHELL_PROVIDERS)
+    require_non_empty_string(agent_shell["model"], "agent_shell.model")
+    root_dir = require_non_empty_string(agent_shell["root_dir"], "agent_shell.root_dir")
+    sessions_dir = require_non_empty_string(
+        agent_shell["sessions_dir"],
+        "agent_shell.sessions_dir",
+    )
+    transcripts_dir = require_non_empty_string(
+        agent_shell["transcripts_dir"],
+        "agent_shell.transcripts_dir",
+    )
+    require_positive_int(agent_shell["max_turns"], "agent_shell.max_turns")
+    require_number_in_closed_range(
+        agent_shell["temperature"],
+        "agent_shell.temperature",
+        0,
+        2,
+    )
+    require_positive_int(
+        agent_shell["max_output_tokens"],
+        "agent_shell.max_output_tokens",
+    )
+    require_non_empty_string(
+        agent_shell["ollama_base_url"],
+        "agent_shell.ollama_base_url",
+    )
+    require_non_empty_string(
+        agent_shell["openai_api_key_env"],
+        "agent_shell.openai_api_key_env",
+    )
+    include_memory_in_text_routes = require_bool(
+        agent_shell["include_memory_in_text_routes"],
+        "agent_shell.include_memory_in_text_routes",
+    )
+    include_retrieval_in_text_routes = require_bool(
+        agent_shell["include_retrieval_in_text_routes"],
+        "agent_shell.include_retrieval_in_text_routes",
+    )
+    require_bool(
+        agent_shell["persist_context_sections"],
+        "agent_shell.persist_context_sections",
+    )
+
+    if sessions_dir == transcripts_dir:
+        fail("agent_shell.sessions_dir and agent_shell.transcripts_dir must be different")
+    if not _path_is_within(root_dir, sessions_dir):
+        fail("agent_shell.sessions_dir must live under agent_shell.root_dir")
+    if not _path_is_within(root_dir, transcripts_dir):
+        fail("agent_shell.transcripts_dir must live under agent_shell.root_dir")
+
+    memory = cfg.get("memory") if isinstance(cfg.get("memory"), dict) else {}
+    if include_memory_in_text_routes and not bool(memory.get("enabled", False)):
+        fail(
+            "agent_shell.include_memory_in_text_routes requires memory.enabled to be true"
+        )
+
+    retrieval = cfg.get("retrieval") if isinstance(cfg.get("retrieval"), dict) else {}
+    if include_retrieval_in_text_routes and not bool(retrieval.get("enabled", False)):
+        fail(
+            "agent_shell.include_retrieval_in_text_routes requires retrieval.enabled to be true"
+        )
+
+
 def validate_orchestration_config(cfg: dict) -> None:
     validate_memory_config(cfg)
+    validate_dream_config(cfg)
     validate_context_providers_config(cfg)
     validate_hooks_config(cfg)
+    validate_workflow_registry_config(cfg)
+    validate_agent_shell_config(cfg)
 
 
 def validate_prepare_data_config(cfg: dict) -> None:
@@ -934,6 +1223,7 @@ def validate_prepare_data_config(cfg: dict) -> None:
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
     validate_orchestration_config(cfg)
+    validate_system_prompts_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
     validate_deterministic_tools_config(cfg)
@@ -961,6 +1251,7 @@ def validate_train_config(cfg: dict) -> None:
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
     validate_orchestration_config(cfg)
+    validate_system_prompts_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
     validate_deterministic_tools_config(cfg)
@@ -1022,6 +1313,7 @@ def validate_export_config(cfg: dict) -> None:
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
     validate_orchestration_config(cfg)
+    validate_system_prompts_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
     validate_deterministic_tools_config(cfg)
@@ -1118,6 +1410,7 @@ def validate_evaluate_config(cfg: dict, num_examples: int) -> None:
     validate_release_config(cfg)
     validate_retrieval_config(cfg)
     validate_orchestration_config(cfg)
+    validate_system_prompts_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
 
@@ -1133,6 +1426,7 @@ def validate_release_artifact_config(cfg: dict) -> None:
     validate_multimodal_config(cfg)
     validate_release_config(cfg)
     validate_orchestration_config(cfg)
+    validate_system_prompts_config(cfg)
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
 
@@ -1201,4 +1495,5 @@ def validate_release_artifact_config(cfg: dict) -> None:
     if judge_concurrency is not None and judge_concurrency < 1:
         fail("evaluation.judge_concurrency must be a positive integer")
     validate_orchestration_config(cfg)
+    validate_system_prompts_config(cfg)
     validate_deterministic_tools_config(cfg)
