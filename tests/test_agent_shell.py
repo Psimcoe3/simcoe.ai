@@ -208,6 +208,12 @@ def _base_cfg(tmp_path: Path) -> dict:
             "include_retrieval_in_text_routes": False,
             "persist_context_sections": True,
         },
+        "agent_task_manager": {
+            "enabled": True,
+            "root_dir": str(tmp_path / "agent_tasks"),
+            "tasks_dir": str(tmp_path / "agent_tasks" / "tasks"),
+            "logs_dir": str(tmp_path / "agent_tasks" / "logs"),
+        },
         "skill_registry": {
             "enabled": True,
             "root_dir": str(skills_dir),
@@ -462,7 +468,7 @@ def test_handle_shell_command_lists_and_shows_commands(tmp_path: Path) -> None:
     show_payload = json.loads(show_result["response"])
 
     assert list_result["exit"] is False
-    assert list_payload["command_count"] == 9
+    assert list_payload["command_count"] == 10
     assert [command["name"] for command in list_payload["commands"]] == [
         "help",
         "exit",
@@ -473,7 +479,76 @@ def test_handle_shell_command_lists_and_shows_commands(tmp_path: Path) -> None:
         "providers",
         "route",
         "workflow",
+        "tasks",
     ]
     assert show_payload["name"] == "route"
     assert show_payload["kind"] == "shell_command"
     assert "/route <instruction>" in show_payload["usage_examples"]
+
+
+def test_handle_shell_command_lists_and_shows_tasks(tmp_path: Path) -> None:
+    cfg = _base_cfg(tmp_path)
+    settings = resolve_agent_shell_settings(cfg)
+    system_prompt, metadata = resolve_agent_shell_system_prompt(cfg)
+    session = initialize_session(
+        settings,
+        config_path="config.yaml",
+        system_prompt_metadata=metadata,
+    )
+
+    tasks_dir = tmp_path / "agent_tasks" / "tasks"
+    logs_dir = tmp_path / "agent_tasks" / "logs"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    (logs_dir / "agent-task-123.log").write_text("started\nfinished\n", encoding="utf-8")
+    (tasks_dir / "agent-task-123.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "task_id": "agent-task-123",
+                "kind": "workflow",
+                "name": "demo",
+                "status": "completed",
+                "created_at": "2026-04-01T12:00:00Z",
+                "updated_at": "2026-04-01T12:01:00Z",
+                "started_at": "2026-04-01T12:00:05Z",
+                "completed_at": "2026-04-01T12:01:00Z",
+                "summary_path": str((tasks_dir / "agent-task-123.json").resolve()),
+                "log_path": str((logs_dir / "agent-task-123.log").resolve()),
+                "config_path": str((tmp_path / "config.yaml").resolve()),
+                "pid": 12345,
+                "source": "operator",
+                "metadata": {"workflow": "demo"},
+                "result": {"executed_steps": 1},
+                "error": None,
+                "exit_code": 0,
+                "cancel_requested_at": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    list_result = handle_shell_command(cfg, settings, session, "/tasks")
+    status_result = handle_shell_command(cfg, settings, session, "/tasks status")
+    show_result = handle_shell_command(cfg, settings, session, "/tasks show agent-task-123")
+    attach_result = handle_shell_command(
+        cfg,
+        settings,
+        session,
+        "/tasks attach agent-task-123 --cursor 1 --limit 1",
+    )
+    list_payload = json.loads(list_result["response"])
+    status_payload = json.loads(status_result["response"])
+    show_payload = json.loads(show_result["response"])
+    attach_payload = json.loads(attach_result["response"])
+
+    assert list_result["exit"] is False
+    assert list_payload["task_count"] == 1
+    assert list_payload["tasks"][0]["task_id"] == "agent-task-123"
+    assert status_payload["task_count"] == 1
+    assert status_payload["recent_tasks"][0]["task_id"] == "agent-task-123"
+    assert status_payload["restartable_task_count"] == 0
+    assert show_payload["task"]["task_id"] == "agent-task-123"
+    assert show_payload["log_tail"] == ["started", "finished"]
+    assert attach_payload["attached_lines"] == ["finished"]
+    assert attach_payload["next_cursor"] == 2

@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 
+from agent_skill_registry import normalize_agent_skill_names
 from config_validation import (
     load_config,
     validate_architecture_config,
@@ -36,6 +37,19 @@ def _optional_string_list(value: object) -> list[str]:
     return [cleaned for item in value if isinstance(item, str) and (cleaned := item.strip())]
 
 
+def _validated_skill_names_from_spec(cfg: dict, spec: dict, *, index: int) -> list[str]:
+    skill_names = spec.get("skill_names")
+    if skill_names is None:
+        return []
+    if not isinstance(skill_names, list):
+        raise SystemExit(f"Spec entry {index} skill_names must be a list of strings")
+
+    try:
+        return normalize_agent_skill_names(cfg, skill_names)
+    except ValueError as exc:
+        raise SystemExit(f"Spec entry {index} skill_names are invalid: {exc}") from exc
+
+
 def _resolve_route_fields(
     spec: dict,
     *,
@@ -58,6 +72,7 @@ def _resolve_route_fields(
 
 
 def _direct_tool_row_from_spec(
+    cfg: dict,
     spec: dict,
     index: int,
     benchmark_id: str,
@@ -85,12 +100,14 @@ def _direct_tool_row_from_spec(
         default_route=ROUTE_DETERMINISTIC_TOOL,
         multimodal_enabled=multimodal_enabled,
     )
+    skill_names = _validated_skill_names_from_spec(cfg, spec, index=index)
 
     return {
         "benchmark_id": benchmark_id,
         "category": category,
         "route": route,
         "runtime_owner": runtime_owner,
+        "skill_names": skill_names,
         "attachment_paths": _optional_string_list(spec.get("attachment_paths")),
         "tool_name": tool_name,
         "tool_request": tool_request,
@@ -143,6 +160,7 @@ def main() -> None:
         if tool_name is not None:
             benchmark_rows.append(
                 _direct_tool_row_from_spec(
+                    cfg,
                     spec,
                     index,
                     benchmark_id,
@@ -183,12 +201,14 @@ def main() -> None:
             default_route=ROUTE_TEXT,
             multimodal_enabled=multimodal_enabled,
         )
+        skill_names = _validated_skill_names_from_spec(cfg, spec, index=index)
 
         benchmark_rows.append({
             "benchmark_id": benchmark_id,
             "category": category,
             "route": route,
             "runtime_owner": runtime_owner,
+            "skill_names": skill_names,
             "attachment_paths": _optional_string_list(spec.get("attachment_paths")),
             "tool_name": None,
             "tool_request": None,

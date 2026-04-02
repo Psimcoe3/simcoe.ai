@@ -33,11 +33,22 @@ EXECUTION_ENVELOPE_SCHEMA_VERSION = 1
 EXECUTION_SUBJECT_ROUTE = "route"
 EXECUTION_SUBJECT_CONTEXT_PROVIDER = "context_provider"
 EXECUTION_SUBJECT_DETERMINISTIC_TOOL = "deterministic_tool"
+EXECUTION_SUBJECT_TASK = "task"
 
 EXECUTION_STATUS_SUCCEEDED = "succeeded"
 EXECUTION_STATUS_FAILED = "failed"
 EXECUTION_STATUS_SKIPPED = "skipped"
 EXECUTION_STATUS_DENIED = "denied"
+
+TASK_KIND_WORKFLOW = "workflow"
+TASK_KIND_DREAM = "dream"
+TASK_KIND_SUBAGENT = "subagent"
+
+TASK_STATUS_PENDING = "pending"
+TASK_STATUS_RUNNING = "running"
+TASK_STATUS_COMPLETED = "completed"
+TASK_STATUS_FAILED = "failed"
+TASK_STATUS_CANCELLED = "cancelled"
 
 KNOWN_ROUTES = {
     ROUTE_TEXT,
@@ -67,12 +78,25 @@ KNOWN_EXECUTION_SUBJECTS = {
     EXECUTION_SUBJECT_ROUTE,
     EXECUTION_SUBJECT_CONTEXT_PROVIDER,
     EXECUTION_SUBJECT_DETERMINISTIC_TOOL,
+    EXECUTION_SUBJECT_TASK,
 }
 KNOWN_EXECUTION_STATUSES = {
     EXECUTION_STATUS_SUCCEEDED,
     EXECUTION_STATUS_FAILED,
     EXECUTION_STATUS_SKIPPED,
     EXECUTION_STATUS_DENIED,
+}
+KNOWN_TASK_KINDS = {
+    TASK_KIND_WORKFLOW,
+    TASK_KIND_DREAM,
+    TASK_KIND_SUBAGENT,
+}
+KNOWN_TASK_STATUSES = {
+    TASK_STATUS_PENDING,
+    TASK_STATUS_RUNNING,
+    TASK_STATUS_COMPLETED,
+    TASK_STATUS_FAILED,
+    TASK_STATUS_CANCELLED,
 }
 MULTIMODAL_ROUTES = {ROUTE_DRAWING_SHEET, ROUTE_MIXED}
 FAIL_ROUTE_FALLBACK = "fail"
@@ -158,6 +182,28 @@ def normalize_execution_status(value: object, label: str = "execution status") -
         choices = ", ".join(sorted(KNOWN_EXECUTION_STATUSES))
         raise ValueError(f"{label} must be one of: {choices}")
     return status
+
+
+def normalize_task_kind(value: object, label: str = "task kind") -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} must be a non-empty string")
+
+    task_kind = value.strip().lower()
+    if task_kind not in KNOWN_TASK_KINDS:
+        choices = ", ".join(sorted(KNOWN_TASK_KINDS))
+        raise ValueError(f"{label} must be one of: {choices}")
+    return task_kind
+
+
+def normalize_task_status(value: object, label: str = "task status") -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} must be a non-empty string")
+
+    task_status = value.strip().lower()
+    if task_status not in KNOWN_TASK_STATUSES:
+        choices = ", ".join(sorted(KNOWN_TASK_STATUSES))
+        raise ValueError(f"{label} must be one of: {choices}")
+    return task_status
 
 
 def build_execution_envelope(

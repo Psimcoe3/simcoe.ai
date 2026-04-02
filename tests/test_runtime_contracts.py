@@ -8,12 +8,17 @@ from runtime_contracts import (
     HOOK_ACTION_ANNOTATE,
     HOOK_STAGE_POST_CONTEXT_PROVIDER,
     FAIL_ROUTE_FALLBACK,
+    TASK_KIND_SUBAGENT,
+    TASK_KIND_WORKFLOW,
+    TASK_STATUS_RUNNING,
     build_execution_envelope,
     normalize_context_provider,
     normalize_execution_status,
     normalize_execution_subject,
     normalize_hook_action,
     normalize_hook_stage,
+    normalize_task_kind,
+    normalize_task_status,
     ROUTE_RETRIEVAL,
     normalize_route_fallback,
     summarize_execution_envelopes,
@@ -58,6 +63,12 @@ def test_normalize_hook_stage_and_action_accept_known_values() -> None:
 def test_normalize_execution_subject_and_status_accept_known_values() -> None:
     assert normalize_execution_subject("route") == EXECUTION_SUBJECT_ROUTE
     assert normalize_execution_status("succeeded") == EXECUTION_STATUS_SUCCEEDED
+
+
+def test_normalize_task_kind_and_status_accept_known_values() -> None:
+    assert normalize_task_kind("workflow") == TASK_KIND_WORKFLOW
+    assert normalize_task_kind("subagent") == TASK_KIND_SUBAGENT
+    assert normalize_task_status("running") == TASK_STATUS_RUNNING
 
 
 def test_build_execution_envelope_and_summary_are_stable() -> None:

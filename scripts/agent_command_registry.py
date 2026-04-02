@@ -15,6 +15,19 @@ from agent_skill_registry import (
     normalize_agent_skill_names,
     resolve_skill_registry_settings,
 )
+from agent_task_manager import (
+    TaskManagerError,
+    attach_agent_task,
+    cancel_agent_task,
+    describe_agent_task,
+    list_agent_tasks,
+    parse_task_vars,
+    resume_agent_task,
+    start_subagent_task,
+    start_dream_task,
+    start_workflow_task,
+    summarize_agent_tasks,
+)
 from agent_tool_registry import describe_agent_tool, list_agent_tools
 from request_router import route_request
 from workflow_registry import WorkflowRegistryError, get_workflow, list_workflows
@@ -35,6 +48,7 @@ _COMMAND_ORDER = (
     "providers",
     "route",
     "workflow",
+    "tasks",
 )
 
 _COMMAND_SPECS = {
@@ -122,6 +136,27 @@ _COMMAND_SPECS = {
         "category": "workflow",
         "access_mode": COMMAND_ACCESS_READ_ONLY,
         "usage_examples": ["/workflow list", "/workflow show <name>"],
+    },
+    "tasks": {
+        "name": "tasks",
+        "display_name": "Tasks",
+        "description": "List, inspect, attach, start, cancel, and resume managed background tasks.",
+        "aliases": [],
+        "category": "tasks",
+        "access_mode": COMMAND_ACCESS_SESSION_WRITE,
+        "usage_examples": [
+            "/tasks",
+            "/tasks status",
+            "/tasks list --status running",
+            "/tasks show <task-id>",
+            "/tasks attach <task-id>",
+            "/tasks start workflow <name>",
+            "/tasks start workflow <name> --var key=value",
+            "/tasks start dream",
+            '/tasks start subagent --prompt "Summarize the source section."',
+            "/tasks cancel <task-id>",
+            "/tasks resume <task-id>",
+        ],
     },
 }
 
@@ -222,6 +257,146 @@ def _render_active_skills_payload(cfg: dict, session_summary: dict) -> dict:
         "pinned_skills": list_selected_agent_skills(cfg, pinned_skill_names),
         "next_turn_skills": list_selected_agent_skills(cfg, next_turn_skill_names),
     }
+
+
+def _parse_task_list_options(option_args: list[str]) -> dict[str, str | None]:
+    parsed: dict[str, str | None] = {
+        "kind": None,
+        "status": None,
+        "source": None,
+    }
+    index = 0
+    while index < len(option_args):
+        if index + 1 >= len(option_args):
+            raise ValueError(
+                "Usage: /tasks list [--kind <kind>] [--status <status>] [--source <source>]"
+            )
+        flag = option_args[index].lower()
+        value = option_args[index + 1]
+        if flag == "--kind":
+            parsed["kind"] = value
+        elif flag == "--status":
+            parsed["status"] = value
+        elif flag == "--source":
+            parsed["source"] = value
+        else:
+            raise ValueError(
+                "Usage: /tasks list [--kind <kind>] [--status <status>] [--source <source>]"
+            )
+        index += 2
+    return parsed
+
+
+def _parse_task_status_options(option_args: list[str]) -> dict[str, str | int | None]:
+    parsed: dict[str, str | int | None] = {
+        "kind": None,
+        "status": None,
+        "source": None,
+        "recent_limit": 5,
+    }
+    index = 0
+    while index < len(option_args):
+        if index + 1 >= len(option_args):
+            raise ValueError(
+                "Usage: /tasks status [--kind <kind>] [--status <status>] [--source <source>] [--recent-limit <count>]"
+            )
+        flag = option_args[index].lower()
+        value = option_args[index + 1]
+        if flag == "--kind":
+            parsed["kind"] = value
+        elif flag == "--status":
+            parsed["status"] = value
+        elif flag == "--source":
+            parsed["source"] = value
+        elif flag == "--recent-limit":
+            try:
+                parsed["recent_limit"] = int(value)
+            except ValueError as exc:
+                raise ValueError("/tasks status --recent-limit must be an integer") from exc
+        else:
+            raise ValueError(
+                "Usage: /tasks status [--kind <kind>] [--status <status>] [--source <source>] [--recent-limit <count>]"
+            )
+        index += 2
+    return parsed
+
+
+def _parse_task_attach_options(option_args: list[str]) -> dict[str, int]:
+    parsed = {
+        "cursor": 0,
+        "limit": 20,
+    }
+    index = 0
+    while index < len(option_args):
+        if index + 1 >= len(option_args):
+            raise ValueError("Usage: /tasks attach <task-id> [--cursor <cursor>] [--limit <count>]")
+        flag = option_args[index].lower()
+        value = option_args[index + 1]
+        if flag == "--cursor":
+            try:
+                parsed["cursor"] = int(value)
+            except ValueError as exc:
+                raise ValueError("/tasks attach --cursor must be an integer") from exc
+        elif flag == "--limit":
+            try:
+                parsed["limit"] = int(value)
+            except ValueError as exc:
+                raise ValueError("/tasks attach --limit must be an integer") from exc
+        else:
+            raise ValueError("Usage: /tasks attach <task-id> [--cursor <cursor>] [--limit <count>]")
+        index += 2
+    return parsed
+
+
+def _parse_task_subagent_options(option_args: list[str]) -> dict[str, object]:
+    parsed: dict[str, object] = {
+        "prompt": None,
+        "source": "agent_shell_subagent",
+        "section": None,
+        "attachments": [],
+        "skill_names": [],
+        "tool_name": None,
+        "parent_task_id": None,
+        "agent_name": None,
+        "allowed_routes": [],
+    }
+    index = 0
+    while index < len(option_args):
+        if index + 1 >= len(option_args):
+            raise ValueError(
+                "Usage: /tasks start subagent --prompt <prompt> [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--agent-name <name>] [--allow-route <route>]"
+            )
+        flag = option_args[index].lower()
+        value = option_args[index + 1]
+        if flag == "--prompt":
+            parsed["prompt"] = value
+        elif flag == "--source":
+            parsed["source"] = value
+        elif flag == "--section":
+            parsed["section"] = value
+        elif flag == "--attachment":
+            parsed["attachments"].append(value)
+        elif flag == "--skill":
+            parsed["skill_names"].append(value)
+        elif flag == "--tool-name":
+            parsed["tool_name"] = value
+        elif flag == "--parent-task-id":
+            parsed["parent_task_id"] = value
+        elif flag == "--agent-name":
+            parsed["agent_name"] = value
+        elif flag == "--allow-route":
+            parsed["allowed_routes"].append(value)
+        else:
+            raise ValueError(
+                "Usage: /tasks start subagent --prompt <prompt> [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--agent-name <name>] [--allow-route <route>]"
+            )
+        index += 2
+
+    if not isinstance(parsed["prompt"], str) or not str(parsed["prompt"]).strip():
+        raise ValueError(
+            "Usage: /tasks start subagent --prompt <prompt> [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--agent-name <name>] [--allow-route <route>]"
+        )
+    return parsed
 
 
 def execute_agent_command(
@@ -448,6 +623,137 @@ def execute_agent_command(
                     "response": "Usage: /workflow list | /workflow show <name>",
                 }
         except WorkflowRegistryError as exc:
+            return {"exit": False, "response": str(exc)}
+        return {"exit": False, "response": json.dumps(payload, indent=2, sort_keys=False)}
+    if command == "tasks":
+        config_path = (
+            str(session_summary.get("config_path") or "config.yaml")
+            if isinstance(session_summary, dict)
+            else "config.yaml"
+        )
+        try:
+            if len(parts) == 1:
+                payload = list_agent_tasks(cfg)
+            elif len(parts) >= 2 and parts[1].lower() == "list":
+                options = _parse_task_list_options(parts[2:])
+                payload = list_agent_tasks(
+                    cfg,
+                    task_kind=options["kind"],
+                    task_status=options["status"],
+                    task_source=options["source"],
+                )
+            elif len(parts) >= 2 and parts[1].lower() == "status":
+                options = _parse_task_status_options(parts[2:])
+                payload = summarize_agent_tasks(
+                    cfg,
+                    task_kind=options["kind"],
+                    task_status=options["status"],
+                    task_source=options["source"],
+                    recent_limit=int(options["recent_limit"] or 5),
+                )
+            elif len(parts) >= 3 and parts[1].lower() == "show":
+                payload = describe_agent_task(cfg, parts[2])
+            elif len(parts) >= 3 and parts[1].lower() == "attach":
+                options = _parse_task_attach_options(parts[3:])
+                payload = attach_agent_task(
+                    cfg,
+                    parts[2],
+                    cursor=int(options["cursor"]),
+                    limit=int(options["limit"]),
+                )
+            elif len(parts) >= 3 and parts[1].lower() == "start":
+                task_kind = parts[2].lower()
+                if task_kind == "workflow":
+                    if len(parts) < 4:
+                        return {
+                            "exit": False,
+                            "response": ("Usage: /tasks start workflow <name> [--var key=value]"),
+                        }
+                    workflow_name = parts[3]
+                    extra_args = parts[4:]
+                    if len(extra_args) % 2 != 0 or any(
+                        extra_args[index] != "--var" for index in range(0, len(extra_args), 2)
+                    ):
+                        return {
+                            "exit": False,
+                            "response": ("Usage: /tasks start workflow <name> [--var key=value]"),
+                        }
+                    payload = start_workflow_task(
+                        cfg,
+                        config_path,
+                        workflow_name,
+                        parse_task_vars(extra_args[1::2]),
+                        source="agent_shell",
+                    )
+                elif task_kind == "dream" and len(parts) == 3:
+                    payload = start_dream_task(
+                        cfg,
+                        config_path,
+                        source="agent_shell",
+                    )
+                elif task_kind == "subagent":
+                    options = _parse_task_subagent_options(parts[3:])
+                    payload = start_subagent_task(
+                        cfg,
+                        config_path,
+                        str(options["prompt"]),
+                        source=str(options["source"]),
+                        section=(
+                            str(options["section"])
+                            if isinstance(options["section"], str)
+                            and str(options["section"]).strip()
+                            else None
+                        ),
+                        attachments=list(options["attachments"]),
+                        explicit_skill_names=list(options["skill_names"]),
+                        explicit_tool_name=(
+                            str(options["tool_name"])
+                            if isinstance(options["tool_name"], str)
+                            and str(options["tool_name"]).strip()
+                            else None
+                        ),
+                        parent_task_id=(
+                            str(options["parent_task_id"])
+                            if isinstance(options["parent_task_id"], str)
+                            and str(options["parent_task_id"]).strip()
+                            else None
+                        ),
+                        agent_name=(
+                            str(options["agent_name"])
+                            if isinstance(options["agent_name"], str)
+                            and str(options["agent_name"]).strip()
+                            else None
+                        ),
+                        allowed_routes=list(options["allowed_routes"]),
+                    )
+                else:
+                    return {
+                        "exit": False,
+                        "response": (
+                            "Usage: /tasks start workflow <name> [--var key=value] "
+                            "| /tasks start dream "
+                            "| /tasks start subagent --prompt <prompt> [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--agent-name <name>] [--allow-route <route>]"
+                        ),
+                    }
+            elif len(parts) >= 3 and parts[1].lower() == "cancel":
+                payload = cancel_agent_task(cfg, parts[2])
+            elif len(parts) >= 3 and parts[1].lower() == "resume":
+                payload = resume_agent_task(cfg, parts[2], source="agent_shell_resume")
+            else:
+                return {
+                    "exit": False,
+                    "response": (
+                        "Usage: /tasks | /tasks list [--kind <kind>] [--status <status>] [--source <source>] "
+                        "| /tasks status [--kind <kind>] [--status <status>] [--source <source>] [--recent-limit <count>] "
+                        "| /tasks show <task-id> "
+                        "| /tasks attach <task-id> [--cursor <cursor>] [--limit <count>] "
+                        "| /tasks start workflow <name> [--var key=value] "
+                        "| /tasks start dream "
+                        "| /tasks start subagent --prompt <prompt> [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--agent-name <name>] [--allow-route <route>] "
+                        "| /tasks cancel <task-id> | /tasks resume <task-id>"
+                    ),
+                }
+        except (TaskManagerError, WorkflowRegistryError, ValueError) as exc:
             return {"exit": False, "response": str(exc)}
         return {"exit": False, "response": json.dumps(payload, indent=2, sort_keys=False)}
 

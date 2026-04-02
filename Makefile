@@ -52,12 +52,12 @@ GOLDEN_SOURCE      ?= $(RETRIEVAL_SOURCE)
 GOLDEN_SPEC        ?= evals/golden_electrician_spec.json
 GOLDEN_OUT         ?= evals/golden_electrician.jsonl
 GOLDEN_MANIFEST    ?= evals/golden_electrician.manifest.json
-QUALITY_PATHS      ?= scripts/agent_command_registry.py scripts/agent_shell.py scripts/agent_skill_registry.py scripts/check_env.py scripts/context_providers.py scripts/deterministic_tool_utils.py scripts/hook_runtime.py scripts/indexed_memory.py scripts/orchestration_inspect.py scripts/prompt_templates.py scripts/request_router.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/runtime_contracts.py scripts/train.py scripts/validate_release_artifacts.py scripts/package_release_bundle.py scripts/workflow_registry.py tests
+QUALITY_PATHS      ?= scripts/agent_command_registry.py scripts/agent_shell.py scripts/agent_skill_registry.py scripts/agent_task_manager.py scripts/check_env.py scripts/context_providers.py scripts/deterministic_tool_utils.py scripts/hook_runtime.py scripts/indexed_memory.py scripts/orchestration_inspect.py scripts/prompt_templates.py scripts/request_router.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/runtime_contracts.py scripts/train.py scripts/validate_release_artifacts.py scripts/package_release_bundle.py scripts/workflow_registry.py tests
 TEST_PATHS         ?= tests
 ARGS               ?=
 WORKFLOW           ?=
 
-.PHONY: all quality quality-release release-bundle release-verify lint test check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release agent-shell route-request memory-add memory-query memory-import memory-consolidate memory-rebuild-index workflow-list workflow-show workflow-validate workflow-run inspect-hooks inspect-providers inspect-commands inspect-skills inspect-tools inspect-execution inspect-shell source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest revit-lookup estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
+.PHONY: all quality quality-release release-bundle release-verify lint test check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release agent-shell route-request memory-add memory-query memory-import memory-consolidate memory-rebuild-index workflow-list workflow-show workflow-validate workflow-run task-list task-status task-show task-attach task-start-workflow task-start-dream task-start-subagent task-cancel task-resume inspect-hooks inspect-providers inspect-commands inspect-skills inspect-tools inspect-tasks inspect-execution inspect-shell source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest revit-lookup estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -167,6 +167,53 @@ workflow-run: ## Run one checked-in operator workflow (set WORKFLOW=name and pas
 	fi
 	$(PYTHON) scripts/workflow_registry.py --config $(CONFIG) run $(WORKFLOW) $(ARGS)
 
+task-list: ## List managed background tasks (pass filters via ARGS)
+	$(PYTHON) scripts/agent_task_manager.py --config $(CONFIG) list $(ARGS)
+
+task-status: ## Show a compact managed-task status summary (pass filters via ARGS)
+	$(PYTHON) scripts/agent_task_manager.py --config $(CONFIG) status $(ARGS)
+
+task-show: ## Show one managed background task (set TASK_ID=id or pass via ARGS)
+	@if [[ -z "$(TASK_ID)" && -z "$(strip $(ARGS))" ]]; then \
+		echo "Usage: make task-show TASK_ID=agent-task-123 CONFIG=config.yaml"; \
+		exit 1; \
+	fi
+	$(PYTHON) scripts/agent_task_manager.py --config $(CONFIG) show $(if $(TASK_ID),$(TASK_ID),$(ARGS))
+
+task-attach: ## Reattach to a managed background task log stream (set TASK_ID=id and pass cursor options via ARGS)
+	@if [[ -z "$(TASK_ID)" ]]; then \
+		echo "Usage: make task-attach TASK_ID=agent-task-123 CONFIG=config.yaml ARGS='--cursor 0 --limit 20'"; \
+		exit 1; \
+	fi
+	$(PYTHON) scripts/agent_task_manager.py --config $(CONFIG) attach $(TASK_ID) $(ARGS)
+
+task-start-workflow: ## Start a checked-in workflow as a managed background task (set WORKFLOW=name)
+	@if [[ -z "$(WORKFLOW)" ]]; then \
+		echo "Usage: make task-start-workflow WORKFLOW=name CONFIG=config.yaml ARGS='--var key=value'"; \
+		exit 1; \
+	fi
+	$(PYTHON) scripts/agent_task_manager.py --config $(CONFIG) start-workflow $(WORKFLOW) $(ARGS)
+
+task-start-dream: ## Start a managed background dream run
+	$(PYTHON) scripts/agent_task_manager.py --config $(CONFIG) start-dream $(ARGS)
+
+task-start-subagent: ## Start a bounded managed background subagent task (pass prompt/options via ARGS)
+	$(PYTHON) scripts/agent_task_manager.py --config $(CONFIG) start-subagent $(ARGS)
+
+task-cancel: ## Request cancellation for one managed background task (set TASK_ID=id or pass via ARGS)
+	@if [[ -z "$(TASK_ID)" && -z "$(strip $(ARGS))" ]]; then \
+		echo "Usage: make task-cancel TASK_ID=agent-task-123 CONFIG=config.yaml"; \
+		exit 1; \
+	fi
+	$(PYTHON) scripts/agent_task_manager.py --config $(CONFIG) cancel $(if $(TASK_ID),$(TASK_ID),$(ARGS))
+
+task-resume: ## Resume a failed, cancelled, or pending managed background task (set TASK_ID=id or pass via ARGS)
+	@if [[ -z "$(TASK_ID)" && -z "$(strip $(ARGS))" ]]; then \
+		echo "Usage: make task-resume TASK_ID=agent-task-123 CONFIG=config.yaml"; \
+		exit 1; \
+	fi
+	$(PYTHON) scripts/agent_task_manager.py --config $(CONFIG) resume $(if $(TASK_ID),$(TASK_ID),$(ARGS))
+
 inspect-hooks: ## Inspect configured hooks for the selected config
 	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) hooks
 
@@ -181,6 +228,9 @@ inspect-skills: ## Inspect local markdown skill metadata (pass --skill-name via 
 
 inspect-tools: ## Inspect local agent tool metadata (pass --tool-name via ARGS for one tool)
 	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) tools $(ARGS)
+
+inspect-tasks: ## Inspect managed background tasks (pass --task-id via ARGS for one task)
+	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) tasks $(ARGS)
 
 inspect-execution: ## Inspect saved execution summary from evaluation results (pass --results via ARGS if needed)
 	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) execution $(ARGS)
@@ -208,9 +258,9 @@ golden-benchmark: ## Build the curated golden benchmark from the checked-in spec
 		--out $(GOLDEN_OUT) \
 		--manifest $(GOLDEN_MANIFEST)
 
-generate: ## Generate synthetic training data using Ollama
+generate: ## Generate synthetic training data using Ollama (pass overrides via ARGS)
 	$(PYTHON) scripts/generate_data.py --config $(CONFIG) --topics topics.yaml \
-		--out data/raw/generated.jsonl --count 10
+		--out data/raw/generated.jsonl --count 10 $(ARGS)
 	@echo "✅  Generated data saved to data/raw/generated.jsonl"
 	@echo "    To merge: cat data/raw/generated.jsonl >> data/raw/dataset.jsonl"
 

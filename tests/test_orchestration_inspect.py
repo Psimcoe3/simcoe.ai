@@ -6,6 +6,7 @@ from pathlib import Path
 from orchestration_inspect import (
     describe_agent_commands,
     describe_agent_skills,
+    describe_agent_tasks,
     describe_agent_tools,
     describe_agent_shell_session,
     describe_agent_shell_sessions,
@@ -79,6 +80,18 @@ def _skill_cfg(tmp_path: Path) -> dict:
     }
 
 
+def _task_cfg(tmp_path: Path) -> dict:
+    root_dir = tmp_path / "agent_tasks"
+    return {
+        "agent_task_manager": {
+            "enabled": True,
+            "root_dir": str(root_dir),
+            "tasks_dir": str(root_dir / "tasks"),
+            "logs_dir": str(root_dir / "logs"),
+        }
+    }
+
+
 def test_describe_hooks_summarizes_rules() -> None:
     cfg = {
         "hooks": {
@@ -120,7 +133,7 @@ def test_describe_agent_commands_reports_registry() -> None:
     summary = describe_agent_commands()
     detail = describe_agent_commands("quit")
 
-    assert summary["command_count"] == 9
+    assert summary["command_count"] == 10
     assert summary["commands"][0]["name"] == "help"
     assert detail["name"] == "exit"
     assert detail["aliases"] == ["quit"]
@@ -154,6 +167,55 @@ def test_describe_agent_tools_reports_registry() -> None:
     assert summary["tools"][0]["name"] == "estimate_lookup"
     assert detail["name"] == "estimate_lookup"
     assert detail["resolved_settings"]["default_top_k"] == 7
+
+
+def test_describe_agent_tasks_reports_saved_tasks(tmp_path: Path) -> None:
+    cfg = _task_cfg(tmp_path)
+    tasks_dir = tmp_path / "agent_tasks" / "tasks"
+    logs_dir = tmp_path / "agent_tasks" / "logs"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    log_path = logs_dir / "agent-task-123.log"
+    log_path.write_text("step 1\nstep 2\n", encoding="utf-8")
+    summary_path = tasks_dir / "agent-task-123.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "task_id": "agent-task-123",
+                "kind": "workflow",
+                "name": "demo",
+                "status": "completed",
+                "created_at": "2026-04-01T12:00:00Z",
+                "updated_at": "2026-04-01T12:01:00Z",
+                "started_at": "2026-04-01T12:00:05Z",
+                "completed_at": "2026-04-01T12:01:00Z",
+                "summary_path": str(summary_path.resolve()),
+                "log_path": str(log_path.resolve()),
+                "config_path": str((tmp_path / "config.yaml").resolve()),
+                "pid": 12345,
+                "source": "operator",
+                "metadata": {"workflow": "demo"},
+                "result": {"executed_steps": 1},
+                "error": None,
+                "exit_code": 0,
+                "cancel_requested_at": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = describe_agent_tasks(cfg)
+    detail = describe_agent_tasks(cfg, "agent-task-123", tail=1)
+
+    assert summary["task_count"] == 1
+    assert summary["active_task_count"] == 0
+    assert summary["restartable_task_count"] == 0
+    assert summary["tasks"][0]["task_id"] == "agent-task-123"
+    assert detail["task"]["name"] == "demo"
+    assert detail["task"]["restartable"] is False
+    assert detail["log_tail"] == ["step 2"]
 
 
 def test_summarize_execution_results_prefers_top_level_summary() -> None:

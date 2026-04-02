@@ -228,6 +228,12 @@ skill_registry:
   max_active_skills: 2
   max_instruction_chars: 2400
 
+agent_task_manager:
+  enabled: true
+  root_dir: "data/agent_tasks"
+  tasks_dir: "data/agent_tasks/tasks"
+  logs_dir: "data/agent_tasks/logs"
+
 agent_shell:
   enabled: true
   provider: "ollama"

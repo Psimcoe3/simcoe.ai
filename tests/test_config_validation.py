@@ -5,6 +5,7 @@ from copy import deepcopy
 import pytest
 
 from config_validation import (
+    validate_agent_task_manager_config,
     validate_agent_shell_config,
     validate_context_providers_config,
     validate_dream_config,
@@ -392,6 +393,46 @@ def test_validate_skill_registry_config_rejects_missing_dir(
 
     captured = capsys.readouterr()
     assert "Skill registry directory not found" in captured.out
+
+
+def test_validate_agent_task_manager_config_accepts_scaffold(tmp_path) -> None:
+    root_dir = tmp_path / "agent_tasks"
+
+    validate_agent_task_manager_config(
+        {
+            "agent_task_manager": {
+                "enabled": True,
+                "root_dir": str(root_dir),
+                "tasks_dir": str(root_dir / "tasks"),
+                "logs_dir": str(root_dir / "logs"),
+            }
+        }
+    )
+
+
+def test_validate_agent_task_manager_config_rejects_overlapping_dirs(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path,
+) -> None:
+    root_dir = tmp_path / "agent_tasks"
+
+    with pytest.raises(SystemExit):
+        validate_agent_task_manager_config(
+            {
+                "agent_task_manager": {
+                    "enabled": True,
+                    "root_dir": str(root_dir),
+                    "tasks_dir": str(root_dir / "tasks"),
+                    "logs_dir": str(root_dir / "tasks"),
+                }
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert (
+        "agent_task_manager.tasks_dir and agent_task_manager.logs_dir must be different"
+        in captured.out
+    )
 
 
 def test_validate_context_providers_config_requires_retrieval(

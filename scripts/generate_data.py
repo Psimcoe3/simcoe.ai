@@ -33,6 +33,7 @@ import time
 import yaml
 from dotenv import load_dotenv
 
+from agent_skill_registry import render_agent_skill_prompt, select_agent_skills
 from config_validation import load_config, validate_system_prompts_config
 from prompt_templates import (
     SYSTEM_PROMPT_SURFACE_GENERATE_DATA,
@@ -58,6 +59,97 @@ Rules:
 """
 
 
+def _dedupe_string_list(value: object) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        stripped = item.strip()
+        if not stripped or stripped in seen:
+            continue
+        normalized.append(stripped)
+        seen.add(stripped)
+    return normalized
+
+
+def _serialize_selected_skills(selected_skills: list[dict]) -> list[dict]:
+    return [
+        {
+            "name": skill["name"],
+            "title": skill["title"],
+            "summary": skill["summary"],
+            "relative_path": skill["relative_path"],
+            "selection_sources": list(skill.get("selection_sources", [])),
+            "match_score": int(skill.get("match_score", 0) or 0),
+            "matched_terms": list(skill.get("matched_terms", [])),
+        }
+        for skill in selected_skills
+    ]
+
+
+def build_generation_user_prompt(
+    topic: dict,
+    count: int,
+    *,
+    cfg: dict | None = None,
+    explicit_skill_names: list[str] | tuple[str, ...] | None = None,
+) -> tuple[str, dict]:
+    topic_name = str(topic.get("name") or "unknown").strip() or "unknown"
+    topic_description = str(topic.get("description") or "").strip()
+    example_styles = str(topic.get("example_styles") or "questions, procedures, scenarios").strip()
+
+    base_user_prompt = (
+        f"Topic: {topic_name}\n"
+        f"Description: {topic_description}\n"
+        f"Example styles to include: {example_styles}\n\n"
+        f"Generate exactly {count} diverse instruction-tuning examples for this topic.\n"
+        f"Return ONLY a valid JSON array. No extra text before or after."
+    )
+
+    global_skill_names = _dedupe_string_list(explicit_skill_names)
+    topic_skill_names = _dedupe_string_list(topic.get("skill_names"))
+    requested_skill_names = _dedupe_string_list([*global_skill_names, *topic_skill_names])
+    if cfg is None and requested_skill_names:
+        raise ValueError(
+            f"topic '{topic_name}' requested local skills, but --config was not provided"
+        )
+
+    selected_skills: list[dict] = []
+    if cfg is not None:
+        matching_prompt = "\n".join(
+            part for part in (topic_name, topic_description, example_styles) if part
+        )
+        try:
+            selected_skills = select_agent_skills(
+                cfg,
+                matching_prompt,
+                route_name="text",
+                explicit_skill_names=requested_skill_names,
+            )
+        except ValueError as exc:
+            raise ValueError(f"topic '{topic_name}' skill selection failed: {exc}") from exc
+
+    skill_prompt = render_agent_skill_prompt(cfg or {}, selected_skills)
+    user_prompt = (
+        f"{skill_prompt}\n\n{base_user_prompt}"
+        if skill_prompt
+        else base_user_prompt
+    )
+    return user_prompt, {
+        "topic_name": topic_name,
+        "global_skill_names": global_skill_names,
+        "topic_skill_names": topic_skill_names,
+        "requested_skill_names": requested_skill_names,
+        "selected_skill_names": [skill["name"] for skill in selected_skills],
+        "selected_skills": _serialize_selected_skills(selected_skills),
+        "used": bool(selected_skills),
+    }
+
+
 def resolve_generation_system_prompt(cfg: dict | None = None) -> tuple[str, dict]:
     default_prompt = _SYSTEM_PROMPT.rstrip("\n")
     if not isinstance(cfg, dict):
@@ -80,22 +172,10 @@ def resolve_generation_system_prompt(cfg: dict | None = None) -> tuple[str, dict
 def generate_batch(
     client,
     model: str,
-    topic: dict,
-    count: int,
+    user_prompt: str,
     system_prompt: str,
 ) -> list[dict]:
     """Ask the LLM to produce `count` examples for a single topic."""
-    topic_name = topic["name"]
-    topic_description = topic["description"]
-    example_styles = topic.get("example_styles", "questions, procedures, scenarios")
-
-    user_prompt = (
-        f"Topic: {topic_name}\n"
-        f"Description: {topic_description}\n"
-        f"Example styles to include: {example_styles}\n\n"
-        f"Generate exactly {count} diverse instruction-tuning examples for this topic.\n"
-        f"Return ONLY a valid JSON array. No extra text before or after."
-    )
 
     response = client.chat.completions.create(
         model=model,
@@ -225,7 +305,16 @@ def main() -> None:
         default="simcoe",
         help="Model to use: Ollama model name (default: simcoe) or 'openai/<model>' for OpenAI API.",
     )
+    parser.add_argument(
+        "--skill",
+        action="append",
+        default=[],
+        help="Optional local skill id or alias. Can be repeated and applies to every topic prompt.",
+    )
     args = parser.parse_args()
+
+    if args.skill and not args.config:
+        parser.error("--skill requires --config so the local skill registry can be loaded")
 
     system_prompt = _SYSTEM_PROMPT.rstrip("\n")
     system_prompt_info = {
@@ -236,6 +325,7 @@ def main() -> None:
         "variables": {},
         "library_path": None,
     }
+    cfg = None
     if args.config:
         cfg = load_config(args.config)
         validate_system_prompts_config(cfg)
@@ -283,14 +373,25 @@ def main() -> None:
         for topic in topics:
             name = topic.get("name", "unknown")
             print(f"\n📝  Generating {args.count} examples for: {name}")
+            try:
+                user_prompt, prompt_metadata = build_generation_user_prompt(
+                    topic,
+                    args.count,
+                    cfg=cfg,
+                    explicit_skill_names=args.skill,
+                )
+            except ValueError as exc:
+                raise SystemExit(str(exc)) from exc
+
+            if prompt_metadata["used"]:
+                print("    🧠  Skills: " + ", ".join(prompt_metadata["selected_skill_names"]))
 
             for attempt in range(1, max_retries + 1):
                 try:
                     examples = generate_batch(
                         client,
                         model_name,
-                        topic,
-                        args.count,
+                        user_prompt,
                         system_prompt,
                     )
                     for ex in examples:

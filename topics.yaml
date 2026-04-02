@@ -2,9 +2,14 @@
 #
 # Usage:
 #   python scripts/generate_data.py --topics topics.yaml --out data/raw/generated.jsonl --count 20
+#   python scripts/generate_data.py --config config.yaml --topics topics.yaml --out data/raw/generated.jsonl --count 20 --skill electrical-estimating
 #
 # After generating, merge into the main dataset:
 #   cat data/raw/generated.jsonl >> data/raw/dataset.jsonl
+#
+# Optional per-topic field:
+#   skill_names:
+#     - electrical-estimating
 
 topics:
   - name: "NEC Code — General Requirements"

@@ -1137,6 +1137,42 @@ def validate_skill_registry_config(cfg: dict) -> None:
     require_directory(root_dir, "Skill registry directory")
 
 
+def validate_agent_task_manager_config(cfg: dict) -> None:
+    agent_task_manager = cfg.get("agent_task_manager")
+    if agent_task_manager is None:
+        return
+
+    if not isinstance(agent_task_manager, dict):
+        fail("agent_task_manager must be a mapping when present")
+
+    require_keys(
+        agent_task_manager,
+        "agent_task_manager",
+        {"enabled", "root_dir", "tasks_dir", "logs_dir"},
+    )
+
+    require_bool(agent_task_manager["enabled"], "agent_task_manager.enabled")
+    root_dir = require_non_empty_string(
+        agent_task_manager["root_dir"],
+        "agent_task_manager.root_dir",
+    )
+    tasks_dir = require_non_empty_string(
+        agent_task_manager["tasks_dir"],
+        "agent_task_manager.tasks_dir",
+    )
+    logs_dir = require_non_empty_string(
+        agent_task_manager["logs_dir"],
+        "agent_task_manager.logs_dir",
+    )
+
+    if tasks_dir == logs_dir:
+        fail("agent_task_manager.tasks_dir and agent_task_manager.logs_dir must be different")
+    if not _path_is_within(root_dir, tasks_dir):
+        fail("agent_task_manager.tasks_dir must live under agent_task_manager.root_dir")
+    if not _path_is_within(root_dir, logs_dir):
+        fail("agent_task_manager.logs_dir must live under agent_task_manager.root_dir")
+
+
 def validate_agent_shell_config(cfg: dict) -> None:
     agent_shell = cfg.get("agent_shell")
     if agent_shell is None:
@@ -1237,6 +1273,7 @@ def validate_orchestration_config(cfg: dict) -> None:
     validate_hooks_config(cfg)
     validate_workflow_registry_config(cfg)
     validate_skill_registry_config(cfg)
+    validate_agent_task_manager_config(cfg)
     validate_agent_shell_config(cfg)
 
 

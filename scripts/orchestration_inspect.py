@@ -12,9 +12,11 @@ from agent_skill_registry import (
     list_agent_skills,
     resolve_skill_registry_settings,
 )
+from agent_task_manager import describe_agent_task, list_agent_tasks
 from agent_tool_registry import describe_agent_tool, list_agent_tools
 from config_validation import (
     validate_agent_shell_config,
+    validate_agent_task_manager_config,
     validate_deterministic_tools_config,
     load_config,
     validate_context_providers_config,
@@ -111,6 +113,13 @@ def describe_agent_tools(cfg: dict, tool_name: str | None = None) -> dict:
         "enabled_count": sum(1 for tool in tools if tool["enabled"]),
         "tools": tools,
     }
+
+
+def describe_agent_tasks(cfg: dict, task_id: str | None = None, *, tail: int = 20) -> dict:
+    if isinstance(task_id, str) and task_id.strip():
+        return describe_agent_task(cfg, task_id, tail=tail)
+
+    return list_agent_tasks(cfg)
 
 
 def _resolve_agent_shell_settings(cfg: dict) -> dict:
@@ -361,7 +370,7 @@ def describe_execution_results(cfg: dict, results_path: str | None = None) -> di
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Inspect hook, provider, command, skill, tool, execution, and agent shell session surfaces "
+            "Inspect hook, provider, command, skill, tool, task, execution, and agent shell session surfaces "
             "from config and saved artifacts."
         )
     )
@@ -390,6 +399,17 @@ def parse_args() -> argparse.Namespace:
     tools_parser.add_argument(
         "--tool-name",
         help="Optional tool name to inspect. Omit to list the local tool registry.",
+    )
+    tasks_parser = subparsers.add_parser("tasks", help="Inspect managed background tasks")
+    tasks_parser.add_argument(
+        "--task-id",
+        help="Optional task id to inspect. Omit to list saved tasks.",
+    )
+    tasks_parser.add_argument(
+        "--tail",
+        type=int,
+        default=20,
+        help="Recent log lines to include when inspecting one saved task.",
     )
     execution_parser = subparsers.add_parser("execution", help="Inspect saved execution summaries")
     execution_parser.add_argument(
@@ -432,6 +452,9 @@ def main() -> int:
         elif args.command == "tools":
             validate_deterministic_tools_config(cfg)
             payload = describe_agent_tools(cfg, args.tool_name)
+        elif args.command == "tasks":
+            validate_agent_task_manager_config(cfg)
+            payload = describe_agent_tasks(cfg, args.task_id, tail=args.tail)
         elif args.command == "execution":
             payload = describe_execution_results(cfg, args.results)
         elif args.command == "shell":

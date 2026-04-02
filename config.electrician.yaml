@@ -234,6 +234,12 @@ workflow_registry:
   enabled: true
   manifest_path: "workflows/registry.yaml"
 
+agent_task_manager:
+  enabled: true
+  root_dir: "data/agent_tasks_electrician"
+  tasks_dir: "data/agent_tasks_electrician/tasks"
+  logs_dir: "data/agent_tasks_electrician/logs"
+
 deterministic_tools:
   estimate_lookup:
     enabled: true

@@ -326,8 +326,9 @@ make inspect-shell CONFIG=config.yaml ARGS='--session-id agent-shell-123456789ab
 - `workflows/registry.yaml` is a checked-in local workflow manifest for repeatable operator jobs such as memory seeding, retrieval corpus refresh, benchmark refresh, and release verification.
 - `skills/*.md` is a checked-in local markdown skill library with YAML frontmatter and instruction bodies for operator-facing runtime guidance.
 - `scripts/workflow_registry.py` can list, validate, show, dry-run, and execute those workflows using the current Python environment and selected config.
+- `scripts/agent_task_manager.py` can launch those workflows, plus dream-memory consolidation, as managed background tasks with persisted JSON summaries and log files.
 - `scripts/agent_skill_registry.py` loads skill definitions, resolves aliases, and can attach matched skill guidance to model-routed shell turns.
-- `scripts/orchestration_inspect.py` exposes operator inspection views for hook rules, provider ordering, local agent command, skill, and tool metadata, saved execution summaries from evaluation results, and persisted local agent shell sessions.
+- `scripts/orchestration_inspect.py` exposes operator inspection views for hook rules, provider ordering, local agent command, skill, tool, and task metadata, saved execution summaries from evaluation results, and persisted local agent shell sessions.
 - These surfaces are intentionally local and config-driven. They are not a plugin marketplace and do not fetch remote tools or instructions.
 
 ### 5. Build Retrieval And Benchmark Assets
@@ -335,6 +336,7 @@ make inspect-shell CONFIG=config.yaml ARGS='--session-id agent-shell-123456789ab
 - `scripts/build_retrieval_corpus.py` builds a deduplicated local retrieval corpus plus a manifest with source distribution and dedupe counts.
 - `scripts/build_golden_benchmark.py` builds a reproducible benchmark JSONL from the checked-in spec and source corpus.
 - The golden benchmark spec can now mix source-matched text rows with direct deterministic-tool rows. Tool rows declare `route: deterministic_tool`, `tool_name`, `tool_request`, and `tool_expectation` in the spec.
+- Benchmark spec rows can also declare `skill_names`; benchmark build now validates and normalizes those names up front so bad skill IDs fail during benchmark assembly instead of later during evaluation.
 - These assets are intended for source-heavy domains where release quality depends on grounded retrieval, not just memorized phrasing.
 
 ### 6. Source Registry And Review Contracts
@@ -423,6 +425,12 @@ For local operator workflows and inspection:
 make workflow-list CONFIG=config.electrician.yaml
 make workflow-show CONFIG=config.electrician.yaml WORKFLOW=retrieval-refresh
 make workflow-run CONFIG=config.electrician.yaml WORKFLOW=benchmark-refresh ARGS='--dry-run'
+make task-list CONFIG=config.electrician.yaml
+make task-status CONFIG=config.electrician.yaml
+make task-attach CONFIG=config.electrician.yaml TASK_ID=agent-task-123456789abc ARGS='--cursor 0 --limit 20'
+make task-start-workflow CONFIG=config.electrician.yaml WORKFLOW=benchmark-refresh ARGS='--var out=evals/results_electrician.json'
+make task-start-subagent CONFIG=config.electrician.yaml ARGS='--prompt "Check whether retrieval coverage is missing conduit support references." --source operator.review --parent-task-id agent-task-123456789abc'
+make inspect-tasks CONFIG=config.electrician.yaml
 make inspect-hooks CONFIG=config.electrician.yaml
 make inspect-providers CONFIG=config.electrician.yaml
 make inspect-execution CONFIG=config.electrician.yaml
@@ -518,11 +526,17 @@ make inspect-skills CONFIG=config.yaml
 make inspect-skills CONFIG=config.yaml ARGS='--skill-name electrical-estimating'
 make inspect-tools CONFIG=config.yaml
 make inspect-tools CONFIG=config.yaml ARGS='--tool-name estimate_lookup'
+make inspect-tasks CONFIG=config.yaml
+make inspect-tasks CONFIG=config.yaml ARGS='--task-id agent-task-123456789abc --tail 10'
+make task-status CONFIG=config.yaml
+make task-attach CONFIG=config.yaml TASK_ID=agent-task-123456789abc ARGS='--cursor 0 --limit 20'
+make task-resume CONFIG=config.yaml TASK_ID=agent-task-123456789abc
+make task-start-subagent CONFIG=config.yaml ARGS='--prompt "Summarize missing source gaps in the latest estimate response." --source operator.review --skill electrical-estimating --tool estimate_lookup'
 make inspect-shell CONFIG=config.yaml
 make inspect-shell CONFIG=config.yaml ARGS='--session-id agent-shell-123456789abc --tail 3'
 ```
 
-Shell sessions persist under `agent_shell.root_dir` and keep a JSON session summary plus a JSONL transcript per session. For text and retrieval turns, the shell can attach matching local skill guidance from `skills/*.md` before the user instruction is sent to the model, and you can now force skills explicitly with repeated `--skill` flags for one-shot prompts or persist them in a session with `/skills pin <name>`, queue them for one turn with `/skills use <name>`, inspect current state with `/skills active`, and clear them with `/skills clear`. Inside the shell, `/help` includes the expanded `/skills` surface alongside `/commands`, `/tools`, `/session`, `/route`, `/providers`, and `/workflow list|show`.
+Shell sessions persist under `agent_shell.root_dir` and keep a JSON session summary plus a JSONL transcript per session. For text and retrieval turns, the shell can attach matching local skill guidance from `skills/*.md` before the user instruction is sent to the model, and you can now force skills explicitly with repeated `--skill` flags for one-shot prompts or persist them in a session with `/skills pin <name>`, queue them for one turn with `/skills use <name>`, inspect current state with `/skills active`, and clear them with `/skills clear`. Managed background work persists separately under `agent_task_manager.root_dir`, and the shell now exposes `/tasks`, `/tasks list --status running`, `/tasks status`, `/tasks show <task-id>`, `/tasks attach <task-id>`, `/tasks start workflow <name>`, `/tasks start dream`, `/tasks start subagent --prompt <text>`, `/tasks cancel <task-id>`, and `/tasks resume <task-id>` for local workflow, dream, and bounded subagent jobs. Attach reads incremental task log output with cursor support so interrupted operators can rejoin a running task, and subagent tasks carry optional parent task ids, request context, skill lists, and deterministic-tool restrictions for one-turn delegated work. Inside the shell, `/help` includes the expanded `/skills` and `/tasks` surfaces alongside `/commands`, `/tools`, `/session`, `/route`, `/providers`, and `/workflow list|show`.
 
 ---
 
@@ -725,10 +739,16 @@ When records carry a `data_contract` block, `build_catalog_data.py` will block a
 
 `scripts/generate_data.py` uses a local Ollama model by default and can switch
 to an OpenAI-compatible backend when you pass an `openai/<model>` name.
+When you also pass `--config`, it can reuse the local checked-in skill registry:
+repeated `--skill <name>` flags apply to every topic prompt, and individual
+topic rows in `topics.yaml` can declare `skill_names` for per-topic guidance.
 
 ```bash
 # Generate 20 examples per topic with the local Ollama model named "simcoe"
 python scripts/generate_data.py --topics topics.yaml --out data/raw/generated.jsonl --count 20
+
+# Reuse local skill guidance while generating estimating-focused examples
+python scripts/generate_data.py --config config.yaml --topics topics.yaml --out data/raw/generated.jsonl --count 20 --skill electrical-estimating
 
 # Use a remote OpenAI-compatible model instead
 python scripts/generate_data.py --topics topics.yaml --out data/raw/generated.jsonl --count 20 --model openai/gpt-4o
