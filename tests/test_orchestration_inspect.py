@@ -4,6 +4,9 @@ import json
 from pathlib import Path
 
 from orchestration_inspect import (
+    describe_agent_commands,
+    describe_agent_skills,
+    describe_agent_tools,
     describe_agent_shell_session,
     describe_agent_shell_sessions,
     describe_context_providers,
@@ -35,6 +38,43 @@ def _agent_shell_cfg(tmp_path) -> dict:
             "root_dir": str(root_dir),
             "sessions_dir": str(root_dir / "sessions"),
             "transcripts_dir": str(root_dir / "transcripts"),
+        }
+    }
+
+
+def _skill_cfg(tmp_path: Path) -> dict:
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    (skills_dir / "electrical-estimating.md").write_text(
+        "\n".join(
+            [
+                "---",
+                "id: electrical-estimating",
+                "title: Electrical Estimating",
+                "summary: Structure estimate answers around assumptions.",
+                "aliases:",
+                "  - estimate",
+                "tags:",
+                "  - labor",
+                "route_fit:",
+                "  - text",
+                "triggers:",
+                "  - estimate",
+                "use_when: []",
+                "avoid_when: []",
+                "---",
+                "Separate labor and material assumptions.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "skill_registry": {
+            "enabled": True,
+            "root_dir": str(skills_dir),
+            "max_active_skills": 2,
+            "max_instruction_chars": 1200,
         }
     }
 
@@ -74,6 +114,46 @@ def test_describe_context_providers_reports_order_and_active() -> None:
     assert summary["order"] == ["memory", "retrieval"]
     assert summary["active"] == ["memory", "retrieval"]
     assert summary["max_workers"] == 4
+
+
+def test_describe_agent_commands_reports_registry() -> None:
+    summary = describe_agent_commands()
+    detail = describe_agent_commands("quit")
+
+    assert summary["command_count"] == 9
+    assert summary["commands"][0]["name"] == "help"
+    assert detail["name"] == "exit"
+    assert detail["aliases"] == ["quit"]
+
+
+def test_describe_agent_skills_reports_registry(tmp_path: Path) -> None:
+    cfg = _skill_cfg(tmp_path)
+
+    summary = describe_agent_skills(cfg)
+    detail = describe_agent_skills(cfg, "estimate")
+
+    assert summary["skill_count"] == 1
+    assert summary["skills"][0]["name"] == "electrical-estimating"
+    assert detail["name"] == "electrical-estimating"
+    assert "Separate labor and material assumptions." in detail["instructions"]
+
+
+def test_describe_agent_tools_reports_registry() -> None:
+    cfg = {
+        "deterministic_tools": {
+            "estimate_lookup": {"enabled": True, "default_top_k": 7},
+            "revit_entity_lookup": {"enabled": False},
+        }
+    }
+
+    summary = describe_agent_tools(cfg)
+    detail = describe_agent_tools(cfg, "estimate")
+
+    assert summary["tool_count"] == 2
+    assert summary["enabled_count"] == 1
+    assert summary["tools"][0]["name"] == "estimate_lookup"
+    assert detail["name"] == "estimate_lookup"
+    assert detail["resolved_settings"]["default_top_k"] == 7
 
 
 def test_summarize_execution_results_prefers_top_level_summary() -> None:
@@ -128,6 +208,9 @@ def test_describe_agent_shell_sessions_lists_saved_summaries(tmp_path) -> None:
                 "turn_count": 1,
                 "last_route": "text",
                 "last_runtime_owner": "text",
+                "last_skill_names": [],
+                "pinned_skills": ["electrical-estimating"],
+                "next_turn_skills": [],
                 "route_counts": {"text": 1},
             }
         ),
@@ -144,6 +227,9 @@ def test_describe_agent_shell_sessions_lists_saved_summaries(tmp_path) -> None:
                 "turn_count": 2,
                 "last_route": "deterministic_tool",
                 "last_runtime_owner": "geometry_rules",
+                "last_skill_names": ["electrical-estimating"],
+                "pinned_skills": ["electrical-estimating"],
+                "next_turn_skills": ["revit-family-reference"],
                 "route_counts": {"text": 1, "deterministic_tool": 1},
             }
         ),
@@ -158,6 +244,8 @@ def test_describe_agent_shell_sessions_lists_saved_summaries(tmp_path) -> None:
         "agent-shell-a",
     ]
     assert payload["sessions"][0]["route_counts"]["deterministic_tool"] == 1
+    assert payload["sessions"][0]["pinned_skills"] == ["electrical-estimating"]
+    assert payload["sessions"][0]["next_turn_skills"] == ["revit-family-reference"]
 
 
 def test_describe_agent_shell_session_reconstructs_execution_summary(tmp_path) -> None:

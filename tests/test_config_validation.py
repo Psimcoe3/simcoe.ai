@@ -12,6 +12,7 @@ from config_validation import (
     validate_memory_config,
     validate_multimodal_config,
     validate_routing_config,
+    validate_skill_registry_config,
     validate_system_prompts_config,
     validate_workflow_registry_config,
 )
@@ -356,6 +357,41 @@ def test_validate_context_providers_config_accepts_scaffold() -> None:
             }
         }
     )
+
+
+def test_validate_skill_registry_config_accepts_existing_dir(tmp_path) -> None:
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
+
+    validate_skill_registry_config(
+        {
+            "skill_registry": {
+                "enabled": True,
+                "root_dir": str(skills_dir),
+                "max_active_skills": 2,
+                "max_instruction_chars": 1200,
+            }
+        }
+    )
+
+
+def test_validate_skill_registry_config_rejects_missing_dir(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        validate_skill_registry_config(
+            {
+                "skill_registry": {
+                    "enabled": True,
+                    "root_dir": "does/not/exist",
+                    "max_active_skills": 2,
+                    "max_instruction_chars": 1200,
+                }
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert "Skill registry directory not found" in captured.out
 
 
 def test_validate_context_providers_config_requires_retrieval(

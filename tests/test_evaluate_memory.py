@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from evaluate import prepare_prompts_with_retrieval
 from indexed_memory import record_memory_entry
@@ -73,6 +74,33 @@ def _cfg(tmp_path) -> dict:
     }
 
 
+def _write_skill(path: Path, *, skill_id: str, title: str, summary: str, instructions: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(
+            [
+                "---",
+                f"id: {skill_id}",
+                f"title: {title}",
+                f"summary: {summary}",
+                "aliases: []",
+                "tags: []",
+                "route_fit:",
+                "  - text",
+                "  - retrieval",
+                "triggers:",
+                f"  - {skill_id}",
+                "use_when: []",
+                "avoid_when: []",
+                "---",
+                instructions,
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_prepare_prompts_with_retrieval_merges_memory_hints(tmp_path) -> None:
     cfg = _cfg(tmp_path)
     record_memory_entry(
@@ -126,3 +154,46 @@ def test_prepare_prompts_with_retrieval_merges_memory_hints(tmp_path) -> None:
         metadata["memory"]["per_example"][0]["request_id"]
         == metadata["per_example"][0]["memory_request_id"]
     )
+
+
+def test_prepare_prompts_with_retrieval_applies_explicit_skills(tmp_path) -> None:
+    cfg = _cfg(tmp_path)
+    skills_dir = tmp_path / "skills"
+    _write_skill(
+        skills_dir / "electrical-estimating.md",
+        skill_id="electrical-estimating",
+        title="Electrical Estimating",
+        summary="Estimate guidance",
+        instructions="Keep labor and material assumptions explicit.",
+    )
+    cfg["skill_registry"] = {
+        "enabled": True,
+        "root_dir": str(skills_dir),
+        "max_active_skills": 2,
+        "max_instruction_chars": 1200,
+    }
+
+    prompts, metadata = prepare_prompts_with_retrieval(
+        [
+            {
+                "prompt": "### Instruction:\nDraft a conduit estimate\n\n### Response:",
+                "route": "text",
+                "skill_names": ["electrical-estimating"],
+            }
+        ],
+        cfg,
+        {"use_retrieval": False, "skill_names": ["electrical-estimating"]},
+    )
+
+    assert prompts[0].startswith("### Active Skills:")
+    assert "Electrical Estimating" in prompts[0]
+    assert "Keep labor and material assumptions explicit." in prompts[0]
+    assert metadata["skills"]["used"] is True
+    assert metadata["skills"]["global_skill_names"] == ["electrical-estimating"]
+    assert metadata["skills"]["per_example"][0]["requested_skill_names"] == [
+        "electrical-estimating"
+    ]
+    assert metadata["skills"]["per_example"][0]["selected_skill_names"] == ["electrical-estimating"]
+    assert metadata["skills"]["per_example"][0]["selected_skills"][0]["selection_sources"] == [
+        "explicit"
+    ]

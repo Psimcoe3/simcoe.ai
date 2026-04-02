@@ -6,11 +6,20 @@ import json
 import os
 from pathlib import Path
 
+from agent_command_registry import describe_agent_command, list_agent_commands
+from agent_skill_registry import (
+    describe_agent_skill,
+    list_agent_skills,
+    resolve_skill_registry_settings,
+)
+from agent_tool_registry import describe_agent_tool, list_agent_tools
 from config_validation import (
     validate_agent_shell_config,
+    validate_deterministic_tools_config,
     load_config,
     validate_context_providers_config,
     validate_hooks_config,
+    validate_skill_registry_config,
 )
 from context_providers import active_context_provider_names, resolve_context_provider_settings
 from manifest_utils import read_json_file
@@ -62,6 +71,45 @@ def describe_context_providers(cfg: dict) -> dict:
         "max_workers": provider_settings["max_workers"],
         "retrieval_enabled": bool(retrieval_cfg.get("enabled", False)),
         "memory_enabled": bool(memory_cfg.get("enabled", False)),
+    }
+
+
+def describe_agent_commands(command_name: str | None = None) -> dict:
+    if isinstance(command_name, str) and command_name.strip():
+        return describe_agent_command(command_name)
+
+    commands = list_agent_commands()
+    return {
+        "command_count": len(commands),
+        "commands": commands,
+    }
+
+
+def describe_agent_skills(cfg: dict, skill_name: str | None = None) -> dict:
+    if isinstance(skill_name, str) and skill_name.strip():
+        return describe_agent_skill(cfg, skill_name)
+
+    settings = resolve_skill_registry_settings(cfg)
+    skills = list_agent_skills(cfg)
+    return {
+        "enabled": settings["enabled"],
+        "root_dir": settings["root_dir"],
+        "max_active_skills": settings["max_active_skills"],
+        "max_instruction_chars": settings["max_instruction_chars"],
+        "skill_count": len(skills),
+        "skills": skills,
+    }
+
+
+def describe_agent_tools(cfg: dict, tool_name: str | None = None) -> dict:
+    if isinstance(tool_name, str) and tool_name.strip():
+        return describe_agent_tool(cfg, tool_name)
+
+    tools = list_agent_tools(cfg)
+    return {
+        "tool_count": len(tools),
+        "enabled_count": sum(1 for tool in tools if tool["enabled"]),
+        "tools": tools,
     }
 
 
@@ -120,6 +168,11 @@ def _summarize_agent_shell_turn(turn: dict) -> dict:
         "runtime_owner": turn.get("runtime_owner"),
         "user_prompt": turn.get("user", {}).get("prompt"),
         "assistant_response": turn.get("assistant", {}).get("response"),
+        "skill_names": [
+            skill.get("name")
+            for skill in turn.get("skills", [])
+            if isinstance(skill, dict) and isinstance(skill.get("name"), str)
+        ],
         "error": turn.get("error"),
     }
 
@@ -174,6 +227,9 @@ def describe_agent_shell_sessions(cfg: dict) -> dict:
                     "turn_count": int(summary.get("turn_count", 0) or 0),
                     "last_route": summary.get("last_route"),
                     "last_runtime_owner": summary.get("last_runtime_owner"),
+                    "last_skill_names": copy.deepcopy(summary.get("last_skill_names") or []),
+                    "pinned_skills": copy.deepcopy(summary.get("pinned_skills") or []),
+                    "next_turn_skills": copy.deepcopy(summary.get("next_turn_skills") or []),
                     "route_counts": copy.deepcopy(summary.get("route_counts") or {}),
                 }
             )
@@ -305,7 +361,7 @@ def describe_execution_results(cfg: dict, results_path: str | None = None) -> di
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Inspect hook, provider, execution, and agent shell session surfaces "
+            "Inspect hook, provider, command, skill, tool, execution, and agent shell session surfaces "
             "from config and saved artifacts."
         )
     )
@@ -314,6 +370,27 @@ def parse_args() -> argparse.Namespace:
 
     subparsers.add_parser("hooks", help="Inspect configured hook rules")
     subparsers.add_parser("providers", help="Inspect configured context providers")
+    commands_parser = subparsers.add_parser(
+        "commands",
+        help="Inspect local agent shell command metadata",
+    )
+    commands_parser.add_argument(
+        "--command-name",
+        help="Optional command name to inspect. Omit to list the local command registry.",
+    )
+    skills_parser = subparsers.add_parser(
+        "skills",
+        help="Inspect local markdown skill metadata",
+    )
+    skills_parser.add_argument(
+        "--skill-name",
+        help="Optional skill name to inspect. Omit to list the local skill registry.",
+    )
+    tools_parser = subparsers.add_parser("tools", help="Inspect configured local agent tools")
+    tools_parser.add_argument(
+        "--tool-name",
+        help="Optional tool name to inspect. Omit to list the local tool registry.",
+    )
     execution_parser = subparsers.add_parser("execution", help="Inspect saved execution summaries")
     execution_parser.add_argument(
         "--results",
@@ -347,6 +424,14 @@ def main() -> int:
         elif args.command == "providers":
             validate_context_providers_config(cfg)
             payload = describe_context_providers(cfg)
+        elif args.command == "commands":
+            payload = describe_agent_commands(args.command_name)
+        elif args.command == "skills":
+            validate_skill_registry_config(cfg)
+            payload = describe_agent_skills(cfg, args.skill_name)
+        elif args.command == "tools":
+            validate_deterministic_tools_config(cfg)
+            payload = describe_agent_tools(cfg, args.tool_name)
         elif args.command == "execution":
             payload = describe_execution_results(cfg, args.results)
         elif args.command == "shell":

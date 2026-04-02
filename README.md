@@ -262,11 +262,13 @@ Key sections:
 - Auto-starts a local Ollama daemon for judge requests when needed and shuts it down afterward if evaluation launched it.
 - Rates each response 1–5 with a structured rationale. Set `judge_model: null` to disable.
 - Supports quick and full evaluation profiles via config plus CLI overrides for example count, batch size, and generation length.
+- Supports repeated `--skill <name>` flags to pin checked-in local skills onto every text-generation evaluation prompt, and benchmark rows can also declare per-example `skill_names`.
 - Uses `evaluation.golden_benchmark_path` for full-mode benchmark runs when configured.
 - Can inject retrieved context from a local corpus when `retrieval.enabled` and `retrieval.use_in_full_evaluation` are set.
 - Can also inject local indexed-memory hints when `memory.enabled` is true. Memory stays separate from the retrieval corpus: the always-loaded file is a pointer-only index, while full topic records are loaded on demand and filtered skeptically.
 - Retrieval and memory context assembly now runs through a named context-provider registry. Provider ordering is config-driven via `context_providers.order`, and evaluation traces serialize provider-level results separately from the flattened retrieval and memory fields kept for compatibility.
 - Retrieval and memory context assembly still prefetches in parallel during evaluation, and memory queries read the maintained pointer index rather than rebuilding it on every lookup.
+- Evaluation results now serialize skill selection separately from retrieval and memory traces so local prompt guidance is auditable per benchmark row.
 - Route decisions, context providers, and deterministic-tool execution now expose optional pre/post hook stages. Hooks are local config rules for audit, deny, annotate, or field rewrites; they are disabled by default.
 - Evaluation outputs now also carry structured execution envelopes: a top-level `execution.summary` plus per-example `execution` blocks that normalize route, context-provider, and deterministic-tool traces without removing the older compatibility fields.
 - Supports mixed-route golden benchmarks where some rows are evaluated through deterministic tools instead of text generation.
@@ -302,6 +304,15 @@ make inspect-hooks CONFIG=config.electrician.yaml
 
 make inspect-providers CONFIG=config.electrician.yaml
 
+make inspect-commands CONFIG=config.yaml
+make inspect-commands CONFIG=config.yaml ARGS='--command-name workflow'
+
+make inspect-skills CONFIG=config.yaml
+make inspect-skills CONFIG=config.yaml ARGS='--skill-name electrical-estimating'
+
+make inspect-tools CONFIG=config.yaml
+make inspect-tools CONFIG=config.yaml ARGS='--tool-name estimate_lookup'
+
 make inspect-execution CONFIG=config.electrician.yaml
 
 make inspect-shell CONFIG=config.yaml
@@ -313,8 +324,10 @@ make inspect-shell CONFIG=config.yaml ARGS='--session-id agent-shell-123456789ab
 ### 5A. Workflow Registry And Inspection
 
 - `workflows/registry.yaml` is a checked-in local workflow manifest for repeatable operator jobs such as memory seeding, retrieval corpus refresh, benchmark refresh, and release verification.
+- `skills/*.md` is a checked-in local markdown skill library with YAML frontmatter and instruction bodies for operator-facing runtime guidance.
 - `scripts/workflow_registry.py` can list, validate, show, dry-run, and execute those workflows using the current Python environment and selected config.
-- `scripts/orchestration_inspect.py` exposes operator inspection views for hook rules, provider ordering, saved execution summaries from evaluation results, and persisted local agent shell sessions.
+- `scripts/agent_skill_registry.py` loads skill definitions, resolves aliases, and can attach matched skill guidance to model-routed shell turns.
+- `scripts/orchestration_inspect.py` exposes operator inspection views for hook rules, provider ordering, local agent command, skill, and tool metadata, saved execution summaries from evaluation results, and persisted local agent shell sessions.
 - These surfaces are intentionally local and config-driven. They are not a plugin marketplace and do not fetch remote tools or instructions.
 
 ### 5. Build Retrieval And Benchmark Assets
@@ -381,6 +394,8 @@ make help         # show all targets
 ```
 
 Override the config file: `make all CONFIG=my_config.yaml`
+
+Pass extra evaluation args through `ARGS`, for example: `make evaluate CONFIG=config.yaml ARGS='--skill electrical-estimating --skill revit-family-reference'`
 
 For the electrician workflow, the release-oriented sequence is typically:
 
@@ -489,6 +504,7 @@ Run a single routed prompt and exit:
 
 ```bash
 make agent-shell CONFIG=config.yaml ARGS='--prompt "Find the estimate lookup for EMT conduit."'
+make agent-shell CONFIG=config.yaml ARGS='--prompt "Explain how to structure an estimate." --skill electrical-estimating'
 ```
 
 Resume or inspect a saved session:
@@ -496,11 +512,17 @@ Resume or inspect a saved session:
 ```bash
 make agent-shell CONFIG=config.yaml ARGS='--session-id agent-shell-123456789abc'
 make agent-shell CONFIG=config.yaml ARGS='--show-session --session-id agent-shell-123456789abc'
+make inspect-commands CONFIG=config.yaml
+make inspect-commands CONFIG=config.yaml ARGS='--command-name workflow'
+make inspect-skills CONFIG=config.yaml
+make inspect-skills CONFIG=config.yaml ARGS='--skill-name electrical-estimating'
+make inspect-tools CONFIG=config.yaml
+make inspect-tools CONFIG=config.yaml ARGS='--tool-name estimate_lookup'
 make inspect-shell CONFIG=config.yaml
 make inspect-shell CONFIG=config.yaml ARGS='--session-id agent-shell-123456789abc --tail 3'
 ```
 
-Shell sessions persist under `agent_shell.root_dir` and keep a JSON session summary plus a JSONL transcript per session. Inside the shell, `/help` shows the initial command surface: `/session`, `/route`, `/providers`, and `/workflow list|show`.
+Shell sessions persist under `agent_shell.root_dir` and keep a JSON session summary plus a JSONL transcript per session. For text and retrieval turns, the shell can attach matching local skill guidance from `skills/*.md` before the user instruction is sent to the model, and you can now force skills explicitly with repeated `--skill` flags for one-shot prompts or persist them in a session with `/skills pin <name>`, queue them for one turn with `/skills use <name>`, inspect current state with `/skills active`, and clear them with `/skills clear`. Inside the shell, `/help` includes the expanded `/skills` surface alongside `/commands`, `/tools`, `/session`, `/route`, `/providers`, and `/workflow list|show`.
 
 ---
 

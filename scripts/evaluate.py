@@ -36,6 +36,11 @@ try:
 except ImportError:
     torch = None
 
+from agent_skill_registry import (
+    render_agent_skill_prompt,
+    resolve_skill_registry_settings,
+    select_agent_skills,
+)
 from context_providers import (
     active_context_provider_names,
     build_context_provider_registry,
@@ -155,6 +160,53 @@ def build_prompt(instruction: str, context: str | None = None) -> str:
     return f"### Instruction:\n{instruction}\n\n### Response:"
 
 
+def _dedupe_string_list(value: object) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        stripped = item.strip()
+        if not stripped or stripped in seen:
+            continue
+        normalized.append(stripped)
+        seen.add(stripped)
+    return normalized
+
+
+def _empty_skill_evaluation_info(cfg: dict, settings: dict) -> dict:
+    skill_settings = resolve_skill_registry_settings(cfg)
+    return {
+        "enabled": skill_settings["enabled"],
+        "root_dir": skill_settings["root_dir"],
+        "max_active_skills": skill_settings["max_active_skills"],
+        "max_instruction_chars": skill_settings["max_instruction_chars"],
+        "global_skill_names": _dedupe_string_list(settings.get("skill_names")),
+        "used": False,
+        "skill_example_count": 0,
+        "selected_skill_count": 0,
+        "per_example": [],
+    }
+
+
+def _serialize_selected_skills(selected_skills: list[dict]) -> list[dict]:
+    return [
+        {
+            "name": skill["name"],
+            "title": skill["title"],
+            "summary": skill["summary"],
+            "relative_path": skill["relative_path"],
+            "selection_sources": list(skill.get("selection_sources", [])),
+            "match_score": int(skill.get("match_score", 0) or 0),
+            "matched_terms": list(skill.get("matched_terms", [])),
+        }
+        for skill in selected_skills
+    ]
+
+
 def build_example_from_text(text: str) -> dict:
     return {
         "prompt": extract_prompt(text),
@@ -170,6 +222,7 @@ def build_example_from_text(text: str) -> dict:
         "tool_name": None,
         "tool_request": None,
         "tool_expectation": None,
+        "skill_names": [],
     }
 
 
@@ -186,6 +239,7 @@ def build_example_from_benchmark_row(row: dict, cfg: dict, multimodal_enabled: b
     reference = str(row.get("response") or row.get("output") or "").strip()
     benchmark_id = str(row.get("benchmark_id") or "benchmark_row").strip() or "benchmark_row"
     attachment_paths = _attachment_paths_from_benchmark_row(row)
+    skill_names = _dedupe_string_list(row.get("skill_names"))
     routing_decision = None
 
     if row.get("route") is None:
@@ -227,6 +281,7 @@ def build_example_from_benchmark_row(row: dict, cfg: dict, multimodal_enabled: b
         "tool_name": row.get("tool_name"),
         "tool_request": row.get("tool_request") if isinstance(row.get("tool_request"), dict) else None,
         "tool_expectation": row.get("tool_expectation") if isinstance(row.get("tool_expectation"), dict) else None,
+        "skill_names": skill_names,
     }
 
 
@@ -267,6 +322,7 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
     route_forces_retrieval = any(_route_name(example) == ROUTE_RETRIEVAL for example in examples)
     requested_retrieval = bool(settings["use_retrieval"] or route_forces_retrieval)
     memory_enabled = bool(memory_cfg and memory_cfg.get("enabled", False))
+    global_skill_names = _dedupe_string_list(settings.get("skill_names"))
     context_provider_metadata = {
         "order": list(provider_settings["order"]),
         "max_workers": provider_settings["max_workers"],
@@ -279,35 +335,89 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
         "query_count": 0,
         "per_example": [],
     }
+    skill_info = _empty_skill_evaluation_info(cfg, settings)
+    example_queries = [extract_instruction_text(example["prompt"]) for example in examples]
+    base_prompts: list[str] = []
+    skill_traces: list[dict] = []
+    selected_skill_count = 0
+    skill_example_count = 0
+
+    for index, example in enumerate(examples):
+        query = example_queries[index]
+        requested_skill_names = _dedupe_string_list(
+            [*global_skill_names, *_dedupe_string_list(example.get("skill_names"))]
+        )
+        example_label = example.get("benchmark_id") or f"example[{index}]"
+        try:
+            selected_skills = select_agent_skills(
+                cfg,
+                query,
+                route_name=_route_name(example),
+                explicit_skill_names=requested_skill_names,
+            )
+        except ValueError as exc:
+            raise SystemExit(f"{example_label} skill selection failed: {exc}") from exc
+
+        skill_prompt = render_agent_skill_prompt(cfg, selected_skills)
+        if skill_prompt:
+            base_prompts.append(f"{skill_prompt}\n\n{example['prompt']}")
+        else:
+            base_prompts.append(example["prompt"])
+
+        if selected_skills:
+            skill_example_count += 1
+            selected_skill_count += len(selected_skills)
+
+        skill_traces.append(
+            {
+                "query": query,
+                "used": bool(selected_skills),
+                "requested_skill_names": requested_skill_names,
+                "selected_skill_names": [skill["name"] for skill in selected_skills],
+                "selected_skills": _serialize_selected_skills(selected_skills),
+            }
+        )
+
+    skill_info.update(
+        {
+            "used": skill_example_count > 0,
+            "skill_example_count": skill_example_count,
+            "selected_skill_count": selected_skill_count,
+            "per_example": skill_traces,
+        }
+    )
 
     if not retrieval_cfg:
         if requested_retrieval:
             raise SystemExit("Evaluation examples require retrieval, but config.retrieval is not defined")
-        return [example["prompt"] for example in examples], {
+        return base_prompts, {
             "enabled": False,
             "used": False,
             "memory": empty_memory_metadata,
             "context_providers": context_provider_metadata,
+            "skills": skill_info,
         }
 
     retrieval_enabled = bool(retrieval_cfg.get("enabled", False))
     if not retrieval_enabled:
         if requested_retrieval:
             raise SystemExit("Evaluation examples require retrieval, but retrieval.enabled is false")
-        return [example["prompt"] for example in examples], {
+        return base_prompts, {
             "enabled": False,
             "used": False,
             "memory": empty_memory_metadata,
             "context_providers": context_provider_metadata,
+            "skills": skill_info,
         }
 
     if not requested_retrieval:
-        return [example["prompt"] for example in examples], {
+        return base_prompts, {
             "enabled": True,
             "used": False,
             "forced_by_routes": False,
             "memory": empty_memory_metadata,
             "context_providers": context_provider_metadata,
+            "skills": skill_info,
         }
 
     providers, provider_metadata = build_context_provider_registry(cfg)
@@ -316,7 +426,6 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
             "Evaluation examples require the retrieval context provider, but context_providers.order excludes it"
         )
 
-    example_queries = [extract_instruction_text(example["prompt"]) for example in examples]
     should_retrieve_flags = [
         bool(settings["use_retrieval"] or _route_name(example) == ROUTE_RETRIEVAL)
         for example in examples
@@ -404,12 +513,12 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
 
             prompts.append(
                 build_context_augmented_prompt(
-                    example["prompt"],
+                    base_prompts[index],
                     context_sections=context_sections,
                 )
             )
         else:
-            prompts.append(example["prompt"])
+            prompts.append(base_prompts[index])
 
         traces.append(trace)
         memory_traces.append(
@@ -453,6 +562,7 @@ def prepare_prompts_with_retrieval(examples: list[dict], cfg: dict, settings: di
             "query_count": memory_query_count,
             "per_example": memory_traces,
         },
+        "skills": skill_info,
         "context_providers": context_provider_metadata,
         "per_example": traces,
     }
@@ -746,6 +856,7 @@ def resolve_evaluation_settings(cfg: dict, args: argparse.Namespace) -> dict:
         "judge_concurrency": args.judge_concurrency or judge_concurrency,
         "judge_model": None if args.metrics_only else evaluation_cfg.get("judge_model"),
         "metrics_only": args.metrics_only,
+        "skill_names": _dedupe_string_list(args.skill),
         "fail_on_threshold_breach": (
             release_mode
             or
@@ -1747,6 +1858,12 @@ def main() -> None:
         help="Augment prompts with retrieved context when retrieval is configured.",
     )
     parser.add_argument(
+        "--skill",
+        action="append",
+        default=[],
+        help="Pin one or more local skills onto every text-generation evaluation prompt.",
+    )
+    parser.add_argument(
         "--fail_on_thresholds",
         action="store_true",
         help="Exit non-zero when configured release thresholds are not met.",
@@ -1784,12 +1901,14 @@ def main() -> None:
                 details=(
                     f"num_examples={settings['num_examples']} "
                     f"use_retrieval={settings['use_retrieval']} "
+                    f"skill_count={len(settings['skill_names'])} "
                     f"release_mode={settings['release_mode']}"
                 ),
                 metadata={
                     "mode": settings["mode"],
                     "num_examples": settings["num_examples"],
                     "use_retrieval": settings["use_retrieval"],
+                    "skill_names": settings["skill_names"],
                     "release_mode": settings["release_mode"],
                 },
             )
@@ -1813,6 +1932,8 @@ def main() -> None:
         f"metrics_only={settings['metrics_only']}, "
         f"fail_on_threshold_breach={settings['fail_on_threshold_breach']}"
     )
+    if settings["skill_names"]:
+        print(f"    Forced skills: {', '.join(settings['skill_names'])}")
 
     if processed_manifest is None:
         print("  ⚠️   Processed dataset manifest not found. Re-run prepare_data to capture lineage metadata.")
@@ -1838,6 +1959,7 @@ def main() -> None:
     ]
     route_results: list[dict | None] = [None] * len(examples)
     retrieval_traces: list[dict | None] = [None] * len(examples)
+    skill_traces: list[dict | None] = [None] * len(examples)
 
     text_indexes = [index for index, example in enumerate(examples) if not _is_deterministic_tool_example(example)]
     tool_indexes = [index for index, example in enumerate(examples) if _is_deterministic_tool_example(example)]
@@ -1853,6 +1975,7 @@ def main() -> None:
     }
     judge_seconds = 0.0
     retrieval_info = {"enabled": False, "used": False}
+    skill_info = _empty_skill_evaluation_info(cfg, settings)
     rouge_scores: dict = {}
     em_score: float | None = None
 
@@ -1884,10 +2007,13 @@ def main() -> None:
             text_retrieval = retrieval_info.get("per_example", [None] * len(text_examples))
         else:
             text_retrieval = [None] * len(text_examples)
+        skill_info = retrieval_info.get("skills", _empty_skill_evaluation_info(cfg, settings))
+        text_skill_traces = skill_info.get("per_example", [None] * len(text_examples))
 
         for local_index, example_index in enumerate(text_indexes):
             prompts[example_index] = text_prompts[local_index]
             retrieval_traces[example_index] = text_retrieval[local_index]
+            skill_traces[example_index] = text_skill_traces[local_index]
 
         print("\n🤖  Running inference …")
         inference_start = time.perf_counter()
@@ -1996,6 +2122,8 @@ def main() -> None:
                     "release_gate_passed": release_gate["passed"],
                     "retrieval_used": retrieval_info.get("used", False),
                     "memory_used": retrieval_info.get("memory", {}).get("used", False),
+                    "skills_used": skill_info.get("used", False),
+                    "skill_names": settings["skill_names"],
                     "judge_model": judge_model,
                 },
             )
@@ -2035,6 +2163,7 @@ def main() -> None:
             "inference_batch_size": settings["inference_batch_size"],
             "judge_concurrency": settings["judge_concurrency"],
             "use_retrieval": settings["use_retrieval"],
+            "skill_names": settings["skill_names"],
             "metrics_only": settings["metrics_only"],
             "release_mode": settings["release_mode"],
             "fail_on_threshold_breach": settings["fail_on_threshold_breach"],
@@ -2042,6 +2171,7 @@ def main() -> None:
         "evaluation_source": evaluation_source,
         "retrieval": retrieval_info,
         "memory": retrieval_info.get("memory", {"enabled": False, "used": False}),
+        "skills": skill_info,
         "dream": dream_result,
         "system_prompts": {
             "evaluation_judge": judge_system_prompt_info,
@@ -2079,6 +2209,7 @@ def main() -> None:
                 "source": examples[i].get("source"),
                 "section": examples[i].get("section"),
                 "retrieval": retrieval_traces[i],
+                "skills": skill_traces[i],
                 "execution": execution_artifact["per_example"][i],
             }
             for i in range(len(examples))

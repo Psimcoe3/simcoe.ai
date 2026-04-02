@@ -1111,6 +1111,32 @@ def validate_workflow_registry_config(cfg: dict) -> None:
     require_file(manifest_path, "Workflow registry manifest")
 
 
+def validate_skill_registry_config(cfg: dict) -> None:
+    skill_registry = cfg.get("skill_registry")
+    if skill_registry is None:
+        return
+
+    if not isinstance(skill_registry, dict):
+        fail("skill_registry must be a mapping when present")
+
+    require_keys(
+        skill_registry,
+        "skill_registry",
+        {"enabled", "root_dir", "max_active_skills", "max_instruction_chars"},
+    )
+    require_bool(skill_registry["enabled"], "skill_registry.enabled")
+    root_dir = require_non_empty_string(skill_registry["root_dir"], "skill_registry.root_dir")
+    require_positive_int(
+        skill_registry["max_active_skills"],
+        "skill_registry.max_active_skills",
+    )
+    require_positive_int(
+        skill_registry["max_instruction_chars"],
+        "skill_registry.max_instruction_chars",
+    )
+    require_directory(root_dir, "Skill registry directory")
+
+
 def validate_agent_shell_config(cfg: dict) -> None:
     agent_shell = cfg.get("agent_shell")
     if agent_shell is None:
@@ -1210,6 +1236,7 @@ def validate_orchestration_config(cfg: dict) -> None:
     validate_context_providers_config(cfg)
     validate_hooks_config(cfg)
     validate_workflow_registry_config(cfg)
+    validate_skill_registry_config(cfg)
     validate_agent_shell_config(cfg)
 
 

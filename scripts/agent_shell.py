@@ -10,12 +10,14 @@ import copy
 import json
 import os
 from pathlib import Path
-import shlex
 from typing import Callable
 import uuid
 
 from dotenv import load_dotenv
 
+from agent_command_registry import execute_agent_command
+from agent_skill_registry import render_agent_skill_prompt, select_agent_skills
+from agent_tool_registry import execute_inferred_agent_tool
 from config_validation import (
     load_config,
     validate_agent_shell_config,
@@ -27,12 +29,6 @@ from config_validation import (
     validate_system_prompts_config,
 )
 from context_providers import build_context_provider_registry
-from deterministic_tool_utils import build_tool_error, build_tool_request
-from estimate_lookup import (
-    TOOL_NAME as ESTIMATE_LOOKUP_TOOL_NAME,
-    run_estimate_lookup_request,
-)
-from hook_runtime import apply_hook_stage
 from manifest_utils import current_utc_timestamp, read_json_file, write_json_file
 from orchestration_inspect import describe_context_providers
 from prompt_templates import (
@@ -41,26 +37,14 @@ from prompt_templates import (
 )
 from request_router import route_request
 from retrieval_utils import build_context_augmented_prompt
-from revit_entity_lookup import (
-    TOOL_NAME as REVIT_ENTITY_LOOKUP_TOOL_NAME,
-    run_revit_entity_lookup_request,
-)
 from runtime_contracts import (
     CONTEXT_PROVIDER_MEMORY,
     CONTEXT_PROVIDER_RETRIEVAL,
-    EXECUTION_STATUS_DENIED,
-    EXECUTION_STATUS_FAILED,
-    EXECUTION_STATUS_SUCCEEDED,
-    EXECUTION_SUBJECT_DETERMINISTIC_TOOL,
-    HOOK_STAGE_POST_DETERMINISTIC_TOOL,
-    HOOK_STAGE_PRE_DETERMINISTIC_TOOL,
     ROUTE_DETERMINISTIC_TOOL,
     ROUTE_RETRIEVAL,
     ROUTE_TEXT,
-    build_execution_envelope,
     summarize_execution_envelopes,
 )
-from workflow_registry import WorkflowRegistryError, get_workflow, list_workflows
 
 
 load_dotenv()
@@ -68,7 +52,6 @@ load_dotenv()
 SESSION_SCHEMA_VERSION = 1
 TURN_SCHEMA_VERSION = 1
 SUPPORTED_MODEL_ROUTES = {ROUTE_TEXT, ROUTE_RETRIEVAL}
-SUPPORTED_TOOL_NAMES = {ESTIMATE_LOOKUP_TOOL_NAME, REVIT_ENTITY_LOOKUP_TOOL_NAME}
 
 _SYSTEM_PROMPT = """\
 You are a grounded local operator assistant for simcoe.ai.
@@ -76,20 +59,6 @@ Use memory hints, retrieved context, and deterministic tool output as primary ev
 If the answer depends on information you were not given, say what is missing instead of inventing it.
 Keep answers concise, actionable, and explicit about assumptions.
 """
-
-HELP_TEXT = """Available commands:
-/help
-/exit
-/quit
-/session
-/route <instruction>
-/providers
-/workflow list
-/workflow show <name>
-
-Enter a normal prompt to run the routed shell flow.
-Use --session-id from the CLI to resume a saved session.
-""".strip()
 
 
 def resolve_agent_shell_settings(cfg: dict) -> dict:
@@ -134,6 +103,58 @@ def _session_transcript_path(settings: dict, session_id: str) -> Path:
     return Path(settings["transcripts_dir"]) / f"{session_id}.jsonl"
 
 
+def _normalized_session_skill_names(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            continue
+        candidate = item.strip()
+        if candidate in seen:
+            continue
+        cleaned.append(candidate)
+        seen.add(candidate)
+    return cleaned
+
+
+def _normalize_session_summary(summary: dict) -> tuple[dict, bool]:
+    normalized = copy.deepcopy(summary)
+    updated = False
+    for field_name in ("pinned_skills", "next_turn_skills", "last_skill_names"):
+        cleaned = _normalized_session_skill_names(normalized.get(field_name))
+        if normalized.get(field_name) != cleaned:
+            normalized[field_name] = cleaned
+            updated = True
+    return normalized, updated
+
+
+def persist_session_summary(settings: dict, session_summary: dict) -> dict:
+    normalized_summary, _ = _normalize_session_summary(session_summary)
+    write_json_file(
+        str(_session_summary_path(settings, normalized_summary["session_id"])),
+        normalized_summary,
+    )
+    return normalized_summary
+
+
+def update_session_skill_selection(
+    settings: dict,
+    session_summary: dict,
+    pinned_skill_names: list[str] | None,
+    next_turn_skill_names: list[str] | None,
+) -> dict:
+    updated_summary = copy.deepcopy(session_summary)
+    if pinned_skill_names is not None:
+        updated_summary["pinned_skills"] = _normalized_session_skill_names(pinned_skill_names)
+    if next_turn_skill_names is not None:
+        updated_summary["next_turn_skills"] = _normalized_session_skill_names(next_turn_skill_names)
+    updated_summary["updated_at"] = current_utc_timestamp()
+    return persist_session_summary(settings, updated_summary)
+
+
 def ensure_agent_shell_layout(settings: dict) -> None:
     Path(settings["root_dir"]).mkdir(parents=True, exist_ok=True)
     Path(settings["sessions_dir"]).mkdir(parents=True, exist_ok=True)
@@ -153,9 +174,12 @@ def initialize_session(
         summary_path = _session_summary_path(settings, session_id)
         if summary_path.is_file():
             summary = read_json_file(str(summary_path))
+            summary, summary_updated = _normalize_session_summary(summary)
             transcript_path = _session_transcript_path(settings, session_id)
             transcript_path.parent.mkdir(parents=True, exist_ok=True)
             transcript_path.touch(exist_ok=True)
+            if summary_updated:
+                persist_session_summary(settings, summary)
             return summary
 
     resolved_session_id = session_id or f"agent-shell-{uuid.uuid4().hex[:12]}"
@@ -179,6 +203,9 @@ def initialize_session(
         "last_route": None,
         "last_runtime_owner": None,
         "last_prompt": None,
+        "pinned_skills": [],
+        "next_turn_skills": [],
+        "last_skill_names": [],
         "system_prompt_metadata": copy.deepcopy(system_prompt_metadata),
     }
     write_json_file(str(_session_summary_path(settings, resolved_session_id)), summary)
@@ -318,62 +345,6 @@ def build_completion_fn(settings: dict) -> Callable[[list[dict]], str]:
     return complete
 
 
-def _infer_deterministic_tool_name(prompt: str, explicit_tool_name: str | None = None) -> str:
-    if explicit_tool_name in SUPPORTED_TOOL_NAMES:
-        return str(explicit_tool_name)
-
-    normalized_prompt = prompt.lower()
-    revit_markers = ("revit", "family type", "family and type", "subcategory")
-    if any(marker in normalized_prompt for marker in revit_markers):
-        return REVIT_ENTITY_LOOKUP_TOOL_NAME
-    return ESTIMATE_LOOKUP_TOOL_NAME
-
-
-def render_deterministic_tool_response(response: dict) -> str:
-    tool_name = str(response.get("tool_name") or "deterministic_tool")
-    if response.get("response_type") == "error":
-        message = response.get("error", {}).get("message") or "unknown error"
-        return f"{tool_name} failed: {message}"
-
-    results = response.get("results") if isinstance(response.get("results"), list) else []
-    lines = [f"{tool_name} returned {len(results)} result(s)."]
-    for index, result in enumerate(results[:3], start=1):
-        primary_label = (
-            result.get("description")
-            or result.get("family_and_type")
-            or result.get("family_name")
-            or result.get("lookup_key")
-            or result.get("record_id")
-            or "result"
-        )
-        details: list[str] = []
-        if result.get("manufacturer"):
-            details.append(str(result["manufacturer"]))
-        if result.get("part_number"):
-            details.append(f"part={result['part_number']}")
-        estimate = result.get("estimate")
-        if isinstance(estimate, dict) and estimate.get("installed_total") is not None:
-            details.append(f"installed_total={estimate['installed_total']}")
-        quantity_rollup = result.get("quantity_rollup")
-        if (
-            isinstance(quantity_rollup, dict)
-            and quantity_rollup.get("supported")
-            and isinstance(quantity_rollup.get("totals"), dict)
-            and quantity_rollup["totals"].get("installed_total") is not None
-        ):
-            details.append(f"rolled_installed_total={quantity_rollup['totals']['installed_total']}")
-
-        line = f"{index}. {primary_label}"
-        if details:
-            line += " — " + ", ".join(details)
-        lines.append(line)
-
-    warnings = response.get("warnings") if isinstance(response.get("warnings"), list) else []
-    if warnings:
-        lines.append("Warnings: " + "; ".join(str(item) for item in warnings if str(item).strip()))
-    return "\n".join(lines)
-
-
 def execute_deterministic_tool_turn(
     cfg: dict,
     prompt: str,
@@ -381,121 +352,12 @@ def execute_deterministic_tool_turn(
     route_name: str,
     explicit_tool_name: str | None = None,
 ) -> dict:
-    tool_name = _infer_deterministic_tool_name(prompt, explicit_tool_name=explicit_tool_name)
-    request = build_tool_request(tool_name, query=prompt)
-
-    pre_hook = apply_hook_stage(
+    return execute_inferred_agent_tool(
         cfg,
-        HOOK_STAGE_PRE_DETERMINISTIC_TOOL,
-        {
-            "route": route_name,
-            "tool_name": tool_name,
-            "request": copy.deepcopy(request),
-        },
+        prompt,
+        route_name=route_name,
+        explicit_tool_name=explicit_tool_name,
     )
-    hook_events = list(pre_hook["events"])
-    hook_annotations = dict(pre_hook["annotations"])
-
-    if pre_hook["denied"]:
-        denial_message = pre_hook["deny_reason"] or "Deterministic tool denied by hook"
-        response = build_tool_error(
-            tool_name, request=request, message=denial_message, code="denied"
-        )
-        execution_envelope = build_execution_envelope(
-            EXECUTION_SUBJECT_DETERMINISTIC_TOOL,
-            tool_name,
-            EXECUTION_STATUS_DENIED,
-            owner="geometry_rules",
-            details={
-                "request_id": request.get("request_id"),
-                "response_type": response.get("response_type"),
-                "result_count": 0,
-            },
-            hook_annotations=hook_annotations,
-            hook_events=hook_events,
-        )
-        return {
-            "tool_name": tool_name,
-            "request": request,
-            "response": response,
-            "assistant_response": render_deterministic_tool_response(response),
-            "execution_envelope": execution_envelope,
-        }
-
-    hook_payload = pre_hook["payload"]
-    if isinstance(hook_payload.get("tool_name"), str):
-        tool_name = hook_payload["tool_name"]
-    if isinstance(hook_payload.get("request"), dict):
-        request = hook_payload["request"]
-
-    try:
-        if tool_name == ESTIMATE_LOOKUP_TOOL_NAME:
-            response = run_estimate_lookup_request(cfg, request)
-        elif tool_name == REVIT_ENTITY_LOOKUP_TOOL_NAME:
-            response = run_revit_entity_lookup_request(cfg, request)
-        else:
-            raise ValueError(f"Unsupported deterministic tool: {tool_name}")
-
-        post_hook = apply_hook_stage(
-            cfg,
-            HOOK_STAGE_POST_DETERMINISTIC_TOOL,
-            {
-                "route": route_name,
-                "tool_name": tool_name,
-                "request": copy.deepcopy(request),
-                "response": copy.deepcopy(response),
-            },
-        )
-        hook_events.extend(post_hook["events"])
-        hook_annotations = dict(post_hook["annotations"])
-        if post_hook["denied"]:
-            denial_message = post_hook["deny_reason"] or "Deterministic tool denied by hook"
-            response = build_tool_error(
-                tool_name, request=request, message=denial_message, code="denied"
-            )
-            status = EXECUTION_STATUS_DENIED
-        else:
-            tool_payload = post_hook["payload"]
-            if isinstance(tool_payload.get("tool_name"), str):
-                tool_name = tool_payload["tool_name"]
-            if isinstance(tool_payload.get("request"), dict):
-                request = tool_payload["request"]
-            if isinstance(tool_payload.get("response"), dict):
-                response = tool_payload["response"]
-            status = (
-                EXECUTION_STATUS_FAILED
-                if response.get("response_type") == "error"
-                else EXECUTION_STATUS_SUCCEEDED
-            )
-    except Exception as exc:
-        response = build_tool_error(
-            tool_name,
-            request=request,
-            message=str(exc),
-            code="tool_execution_failed",
-        )
-        status = EXECUTION_STATUS_FAILED
-
-    execution_envelope = build_execution_envelope(
-        EXECUTION_SUBJECT_DETERMINISTIC_TOOL,
-        tool_name,
-        status,
-        owner=str(response.get("runtime_owner") or "geometry_rules"),
-        details={
-            "request_id": request.get("request_id"),
-            "response_type": response.get("response_type"),
-            "result_count": int(response.get("result_count", 0) or 0),
-        },
-        hook_annotations=hook_annotations,
-        hook_events=hook_events,
-    )
-    return {
-        "tool_name": tool_name,
-        "request": request,
-        "response": response,
-        "assistant_response": render_deterministic_tool_response(response),
-        "execution_envelope": execution_envelope,
-    }
 
 
 def run_agent_turn(
@@ -509,6 +371,8 @@ def run_agent_turn(
     section: str | None = None,
     attachments: list[str] | None = None,
     explicit_tool_name: str | None = None,
+    explicit_skill_names: list[str] | None = None,
+    pinned_skill_names: list[str] | None = None,
     completion_fn: Callable[[list[dict]], str] | None = None,
     turn_index: int = 0,
     providers: list[dict] | None = None,
@@ -543,6 +407,8 @@ def run_agent_turn(
             "route_decision": None,
             "context_sections": [],
             "provider_traces": [],
+            "skills": [],
+            "skill_prompt": None,
             "tool": None,
             "execution": {
                 "schema_version": 1,
@@ -556,6 +422,8 @@ def run_agent_turn(
     route_decision: dict | None = None
     context_sections: list[tuple[str, str]] = []
     provider_traces: list[dict] = []
+    matched_skills: list[dict] = []
+    skill_prompt: str | None = None
     tool_result: dict | None = None
     prompt_with_context: str | None = None
     error: str | None = None
@@ -594,8 +462,19 @@ def run_agent_turn(
                 providers=providers,
                 provider_metadata=provider_metadata,
             )
+            matched_skills = select_agent_skills(
+                cfg,
+                normalized_prompt,
+                route_name=route_name,
+                explicit_skill_names=explicit_skill_names,
+                pinned_skill_names=pinned_skill_names,
+            )
+            instruction_prompt = build_instruction_prompt(normalized_prompt)
+            skill_prompt = render_agent_skill_prompt(cfg, matched_skills)
+            if skill_prompt:
+                instruction_prompt = f"{skill_prompt}\n\n{instruction_prompt}"
             prompt_with_context = build_context_augmented_prompt(
-                build_instruction_prompt(normalized_prompt),
+                instruction_prompt,
                 context_sections=context_sections,
             )
             complete = completion_fn or build_completion_fn(settings)
@@ -669,6 +548,20 @@ def run_agent_turn(
         "prompt_with_context": prompt_with_context,
         "context_sections": serialized_context_sections,
         "provider_traces": copy.deepcopy(provider_traces),
+        "skills": [
+            {
+                "name": skill["name"],
+                "title": skill["title"],
+                "summary": skill["summary"],
+                "path": skill["path"],
+                "relative_path": skill["relative_path"],
+                "match_score": skill["match_score"],
+                "matched_terms": copy.deepcopy(skill["matched_terms"]),
+                "selection_sources": copy.deepcopy(skill["selection_sources"]),
+            }
+            for skill in matched_skills
+        ],
+        "skill_prompt": skill_prompt,
         "tool": (
             {
                 "name": tool_result["tool_name"],
@@ -694,6 +587,7 @@ def record_turn(
     turn_payload: dict,
     *,
     system_prompt_metadata: dict,
+    clear_next_turn_skills: bool = False,
 ) -> dict:
     transcript_path = _session_transcript_path(settings, session_summary["session_id"])
     transcript_path.parent.mkdir(parents=True, exist_ok=True)
@@ -713,7 +607,21 @@ def record_turn(
     updated_summary["last_route"] = turn_payload.get("route")
     updated_summary["last_runtime_owner"] = turn_payload.get("runtime_owner")
     updated_summary["last_prompt"] = turn_payload.get("user", {}).get("prompt")
+    updated_summary["last_skill_names"] = [
+        skill.get("name")
+        for skill in turn_payload.get("skills", [])
+        if isinstance(skill, dict) and isinstance(skill.get("name"), str)
+    ]
     updated_summary["system_prompt_metadata"] = copy.deepcopy(system_prompt_metadata)
+    updated_summary["pinned_skills"] = _normalized_session_skill_names(
+        updated_summary.get("pinned_skills")
+    )
+    if clear_next_turn_skills:
+        updated_summary["next_turn_skills"] = []
+    else:
+        updated_summary["next_turn_skills"] = _normalized_session_skill_names(
+            updated_summary.get("next_turn_skills")
+        )
 
     route_counts = dict(updated_summary.get("route_counts") or {})
     route_name = turn_payload.get("route")
@@ -745,6 +653,11 @@ def describe_agent_shell_session(settings: dict, session_id: str, *, tail: int =
                 "runtime_owner": turn.get("runtime_owner"),
                 "user_prompt": turn.get("user", {}).get("prompt"),
                 "assistant_response": turn.get("assistant", {}).get("response"),
+                "skill_names": [
+                    skill.get("name")
+                    for skill in turn.get("skills", [])
+                    if isinstance(skill, dict) and isinstance(skill.get("name"), str)
+                ],
                 "error": turn.get("error"),
             }
         )
@@ -761,56 +674,15 @@ def handle_shell_command(
     session_summary: dict,
     raw_prompt: str,
 ) -> dict | None:
-    if not raw_prompt.startswith("/"):
-        return None
-
-    try:
-        parts = shlex.split(raw_prompt)
-    except ValueError as exc:
-        return {"exit": False, "response": f"Command parse error: {exc}"}
-
-    if not parts:
-        return {"exit": False, "response": HELP_TEXT}
-
-    command = parts[0].lower()
-    if command in {"/exit", "/quit"}:
-        return {"exit": True, "response": "Exiting agent shell."}
-    if command == "/help":
-        return {"exit": False, "response": HELP_TEXT}
-    if command == "/session":
-        payload = describe_agent_shell_session(settings, session_summary["session_id"], tail=3)
-        return {"exit": False, "response": json.dumps(payload, indent=2, sort_keys=False)}
-    if command == "/providers":
-        payload = describe_context_providers(cfg)
-        return {"exit": False, "response": json.dumps(payload, indent=2, sort_keys=False)}
-    if command == "/route":
-        if len(parts) < 2:
-            return {"exit": False, "response": "Usage: /route <instruction>"}
-        instruction = raw_prompt.split(None, 1)[1]
-        try:
-            payload = route_request(cfg, instruction)
-        except ValueError as exc:
-            return {"exit": False, "response": f"Routing error: {exc}"}
-        return {"exit": False, "response": json.dumps(payload, indent=2, sort_keys=False)}
-    if command == "/workflow":
-        if len(parts) < 2:
-            return {"exit": False, "response": "Usage: /workflow list | /workflow show <name>"}
-        subcommand = parts[1].lower()
-        try:
-            if subcommand == "list":
-                payload = list_workflows(cfg)
-            elif subcommand == "show" and len(parts) >= 3:
-                payload = get_workflow(cfg, parts[2])
-            else:
-                return {
-                    "exit": False,
-                    "response": "Usage: /workflow list | /workflow show <name>",
-                }
-        except WorkflowRegistryError as exc:
-            return {"exit": False, "response": str(exc)}
-        return {"exit": False, "response": json.dumps(payload, indent=2, sort_keys=False)}
-
-    return {"exit": False, "response": f"Unknown command '{command}'. Use /help."}
+    return execute_agent_command(
+        cfg,
+        settings,
+        session_summary,
+        raw_prompt,
+        describe_session_fn=describe_agent_shell_session,
+        describe_context_providers_fn=describe_context_providers,
+        update_session_skills_fn=update_session_skill_selection,
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -834,6 +706,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--tool-name",
         help="Optional explicit deterministic tool name override.",
+    )
+    parser.add_argument(
+        "--skill",
+        action="append",
+        default=[],
+        help="Optional explicit local skill id or alias. Can be repeated for one-shot prompts.",
     )
     parser.add_argument(
         "--json",
@@ -904,6 +782,9 @@ def main() -> int:
     complete = build_completion_fn(settings)
 
     if args.prompt:
+        pending_next_turn_skills = _normalized_session_skill_names(
+            session_summary.get("next_turn_skills")
+        )
         history_messages = _history_messages_from_turns(
             read_session_turns(settings, session_summary["session_id"]),
             int(settings["max_turns"]),
@@ -918,6 +799,10 @@ def main() -> int:
             section=args.section,
             attachments=args.attachment,
             explicit_tool_name=args.tool_name,
+            explicit_skill_names=list(args.skill) + pending_next_turn_skills,
+            pinned_skill_names=_normalized_session_skill_names(
+                session_summary.get("pinned_skills")
+            ),
             completion_fn=complete,
             turn_index=int(session_summary.get("turn_count", 0)),
             providers=providers,
@@ -928,6 +813,7 @@ def main() -> int:
             session_summary,
             turn_payload,
             system_prompt_metadata=system_prompt_metadata,
+            clear_next_turn_skills=bool(pending_next_turn_skills),
         )
 
         if args.json:
@@ -961,11 +847,16 @@ def main() -> int:
 
         command_result = handle_shell_command(cfg, settings, session_summary, prompt)
         if command_result is not None:
+            if isinstance(command_result.get("session_summary"), dict):
+                session_summary = command_result["session_summary"]
             print(command_result["response"])
             if command_result.get("exit"):
                 break
             continue
 
+        pending_next_turn_skills = _normalized_session_skill_names(
+            session_summary.get("next_turn_skills")
+        )
         history_messages = _history_messages_from_turns(
             read_session_turns(settings, session_summary["session_id"]),
             int(settings["max_turns"]),
@@ -976,6 +867,10 @@ def main() -> int:
             prompt,
             system_prompt=system_prompt,
             history_messages=history_messages,
+            explicit_skill_names=pending_next_turn_skills,
+            pinned_skill_names=_normalized_session_skill_names(
+                session_summary.get("pinned_skills")
+            ),
             completion_fn=complete,
             turn_index=int(session_summary.get("turn_count", 0)),
             providers=providers,
@@ -986,6 +881,7 @@ def main() -> int:
             session_summary,
             turn_payload,
             system_prompt_metadata=system_prompt_metadata,
+            clear_next_turn_skills=bool(pending_next_turn_skills),
         )
         print(turn_payload["assistant"]["response"])
 

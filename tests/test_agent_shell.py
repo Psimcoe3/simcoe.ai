@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from agent_shell import (
+    handle_shell_command,
     describe_agent_shell_session,
     initialize_session,
     read_session_turns,
@@ -24,6 +25,65 @@ def _base_cfg(tmp_path: Path) -> dict:
     retrieval_corpus = tmp_path / "retrieval.jsonl"
     estimate_index = tmp_path / "estimate_index.jsonl"
     revit_index = tmp_path / "revit_index.jsonl"
+    skills_dir = tmp_path / "skills"
+
+    (skills_dir / "electrical-estimating.md").parent.mkdir(parents=True, exist_ok=True)
+    (skills_dir / "electrical-estimating.md").write_text(
+        "\n".join(
+            [
+                "---",
+                "id: electrical-estimating",
+                "title: Electrical Estimating",
+                "summary: Structure estimate answers around labor and material assumptions.",
+                "aliases:",
+                "  - estimate",
+                "  - quote",
+                "tags:",
+                "  - labor",
+                "  - material",
+                "route_fit:",
+                "  - text",
+                "  - retrieval",
+                "triggers:",
+                "  - estimate",
+                "  - labor",
+                "  - material",
+                "use_when: []",
+                "avoid_when: []",
+                "---",
+                "Separate labor, material, and assumptions when discussing an estimate.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (skills_dir / "revit-family-reference.md").write_text(
+        "\n".join(
+            [
+                "---",
+                "id: revit-family-reference",
+                "title: Revit Family Reference",
+                "summary: Present exact Revit family and type labels from grounded records.",
+                "aliases:",
+                "  - revit",
+                "tags:",
+                "  - family",
+                "  - type",
+                "route_fit:",
+                "  - text",
+                "  - deterministic_tool",
+                "triggers:",
+                "  - revit",
+                "  - family type",
+                "use_when: []",
+                "avoid_when: []",
+                "---",
+                "Prefer exact family and type labels and say when grounded data is missing.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
     _write_jsonl(
         retrieval_corpus,
@@ -148,6 +208,12 @@ def _base_cfg(tmp_path: Path) -> dict:
             "include_retrieval_in_text_routes": False,
             "persist_context_sections": True,
         },
+        "skill_registry": {
+            "enabled": True,
+            "root_dir": str(skills_dir),
+            "max_active_skills": 2,
+            "max_instruction_chars": 1200,
+        },
         "system_prompts": {
             "library_path": "prompts/system_prompt_templates.yaml",
             "agent_shell": {"template_id": "interactive-grounded-operator"},
@@ -235,3 +301,179 @@ def test_agent_shell_session_persists_and_reloads_turns(tmp_path: Path) -> None:
     assert payload["recent_turns"][0]["assistant_response"] == "Stored answer"
     assert turns[0]["assistant"]["response"] == "Stored answer"
     assert turns[0]["route"] == "text"
+    assert payload["session"]["last_skill_names"] == []
+
+
+def test_run_agent_turn_attaches_matching_skill_guidance(tmp_path: Path) -> None:
+    cfg = _base_cfg(tmp_path)
+    settings = resolve_agent_shell_settings(cfg)
+    system_prompt, _ = resolve_agent_shell_system_prompt(cfg)
+    captured_messages: dict[str, list[dict]] = {}
+
+    def fake_completion(messages: list[dict]) -> str:
+        captured_messages["messages"] = messages
+        return "Structured estimate answer"
+
+    turn = run_agent_turn(
+        cfg,
+        settings,
+        "Explain how to structure an electrical estimate with labor and material assumptions.",
+        system_prompt=system_prompt,
+        history_messages=[],
+        completion_fn=fake_completion,
+    )
+
+    assert turn["route"] == "text"
+    assert turn["skills"][0]["name"] == "electrical-estimating"
+    assert turn["skills"][0]["selection_sources"] == ["matched"]
+    assert turn["skill_prompt"] is not None
+    assert "### Active Skills:" in captured_messages["messages"][-1]["content"]
+    assert "Electrical Estimating" in captured_messages["messages"][-1]["content"]
+
+
+def test_run_agent_turn_applies_explicit_and_pinned_skill_selection(tmp_path: Path) -> None:
+    cfg = _base_cfg(tmp_path)
+    settings = resolve_agent_shell_settings(cfg)
+    system_prompt, _ = resolve_agent_shell_system_prompt(cfg)
+    captured_messages: dict[str, list[dict]] = {}
+
+    def fake_completion(messages: list[dict]) -> str:
+        captured_messages["messages"] = messages
+        return "Structured answer"
+
+    turn = run_agent_turn(
+        cfg,
+        settings,
+        "Explain how to structure an estimate with labor and material assumptions.",
+        system_prompt=system_prompt,
+        history_messages=[],
+        explicit_skill_names=["revit"],
+        pinned_skill_names=["estimate"],
+        completion_fn=fake_completion,
+    )
+
+    assert [skill["name"] for skill in turn["skills"]] == [
+        "revit-family-reference",
+        "electrical-estimating",
+    ]
+    assert turn["skills"][0]["selection_sources"] == ["explicit"]
+    assert turn["skills"][1]["selection_sources"] == ["pinned", "matched"]
+    assert "Revit Family Reference" in captured_messages["messages"][-1]["content"]
+
+
+def test_handle_shell_command_lists_and_shows_tools(tmp_path: Path) -> None:
+    cfg = _base_cfg(tmp_path)
+    settings = resolve_agent_shell_settings(cfg)
+    system_prompt, metadata = resolve_agent_shell_system_prompt(cfg)
+    session = initialize_session(
+        settings,
+        config_path="config.yaml",
+        system_prompt_metadata=metadata,
+    )
+
+    list_result = handle_shell_command(cfg, settings, session, "/tools")
+    list_payload = json.loads(list_result["response"])
+    show_result = handle_shell_command(cfg, settings, session, "/tools show estimate")
+    show_payload = json.loads(show_result["response"])
+
+    assert list_result["exit"] is False
+    assert list_payload["tool_count"] == 2
+    assert list_payload["enabled_count"] == 2
+    assert [tool["name"] for tool in list_payload["tools"]] == [
+        "estimate_lookup",
+        "revit_entity_lookup",
+    ]
+    assert show_payload["name"] == "estimate_lookup"
+    assert show_payload["kind"] == "deterministic_tool"
+    assert show_payload["enabled"] is True
+
+
+def test_handle_shell_command_lists_and_shows_skills(tmp_path: Path) -> None:
+    cfg = _base_cfg(tmp_path)
+    settings = resolve_agent_shell_settings(cfg)
+    system_prompt, metadata = resolve_agent_shell_system_prompt(cfg)
+    session = initialize_session(
+        settings,
+        config_path="config.yaml",
+        system_prompt_metadata=metadata,
+    )
+
+    list_result = handle_shell_command(cfg, settings, session, "/skills")
+    list_payload = json.loads(list_result["response"])
+    show_result = handle_shell_command(cfg, settings, session, "/skills show estimate")
+    show_payload = json.loads(show_result["response"])
+
+    assert list_result["exit"] is False
+    assert list_payload["skill_count"] == 2
+    assert [skill["name"] for skill in list_payload["skills"]] == [
+        "electrical-estimating",
+        "revit-family-reference",
+    ]
+    assert show_payload["name"] == "electrical-estimating"
+    assert "Separate labor, material, and assumptions" in show_payload["instructions"]
+
+
+def test_handle_shell_command_can_pin_and_queue_skills(tmp_path: Path) -> None:
+    cfg = _base_cfg(tmp_path)
+    settings = resolve_agent_shell_settings(cfg)
+    _, metadata = resolve_agent_shell_system_prompt(cfg)
+    session = initialize_session(
+        settings,
+        config_path="config.yaml",
+        system_prompt_metadata=metadata,
+    )
+
+    pinned = handle_shell_command(cfg, settings, session, "/skills pin estimate")
+    pinned_payload = json.loads(pinned["response"])
+    queued = handle_shell_command(
+        cfg,
+        settings,
+        pinned["session_summary"],
+        "/skills use revit",
+    )
+    queued_payload = json.loads(queued["response"])
+    cleared = handle_shell_command(
+        cfg,
+        settings,
+        queued["session_summary"],
+        "/skills clear",
+    )
+    cleared_payload = json.loads(cleared["response"])
+
+    assert pinned_payload["pinned_skill_names"] == ["electrical-estimating"]
+    assert queued_payload["next_turn_skill_names"] == ["revit-family-reference"]
+    assert cleared_payload["pinned_skill_names"] == []
+    assert cleared_payload["next_turn_skill_names"] == []
+
+
+def test_handle_shell_command_lists_and_shows_commands(tmp_path: Path) -> None:
+    cfg = _base_cfg(tmp_path)
+    settings = resolve_agent_shell_settings(cfg)
+    system_prompt, metadata = resolve_agent_shell_system_prompt(cfg)
+    session = initialize_session(
+        settings,
+        config_path="config.yaml",
+        system_prompt_metadata=metadata,
+    )
+
+    list_result = handle_shell_command(cfg, settings, session, "/commands")
+    list_payload = json.loads(list_result["response"])
+    show_result = handle_shell_command(cfg, settings, session, "/commands show route")
+    show_payload = json.loads(show_result["response"])
+
+    assert list_result["exit"] is False
+    assert list_payload["command_count"] == 9
+    assert [command["name"] for command in list_payload["commands"]] == [
+        "help",
+        "exit",
+        "session",
+        "commands",
+        "skills",
+        "tools",
+        "providers",
+        "route",
+        "workflow",
+    ]
+    assert show_payload["name"] == "route"
+    assert show_payload["kind"] == "shell_command"
+    assert "/route <instruction>" in show_payload["usage_examples"]

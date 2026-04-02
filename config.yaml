@@ -222,6 +222,12 @@ workflow_registry:
   enabled: true
   manifest_path: "workflows/registry.yaml"
 
+skill_registry:
+  enabled: true
+  root_dir: "skills"
+  max_active_skills: 2
+  max_instruction_chars: 2400
+
 agent_shell:
   enabled: true
   provider: "ollama"

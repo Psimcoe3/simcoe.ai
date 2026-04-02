@@ -50,6 +50,7 @@ def test_build_example_from_benchmark_row_infers_retrieval_route() -> None:
             "instruction": "Summarize the electrical construction reference source Module Nine.",
             "source": "NCCER Electrical Guides / NCCER Level 1 Trainee Guide",
             "response": "A summary",
+            "skill_names": ["electrical-estimating", "electrical-estimating"],
         },
         _base_cfg(),
         multimodal_enabled=False,
@@ -58,6 +59,7 @@ def test_build_example_from_benchmark_row_infers_retrieval_route() -> None:
     assert example["route"] == "retrieval"
     assert example["runtime_owner"] == "retrieval"
     assert example["routing_decision"]["resolved_route"] == "retrieval"
+    assert example["skill_names"] == ["electrical-estimating"]
 
 
 def test_build_example_from_benchmark_row_blocks_drawing_sheet_without_runtime() -> None:

@@ -52,12 +52,12 @@ GOLDEN_SOURCE      ?= $(RETRIEVAL_SOURCE)
 GOLDEN_SPEC        ?= evals/golden_electrician_spec.json
 GOLDEN_OUT         ?= evals/golden_electrician.jsonl
 GOLDEN_MANIFEST    ?= evals/golden_electrician.manifest.json
-QUALITY_PATHS      ?= scripts/agent_shell.py scripts/check_env.py scripts/context_providers.py scripts/deterministic_tool_utils.py scripts/hook_runtime.py scripts/indexed_memory.py scripts/orchestration_inspect.py scripts/prompt_templates.py scripts/request_router.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/runtime_contracts.py scripts/train.py scripts/validate_release_artifacts.py scripts/package_release_bundle.py scripts/workflow_registry.py tests
+QUALITY_PATHS      ?= scripts/agent_command_registry.py scripts/agent_shell.py scripts/agent_skill_registry.py scripts/check_env.py scripts/context_providers.py scripts/deterministic_tool_utils.py scripts/hook_runtime.py scripts/indexed_memory.py scripts/orchestration_inspect.py scripts/prompt_templates.py scripts/request_router.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/runtime_contracts.py scripts/train.py scripts/validate_release_artifacts.py scripts/package_release_bundle.py scripts/workflow_registry.py tests
 TEST_PATHS         ?= tests
 ARGS               ?=
 WORKFLOW           ?=
 
-.PHONY: all quality quality-release release-bundle release-verify lint test check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release agent-shell route-request memory-add memory-query memory-import memory-consolidate memory-rebuild-index workflow-list workflow-show workflow-validate workflow-run inspect-hooks inspect-providers inspect-execution inspect-shell source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest revit-lookup estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
+.PHONY: all quality quality-release release-bundle release-verify lint test check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release agent-shell route-request memory-add memory-query memory-import memory-consolidate memory-rebuild-index workflow-list workflow-show workflow-validate workflow-run inspect-hooks inspect-providers inspect-commands inspect-skills inspect-tools inspect-execution inspect-shell source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest revit-lookup estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -118,13 +118,13 @@ $(GGUF_Q4): $(MERGED_DIR)/config.json
 	@echo "✅  GGUF Q4_K_M ready: $(GGUF_Q4)"
 
 evaluate: ## Score outputs with ROUGE, exact match, and LLM-as-judge
-	$(PYTHON) scripts/evaluate.py --config $(CONFIG)
+	$(PYTHON) scripts/evaluate.py --config $(CONFIG) $(ARGS)
 
 evaluate-quick: ## Run a faster metrics-only evaluation profile
-	$(PYTHON) scripts/evaluate.py --config $(CONFIG) --quick --metrics_only
+	$(PYTHON) scripts/evaluate.py --config $(CONFIG) --quick --metrics_only $(ARGS)
 
 evaluate-release: ## Evaluate and fail if configured release thresholds are not met
-	$(PYTHON) scripts/evaluate.py --config $(CONFIG) --release
+	$(PYTHON) scripts/evaluate.py --config $(CONFIG) --release $(ARGS)
 
 agent-shell: ## Start the local agent shell (pass one-shot prompts or session args via ARGS)
 	$(PYTHON) scripts/agent_shell.py --config $(CONFIG) $(ARGS)
@@ -172,6 +172,15 @@ inspect-hooks: ## Inspect configured hooks for the selected config
 
 inspect-providers: ## Inspect configured context providers for the selected config
 	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) providers
+
+inspect-commands: ## Inspect local agent shell command metadata (pass --command-name via ARGS for one command)
+	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) commands $(ARGS)
+
+inspect-skills: ## Inspect local markdown skill metadata (pass --skill-name via ARGS for one skill)
+	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) skills $(ARGS)
+
+inspect-tools: ## Inspect local agent tool metadata (pass --tool-name via ARGS for one tool)
+	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) tools $(ARGS)
 
 inspect-execution: ## Inspect saved execution summary from evaluation results (pass --results via ARGS if needed)
 	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) execution $(ARGS)
