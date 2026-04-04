@@ -5,6 +5,7 @@ from copy import deepcopy
 import pytest
 
 from config_validation import (
+    validate_agent_registry_config,
     validate_agent_task_manager_config,
     validate_agent_shell_config,
     validate_context_providers_config,
@@ -395,6 +396,37 @@ def test_validate_skill_registry_config_rejects_missing_dir(
     assert "Skill registry directory not found" in captured.out
 
 
+def test_validate_agent_registry_config_accepts_existing_dir(tmp_path) -> None:
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir(parents=True, exist_ok=True)
+
+    validate_agent_registry_config(
+        {
+            "agent_registry": {
+                "enabled": True,
+                "root_dir": str(agents_dir),
+            }
+        }
+    )
+
+
+def test_validate_agent_registry_config_rejects_missing_dir(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        validate_agent_registry_config(
+            {
+                "agent_registry": {
+                    "enabled": True,
+                    "root_dir": "does/not/exist",
+                }
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert "Agent registry directory not found" in captured.out
+
+
 def test_validate_agent_task_manager_config_accepts_scaffold(tmp_path) -> None:
     root_dir = tmp_path / "agent_tasks"
 
@@ -405,6 +437,7 @@ def test_validate_agent_task_manager_config_accepts_scaffold(tmp_path) -> None:
                 "root_dir": str(root_dir),
                 "tasks_dir": str(root_dir / "tasks"),
                 "logs_dir": str(root_dir / "logs"),
+                "transcripts_dir": str(root_dir / "transcripts"),
             }
         }
     )
@@ -424,6 +457,7 @@ def test_validate_agent_task_manager_config_rejects_overlapping_dirs(
                     "root_dir": str(root_dir),
                     "tasks_dir": str(root_dir / "tasks"),
                     "logs_dir": str(root_dir / "tasks"),
+                    "transcripts_dir": str(root_dir / "transcripts"),
                 }
             }
         )
@@ -431,6 +465,32 @@ def test_validate_agent_task_manager_config_rejects_overlapping_dirs(
     captured = capsys.readouterr()
     assert (
         "agent_task_manager.tasks_dir and agent_task_manager.logs_dir must be different"
+        in captured.out
+    )
+
+
+def test_validate_agent_task_manager_config_rejects_overlapping_transcript_dir(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path,
+) -> None:
+    root_dir = tmp_path / "agent_tasks"
+
+    with pytest.raises(SystemExit):
+        validate_agent_task_manager_config(
+            {
+                "agent_task_manager": {
+                    "enabled": True,
+                    "root_dir": str(root_dir),
+                    "tasks_dir": str(root_dir / "tasks"),
+                    "logs_dir": str(root_dir / "logs"),
+                    "transcripts_dir": str(root_dir / "logs"),
+                }
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert (
+        "agent_task_manager.logs_dir and agent_task_manager.transcripts_dir must be different"
         in captured.out
     )
 
@@ -544,6 +604,7 @@ def test_validate_agent_shell_config_accepts_scaffold() -> None:
                 "max_turns": 40,
                 "temperature": 0.2,
                 "max_output_tokens": 512,
+                "history_turn_window": 6,
                 "ollama_base_url": "http://localhost:11434/v1",
                 "openai_api_key_env": "OPENAI_API_KEY",
                 "include_memory_in_text_routes": False,
@@ -572,6 +633,7 @@ def test_validate_agent_shell_config_rejects_unknown_provider(
                     "max_turns": 40,
                     "temperature": 0.2,
                     "max_output_tokens": 512,
+                    "history_turn_window": 6,
                     "ollama_base_url": "http://localhost:11434/v1",
                     "openai_api_key_env": "OPENAI_API_KEY",
                     "include_memory_in_text_routes": False,
@@ -603,6 +665,7 @@ def test_validate_agent_shell_config_requires_retrieval_for_text_route_injection
                     "max_turns": 40,
                     "temperature": 0.2,
                     "max_output_tokens": 512,
+                    "history_turn_window": 6,
                     "ollama_base_url": "http://localhost:11434/v1",
                     "openai_api_key_env": "OPENAI_API_KEY",
                     "include_memory_in_text_routes": False,
@@ -614,6 +677,38 @@ def test_validate_agent_shell_config_requires_retrieval_for_text_route_injection
 
     captured = capsys.readouterr()
     assert "agent_shell.include_retrieval_in_text_routes requires retrieval.enabled" in captured.out
+
+
+def test_validate_agent_shell_config_rejects_non_positive_history_turn_window(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        validate_agent_shell_config(
+            {
+                "retrieval": {"enabled": False},
+                "memory": {"enabled": False},
+                "agent_shell": {
+                    "enabled": True,
+                    "provider": "ollama",
+                    "model": "simcoe",
+                    "root_dir": "data/agent_shell",
+                    "sessions_dir": "data/agent_shell/sessions",
+                    "transcripts_dir": "data/agent_shell/transcripts",
+                    "max_turns": 40,
+                    "temperature": 0.2,
+                    "max_output_tokens": 512,
+                    "history_turn_window": 0,
+                    "ollama_base_url": "http://localhost:11434/v1",
+                    "openai_api_key_env": "OPENAI_API_KEY",
+                    "include_memory_in_text_routes": False,
+                    "include_retrieval_in_text_routes": False,
+                    "persist_context_sections": True,
+                },
+            }
+        )
+
+    captured = capsys.readouterr()
+    assert "agent_shell.history_turn_window must be a positive integer" in captured.out
 
 
 def test_validate_system_prompts_config_accepts_builtin_templates() -> None:

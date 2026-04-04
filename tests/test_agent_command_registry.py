@@ -43,6 +43,39 @@ def _write_skill(path: Path, *, skill_id: str, title: str, summary: str, trigger
     )
 
 
+def _write_agent(
+    path: Path,
+    *,
+    agent_id: str,
+    title: str,
+    summary: str,
+    alias: str,
+    instructions: str,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(
+            [
+                "---",
+                f"id: {agent_id}",
+                f"title: {title}",
+                f"summary: {summary}",
+                "aliases:",
+                f"  - {alias}",
+                "skill_names: []",
+                "allowed_routes:",
+                "  - text",
+                "use_when: []",
+                "avoid_when: []",
+                "---",
+                instructions,
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_list_agent_commands_reports_registry_order_and_aliases() -> None:
     commands = list_agent_commands()
 
@@ -52,6 +85,7 @@ def test_list_agent_commands_reports_registry_order_and_aliases() -> None:
         "session",
         "commands",
         "skills",
+        "agents",
         "tools",
         "providers",
         "route",
@@ -94,7 +128,7 @@ def test_execute_agent_command_lists_and_shows_commands() -> None:
 
     payload = json.loads(result["response"])
     detail_payload = json.loads(detail["response"])
-    assert payload["command_count"] == 10
+    assert payload["command_count"] == 11
     assert detail_payload["name"] == "exit"
     assert detail_payload["aliases"] == ["quit"]
 
@@ -118,6 +152,7 @@ def test_render_agent_command_help_mentions_commands_surface() -> None:
     assert "/commands" in help_text
     assert "/commands show <name>" in help_text
     assert "/skills" in help_text
+    assert "/agents" in help_text
     assert "/tasks" in help_text
 
 
@@ -162,6 +197,48 @@ def test_execute_agent_command_lists_and_shows_skills(tmp_path: Path) -> None:
     assert payload["skills"][0]["name"] == "electrical-estimating"
     assert detail_payload["name"] == "electrical-estimating"
     assert "Use this skill" in detail_payload["instructions"]
+
+
+def test_execute_agent_command_lists_and_shows_agents(tmp_path: Path) -> None:
+    agents_dir = tmp_path / "agents"
+    _write_agent(
+        agents_dir / "estimate-reviewer.md",
+        agent_id="estimate-reviewer",
+        title="Estimate Reviewer",
+        summary="Review estimate gaps.",
+        alias="estimate-review",
+        instructions="Review grounded estimate gaps.",
+    )
+    cfg = {
+        "agent_registry": {
+            "enabled": True,
+            "root_dir": str(agents_dir),
+        }
+    }
+
+    result = execute_agent_command(
+        cfg,
+        {},
+        {"session_id": "agent-shell-123"},
+        "/agents",
+        describe_session_fn=lambda settings, session_id: {"session_id": session_id},
+        describe_context_providers_fn=lambda cfg: {"active": []},
+    )
+    detail = execute_agent_command(
+        cfg,
+        {},
+        {"session_id": "agent-shell-123"},
+        "/agents show estimate-review",
+        describe_session_fn=lambda settings, session_id: {"session_id": session_id},
+        describe_context_providers_fn=lambda cfg: {"active": []},
+    )
+
+    payload = json.loads(result["response"])
+    detail_payload = json.loads(detail["response"])
+    assert payload["agent_count"] == 1
+    assert payload["agents"][0]["name"] == "estimate-reviewer"
+    assert detail_payload["name"] == "estimate-reviewer"
+    assert detail_payload["instructions"] == "Review grounded estimate gaps."
 
 
 def test_execute_agent_command_can_pin_use_and_clear_skills(tmp_path: Path) -> None:
@@ -273,6 +350,23 @@ def test_execute_agent_command_lists_statuses_starts_cancels_and_resumes_tasks(
         "active_task_count": 1,
         "restartable_task_count": 0,
         "recent_limit": 5,
+        "lineage": {
+            "root_task_count": 1,
+            "child_task_count": 0,
+            "parent_task_count": 1,
+            "tasks_with_children": [
+                {
+                    "task_id": "agent-task-123",
+                    "kind": "workflow",
+                    "name": "demo",
+                    "status": "running",
+                    "active": True,
+                    "restartable": False,
+                    "child_task_count": 1,
+                    "last_child_task_id": "agent-task-sub",
+                }
+            ],
+        },
         "recent_tasks": [
             {
                 "task_id": "agent-task-123",
@@ -281,6 +375,8 @@ def test_execute_agent_command_lists_statuses_starts_cancels_and_resumes_tasks(
                 "status": "running",
                 "active": True,
                 "restartable": False,
+                "child_task_count": 1,
+                "last_child_task_id": "agent-task-sub",
             }
         ],
         "active_tasks": [
@@ -291,6 +387,8 @@ def test_execute_agent_command_lists_statuses_starts_cancels_and_resumes_tasks(
                 "status": "running",
                 "active": True,
                 "restartable": False,
+                "child_task_count": 1,
+                "last_child_task_id": "agent-task-sub",
             }
         ],
         "restartable_tasks": [],
@@ -370,10 +468,25 @@ def test_execute_agent_command_lists_statuses_starts_cancels_and_resumes_tasks(
         return list_payload
 
     monkeypatch.setattr(agent_command_registry, "list_agent_tasks", _fake_list_agent_tasks)
+
+    def _fake_describe_agent_task(
+        cfg: dict,
+        task_id: str,
+        *,
+        tail: int = 20,
+        transcript_tail: int | None = None,
+    ) -> dict:
+        captured["show_args"] = {
+            "task_id": task_id,
+            "tail": tail,
+            "transcript_tail": transcript_tail,
+        }
+        return detail_payload
+
     monkeypatch.setattr(
         agent_command_registry,
         "describe_agent_task",
-        lambda cfg, task_id: detail_payload,
+        _fake_describe_agent_task,
     )
     monkeypatch.setattr(
         agent_command_registry,
@@ -405,23 +518,27 @@ def test_execute_agent_command_lists_statuses_starts_cancels_and_resumes_tasks(
         config_path: str,
         prompt: str,
         *,
+        agent_definition_name: str | None = None,
         source: str = "operator",
         section: str | None = None,
         attachments: list[str] | None = None,
         explicit_skill_names: list[str] | tuple[str, ...] | None = None,
         explicit_tool_name: str | None = None,
         parent_task_id: str | None = None,
+        delegation_briefing: str | None = None,
         agent_name: str | None = None,
         allowed_routes: list[str] | tuple[str, ...] | None = None,
     ) -> dict:
         captured["subagent_args"] = {
             "prompt": prompt,
+            "agent_definition_name": agent_definition_name,
             "source": source,
             "section": section,
             "attachments": list(attachments or []),
             "explicit_skill_names": list(explicit_skill_names or []),
             "explicit_tool_name": explicit_tool_name,
             "parent_task_id": parent_task_id,
+            "delegation_briefing": delegation_briefing,
             "agent_name": agent_name,
             "allowed_routes": list(allowed_routes or []),
         }
@@ -464,7 +581,7 @@ def test_execute_agent_command_lists_statuses_starts_cancels_and_resumes_tasks(
         {},
         {},
         session_summary,
-        "/tasks show agent-task-123",
+        "/tasks show agent-task-123 --tail 3 --transcript-tail 1",
         describe_session_fn=lambda settings, session_id: {"session_id": session_id},
         describe_context_providers_fn=lambda cfg: {"active": []},
     )
@@ -496,7 +613,7 @@ def test_execute_agent_command_lists_statuses_starts_cancels_and_resumes_tasks(
         {},
         {},
         session_summary,
-        '/tasks start subagent --prompt "Summarize the source section." --section module-1 --attachment source.pdf --skill estimate --tool-name estimate_lookup --parent-task-id agent-task-parent --agent-name worker --allow-route deterministic_tool',
+        '/tasks start subagent --agent estimate-reviewer --prompt "Summarize the source section." --section module-1 --attachment source.pdf --skill estimate --tool-name estimate_lookup --parent-task-id agent-task-parent --briefing "Use the latest grounded estimate notes." --agent-name worker --allow-route deterministic_tool',
         describe_session_fn=lambda settings, session_id: {"session_id": session_id},
         describe_context_providers_fn=lambda cfg: {"active": []},
     )
@@ -520,19 +637,31 @@ def test_execute_agent_command_lists_statuses_starts_cancels_and_resumes_tasks(
     assert json.loads(listed["response"])["task_count"] == 1
     assert captured["list_args"] == {"kind": None, "status": "running", "source": "agent_shell"}
     assert json.loads(status["response"])["active_task_count"] == 1
+    assert json.loads(status["response"])["lineage"]["parent_task_count"] == 1
+    assert (
+        json.loads(status["response"])["lineage"]["tasks_with_children"][0]["task_id"]
+        == "agent-task-123"
+    )
     assert json.loads(shown["response"])["task"]["task_id"] == "agent-task-123"
+    assert captured["show_args"] == {
+        "task_id": "agent-task-123",
+        "tail": 3,
+        "transcript_tail": 1,
+    }
     assert json.loads(attached["response"])["next_cursor"] == 2
     assert json.loads(started["response"])["task_id"] == "agent-task-456"
     assert json.loads(dreamed["response"])["kind"] == "dream"
     assert json.loads(subagent_started["response"])["kind"] == "subagent"
     assert captured["subagent_args"] == {
         "prompt": "Summarize the source section.",
+        "agent_definition_name": "estimate-reviewer",
         "source": "agent_shell_subagent",
         "section": "module-1",
         "attachments": ["source.pdf"],
         "explicit_skill_names": ["estimate"],
         "explicit_tool_name": "estimate_lookup",
         "parent_task_id": "agent-task-parent",
+        "delegation_briefing": "Use the latest grounded estimate notes.",
         "agent_name": "worker",
         "allowed_routes": ["deterministic_tool"],
     }

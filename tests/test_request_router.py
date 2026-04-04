@@ -67,6 +67,35 @@ def test_route_request_uses_deterministic_tool_for_lookup_queries() -> None:
     assert decision["runtime_owner"] == "geometry_rules"
 
 
+def test_route_request_uses_deterministic_tool_for_delegate_queries_when_enabled() -> None:
+    cfg = _base_cfg()
+    cfg["agent_registry"] = {"enabled": True, "root_dir": "agents"}
+    cfg["agent_task_manager"] = {
+        "enabled": True,
+        "root_dir": "data/agent_tasks",
+        "tasks_dir": "data/agent_tasks/tasks",
+        "logs_dir": "data/agent_tasks/logs",
+    }
+
+    decision = route_request(
+        cfg,
+        "Delegate to estimate-reviewer: review the latest estimate answer.",
+    )
+
+    assert decision["requested_route"] == "deterministic_tool"
+    assert decision["resolved_route"] == "deterministic_tool"
+
+
+def test_route_request_keeps_delegate_queries_on_text_when_delegate_tool_is_unavailable() -> None:
+    decision = route_request(
+        _base_cfg(),
+        "Delegate to estimate-reviewer: review the latest estimate answer.",
+    )
+
+    assert decision["requested_route"] == "text"
+    assert decision["resolved_route"] == "text"
+
+
 def test_route_request_blocks_drawing_sheet_when_multimodal_is_disabled() -> None:
     with pytest.raises(ValueError, match="fallback policy is 'fail'"):
         route_request(

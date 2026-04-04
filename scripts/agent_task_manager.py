@@ -1,5 +1,5 @@
 """
-Managed background task runner for workflow and dream jobs.
+Managed background task runner for workflow, dream, and subagent jobs.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import subprocess
 import sys
 import uuid
 
+from agent_registry import resolve_agent_definition_task_defaults
 from agent_skill_registry import normalize_agent_skill_names
 from config_validation import (
     load_config,
@@ -38,6 +39,7 @@ from runtime_contracts import (
     normalize_task_kind,
     normalize_task_status,
     normalize_route,
+    summarize_execution_envelopes,
 )
 from request_router import route_request
 from workflow_registry import WorkflowRegistryError, render_workflow_steps, run_workflow
@@ -52,11 +54,18 @@ RESUMABLE_TASK_STATUSES = frozenset(
 DEFAULT_TASK_RECENT_LIMIT = 5
 DEFAULT_ATTACH_LINE_LIMIT = 20
 DEFAULT_SUBAGENT_ALLOWED_ROUTES = (ROUTE_TEXT, ROUTE_RETRIEVAL)
+MAX_SUBAGENT_DELEGATION_BRIEFING_CHARS = 4000
 SUBAGENT_TASK_ALLOWED_ROUTES = {
     ROUTE_TEXT,
     ROUTE_RETRIEVAL,
     ROUTE_DETERMINISTIC_TOOL,
 }
+TASK_TRANSCRIPT_RECORD_SUBAGENT_TURN = "subagent_turn"
+TASK_TRANSCRIPT_RECORD_TASK_EVENT = "task_event"
+TASK_TRANSCRIPT_EVENT_STARTED = "task_started"
+TASK_TRANSCRIPT_EVENT_COMPLETED = "task_completed"
+TASK_TRANSCRIPT_EVENT_FAILED = "task_failed"
+TASK_TRANSCRIPT_EVENT_CANCELLED = "task_cancelled"
 
 
 class TaskManagerError(ValueError):
@@ -81,6 +90,9 @@ def resolve_agent_task_manager_settings(cfg: dict) -> dict:
         "logs_dir": _resolve_repo_path(
             str(agent_task_manager.get("logs_dir") or f"{root_dir}/logs")
         ),
+        "transcripts_dir": _resolve_repo_path(
+            str(agent_task_manager.get("transcripts_dir") or f"{root_dir}/transcripts")
+        ),
     }
 
 
@@ -95,6 +107,7 @@ def ensure_agent_task_manager_layout(settings: dict) -> None:
     Path(settings["root_dir"]).mkdir(parents=True, exist_ok=True)
     Path(settings["tasks_dir"]).mkdir(parents=True, exist_ok=True)
     Path(settings["logs_dir"]).mkdir(parents=True, exist_ok=True)
+    Path(settings["transcripts_dir"]).mkdir(parents=True, exist_ok=True)
 
 
 def _task_summary_path(settings: dict, task_id: str) -> Path:
@@ -105,8 +118,13 @@ def _task_log_path(settings: dict, task_id: str) -> Path:
     return Path(settings["logs_dir"]) / f"{task_id}.log"
 
 
+def _task_transcript_path(settings: dict, task_id: str) -> Path:
+    return Path(settings["transcripts_dir"]) / f"{task_id}.jsonl"
+
+
 def _task_list_payload(summary: dict) -> dict:
     metadata = _task_metadata(summary)
+    child_task_ids = _task_child_task_ids(summary)
     return {
         "task_id": summary["task_id"],
         "kind": summary["kind"],
@@ -121,7 +139,10 @@ def _task_list_payload(summary: dict) -> dict:
         "exit_code": summary.get("exit_code"),
         "pid": summary.get("pid"),
         "source": summary.get("source"),
-        "parent_task_id": metadata.get("parent_task_id"),
+        "parent_task_id": _task_parent_task_id(summary),
+        "child_task_count": len(child_task_ids),
+        "last_child_task_id": _task_last_child_task_id(summary),
+        "agent_definition_name": metadata.get("agent_definition_name"),
         "cancel_requested_at": summary.get("cancel_requested_at"),
         "resumed_by_task_id": summary.get("resumed_by_task_id"),
         "resumed_from_task_id": metadata.get("resumed_from_task_id"),
@@ -159,6 +180,7 @@ def _task_summary(
     created_at = current_utc_timestamp()
     summary_path = _task_summary_path(settings, task_id)
     log_path = _task_log_path(settings, task_id)
+    transcript_path = _task_transcript_path(settings, task_id)
     return {
         "schema_version": TASK_MANAGER_SCHEMA_VERSION,
         "task_id": task_id,
@@ -170,6 +192,7 @@ def _task_summary(
         "config_path": os.path.abspath(config_path),
         "summary_path": str(summary_path.resolve()),
         "log_path": str(log_path.resolve()),
+        "transcript_path": str(transcript_path.resolve()),
         "pid": None,
         "source": source,
         "metadata": copy.deepcopy(metadata or {}),
@@ -185,6 +208,332 @@ def _task_summary(
 def _task_metadata(summary: dict) -> dict:
     metadata = summary.get("metadata")
     return copy.deepcopy(metadata) if isinstance(metadata, dict) else {}
+
+
+def _task_parent_task_id(summary: dict) -> str | None:
+    parent_task_id = _task_metadata(summary).get("parent_task_id")
+    if not isinstance(parent_task_id, str) or not parent_task_id.strip():
+        return None
+    return parent_task_id.strip()
+
+
+def _task_child_task_ids(summary: dict) -> list[str]:
+    child_task_ids = _task_metadata(summary).get("child_task_ids")
+    if not isinstance(child_task_ids, list):
+        return []
+
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in child_task_ids:
+        if not isinstance(item, str) or not item.strip():
+            continue
+        candidate = item.strip()
+        if candidate in seen:
+            continue
+        cleaned.append(candidate)
+        seen.add(candidate)
+    return cleaned
+
+
+def _task_last_child_task_id(summary: dict) -> str | None:
+    last_child_task_id = summary.get("last_child_task_id")
+    if isinstance(last_child_task_id, str) and last_child_task_id.strip():
+        return last_child_task_id.strip()
+
+    child_task_ids = _task_child_task_ids(summary)
+    return child_task_ids[-1] if child_task_ids else None
+
+
+def _task_detail_payload(summary: dict, *, process_running: bool | None = None) -> dict:
+    child_task_ids = _task_child_task_ids(summary)
+    payload = copy.deepcopy(summary)
+    payload["active"] = _task_is_active(summary)
+    payload["restartable"] = _task_is_resumable(summary)
+    payload["process_running"] = (
+        _task_process_running(summary) if process_running is None else process_running
+    )
+    payload["parent_task_id"] = _task_parent_task_id(summary)
+    payload["child_task_count"] = len(child_task_ids)
+    payload["child_task_ids"] = child_task_ids
+    payload["last_child_task_id"] = _task_last_child_task_id(summary)
+    subagent_context = _subagent_task_context(summary)
+    if subagent_context is not None:
+        payload["subagent_context"] = subagent_context
+    return payload
+
+
+def _resolved_task_transcript_path(settings: dict, summary: dict) -> Path:
+    transcript_path = summary.get("transcript_path")
+    if isinstance(transcript_path, str) and transcript_path.strip():
+        resolved_path = Path(transcript_path).expanduser()
+        if not resolved_path.is_absolute():
+            resolved_path = Path(os.path.abspath(str(resolved_path)))
+        return resolved_path
+    return _task_transcript_path(settings, str(summary.get("task_id") or ""))
+
+
+def _read_task_jsonl_records(path: Path) -> list[dict]:
+    if not path.is_file():
+        return []
+
+    records: list[dict] = []
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            records.append(json.loads(stripped))
+    return records
+
+
+def _task_transcript_record_type(record: dict) -> str:
+    record_type = record.get("record_type")
+    if isinstance(record_type, str) and record_type.strip():
+        return record_type.strip()
+    if isinstance(record.get("turn_id"), str) and record.get("turn_id").strip():
+        return TASK_TRANSCRIPT_RECORD_SUBAGENT_TURN
+    return TASK_TRANSCRIPT_RECORD_TASK_EVENT
+
+
+def _task_transcript_base_event(summary: dict, *, event_type: str) -> dict:
+    return {
+        "record_type": TASK_TRANSCRIPT_RECORD_TASK_EVENT,
+        "event_type": event_type,
+        "recorded_at": current_utc_timestamp(),
+        "task_id": summary.get("task_id"),
+        "task_kind": summary.get("kind"),
+        "task_name": summary.get("name"),
+        "task_status": summary.get("status"),
+        "source": summary.get("source"),
+    }
+
+
+def _workflow_task_transcript_event(summary: dict, *, event_type: str) -> dict:
+    metadata = _task_metadata(summary)
+    result = summary.get("result") if isinstance(summary.get("result"), dict) else None
+    workflow_name = (
+        str(metadata.get("workflow")).strip()
+        if isinstance(metadata.get("workflow"), str) and str(metadata.get("workflow")).strip()
+        else str(summary.get("name") or "workflow")
+    )
+    record = _task_transcript_base_event(summary, event_type=event_type)
+    record.update(
+        {
+            "workflow": workflow_name,
+            "description": (
+                result.get("description")
+                if isinstance(result, dict) and isinstance(result.get("description"), str)
+                else metadata.get("description")
+            ),
+            "step_count": (
+                int(result.get("step_count", 0) or 0)
+                if isinstance(result, dict)
+                else int(metadata.get("step_count", 0) or 0)
+            ),
+            "tags": (
+                copy.deepcopy(result.get("tags", []))
+                if isinstance(result, dict)
+                else copy.deepcopy(metadata.get("tags", []))
+            ),
+            "variables": (
+                copy.deepcopy(result.get("variables", {}))
+                if isinstance(result, dict)
+                else copy.deepcopy(metadata.get("variables", {}))
+            ),
+        }
+    )
+    if isinstance(result, dict):
+        record["executed_steps"] = int(result.get("executed_steps", 0) or 0)
+        record["dream"] = copy.deepcopy(result.get("dream", {}))
+        record["result"] = _workflow_result_summary(result)
+    if isinstance(summary.get("error"), str) and str(summary.get("error")).strip():
+        record["error"] = str(summary.get("error")).strip()
+    exit_code = summary.get("exit_code")
+    if isinstance(exit_code, int) and not isinstance(exit_code, bool):
+        record["exit_code"] = exit_code
+    return record
+
+
+def _dream_task_transcript_event(summary: dict, *, event_type: str) -> dict:
+    metadata = _task_metadata(summary)
+    result = summary.get("result") if isinstance(summary.get("result"), dict) else None
+    record = _task_transcript_base_event(summary, event_type=event_type)
+    record["dream_enabled"] = bool(metadata.get("dream_enabled", False))
+    if isinstance(result, dict):
+        record["dream_status"] = result.get("status")
+        record["result"] = copy.deepcopy(result)
+    if isinstance(summary.get("error"), str) and str(summary.get("error")).strip():
+        record["error"] = str(summary.get("error")).strip()
+    exit_code = summary.get("exit_code")
+    if isinstance(exit_code, int) and not isinstance(exit_code, bool):
+        record["exit_code"] = exit_code
+    return record
+
+
+def _task_transcript_event(summary: dict, *, event_type: str) -> dict | None:
+    try:
+        task_kind = normalize_task_kind(summary.get("kind"), "task kind")
+    except ValueError:
+        return None
+
+    if task_kind == TASK_KIND_WORKFLOW:
+        return _workflow_task_transcript_event(summary, event_type=event_type)
+    if task_kind == TASK_KIND_DREAM:
+        return _dream_task_transcript_event(summary, event_type=event_type)
+    return None
+
+
+def _task_transcript_event_type(task_status: object) -> str:
+    normalized_status = normalize_task_status(task_status, "task status")
+    if normalized_status == TASK_STATUS_COMPLETED:
+        return TASK_TRANSCRIPT_EVENT_COMPLETED
+    if normalized_status == TASK_STATUS_FAILED:
+        return TASK_TRANSCRIPT_EVENT_FAILED
+    if normalized_status == TASK_STATUS_CANCELLED:
+        return TASK_TRANSCRIPT_EVENT_CANCELLED
+    return TASK_TRANSCRIPT_EVENT_STARTED
+
+
+def _summarize_task_transcript_turn(turn: dict) -> dict:
+    return {
+        "turn_id": turn.get("turn_id"),
+        "turn_index": turn.get("turn_index"),
+        "route": turn.get("route"),
+        "runtime_owner": turn.get("runtime_owner"),
+        "user_prompt": turn.get("user", {}).get("prompt"),
+        "assistant_response": turn.get("assistant", {}).get("response"),
+        "skill_names": [
+            skill.get("name")
+            for skill in turn.get("skills", [])
+            if isinstance(skill, dict) and isinstance(skill.get("name"), str)
+        ],
+        "tool_name": (
+            turn.get("tool", {}).get("name") if isinstance(turn.get("tool"), dict) else None
+        ),
+        "error": turn.get("error"),
+    }
+
+
+def _summarize_task_transcript_event(record: dict) -> dict:
+    result = record.get("result") if isinstance(record.get("result"), dict) else {}
+    dream = record.get("dream") if isinstance(record.get("dream"), dict) else {}
+    result_dream = result.get("dream") if isinstance(result.get("dream"), dict) else {}
+    return {
+        "event_type": record.get("event_type"),
+        "recorded_at": record.get("recorded_at"),
+        "task_kind": record.get("task_kind"),
+        "task_status": record.get("task_status"),
+        "workflow": record.get("workflow") or result.get("workflow"),
+        "executed_steps": record.get("executed_steps") or result.get("executed_steps"),
+        "step_count": record.get("step_count") or result.get("step_count"),
+        "dream_status": (
+            record.get("dream_status")
+            or dream.get("status")
+            or result.get("status")
+            or result_dream.get("status")
+        ),
+        "error": record.get("error"),
+        "exit_code": record.get("exit_code"),
+    }
+
+
+def _append_task_execution_envelopes_from_turn(turn: dict, envelopes: list[dict]) -> int | None:
+    execution = turn.get("execution") if isinstance(turn.get("execution"), dict) else None
+    if execution is None:
+        return None
+
+    schema_version = (
+        execution.get("schema_version")
+        if isinstance(execution.get("schema_version"), int)
+        else None
+    )
+    route = execution.get("route")
+    if isinstance(route, dict):
+        envelopes.append(copy.deepcopy(route))
+
+    context_providers = execution.get("context_providers")
+    if isinstance(context_providers, list):
+        for provider in context_providers:
+            if isinstance(provider, dict):
+                envelopes.append(copy.deepcopy(provider))
+
+    deterministic_tool = execution.get("deterministic_tool")
+    if isinstance(deterministic_tool, dict):
+        envelopes.append(copy.deepcopy(deterministic_tool))
+    return schema_version
+
+
+def _append_task_transcript_record(settings: dict, summary: dict, record: dict) -> None:
+    transcript_path = _resolved_task_transcript_path(settings, summary)
+    transcript_path.parent.mkdir(parents=True, exist_ok=True)
+    with transcript_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(copy.deepcopy(record), sort_keys=True) + "\n")
+
+
+def _task_transcript_payload(settings: dict, summary: dict, *, tail: int) -> dict | None:
+    try:
+        task_kind = normalize_task_kind(summary.get("kind"), "task kind")
+    except ValueError:
+        task_kind = None
+
+    transcript_path = _resolved_task_transcript_path(settings, summary)
+    if not transcript_path.is_file():
+        return None
+
+    records = _read_task_jsonl_records(transcript_path)
+    if not records:
+        return None
+
+    if task_kind == TASK_KIND_SUBAGENT:
+        turns = [
+            record
+            for record in records
+            if _task_transcript_record_type(record) == TASK_TRANSCRIPT_RECORD_SUBAGENT_TURN
+        ]
+        recent_turns = [_summarize_task_transcript_turn(turn) for turn in turns[-max(0, tail) :]]
+        envelopes: list[dict] = []
+        schema_version = None
+        for turn in turns:
+            turn_schema_version = _append_task_execution_envelopes_from_turn(turn, envelopes)
+            if schema_version is None and turn_schema_version is not None:
+                schema_version = turn_schema_version
+
+        return {
+            "transcript_path": str(transcript_path.resolve()),
+            "record_count": len(records),
+            "turn_count": len(turns),
+            "recent_turns": recent_turns,
+            "last_turn": copy.deepcopy(turns[-1]) if turns else None,
+            "execution": {
+                "source": "reconstructed_from_task_transcript",
+                "schema_version": schema_version,
+                "summary": summarize_execution_envelopes(envelopes),
+            },
+        }
+
+    events = [
+        record
+        for record in records
+        if _task_transcript_record_type(record) == TASK_TRANSCRIPT_RECORD_TASK_EVENT
+    ]
+    if not events:
+        return None
+
+    return {
+        "transcript_path": str(transcript_path.resolve()),
+        "record_count": len(records),
+        "event_count": len(events),
+        "recent_events": [
+            _summarize_task_transcript_event(record) for record in events[-max(0, tail) :]
+        ],
+        "last_event": copy.deepcopy(events[-1]) if events else None,
+    }
+
+
+def _write_task_transcript_turn(settings: dict, summary: dict, turn_payload: dict) -> None:
+    record = copy.deepcopy(turn_payload)
+    record.setdefault("record_type", TASK_TRANSCRIPT_RECORD_SUBAGENT_TURN)
+    _append_task_transcript_record(settings, summary, record)
 
 
 def _task_is_active(summary: dict) -> bool:
@@ -294,6 +643,94 @@ def _normalize_subagent_prompt(value: object) -> str:
     return value.strip()
 
 
+def _normalize_subagent_instructions(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TaskManagerError("subagent instructions must be a string when present")
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _normalize_subagent_delegation_briefing(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TaskManagerError("subagent delegation briefing must be a string when present")
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if len(cleaned) <= MAX_SUBAGENT_DELEGATION_BRIEFING_CHARS:
+        return cleaned
+
+    truncated = cleaned[:MAX_SUBAGENT_DELEGATION_BRIEFING_CHARS].rstrip()
+    return f"{truncated}\n\n[delegation briefing truncated]"
+
+
+def _compose_subagent_execution_prompt(
+    prompt: str,
+    *,
+    agent_instructions: str | None,
+    delegation_briefing: str | None,
+) -> str:
+    sections: list[str] = []
+    if agent_instructions:
+        sections.append(f"### Agent Instructions:\n{agent_instructions}")
+    if delegation_briefing:
+        sections.append(f"### Delegation Briefing:\n{delegation_briefing}")
+    if not sections:
+        return prompt
+    sections.append(f"### Assigned Task:\n{prompt}")
+    return "\n\n".join(sections)
+
+
+def _build_subagent_delegation_briefing(summary: dict) -> str | None:
+    metadata = _task_metadata(summary)
+    sections: list[str] = []
+    overview: list[str] = []
+
+    task_id = summary.get("task_id")
+    if isinstance(task_id, str) and task_id.strip():
+        overview.append(f"Parent task id: {task_id.strip()}")
+
+    parent_worker = metadata.get("agent_name") or summary.get("name")
+    if isinstance(parent_worker, str) and parent_worker.strip():
+        overview.append(f"Parent worker: {parent_worker.strip()}")
+
+    parent_agent_definition = metadata.get("agent_definition_name")
+    if isinstance(parent_agent_definition, str) and parent_agent_definition.strip():
+        overview.append(f"Parent agent definition: {parent_agent_definition.strip()}")
+
+    request_source = metadata.get("request_source") or summary.get("source")
+    if isinstance(request_source, str) and request_source.strip():
+        overview.append(f"Parent request source: {request_source.strip()}")
+
+    section = metadata.get("section")
+    if isinstance(section, str) and section.strip():
+        overview.append(f"Parent section: {section.strip()}")
+
+    attachments = _normalized_subagent_attachments(metadata.get("attachments"))
+    if attachments:
+        overview.append(f"Parent attachments: {', '.join(attachments)}")
+
+    if overview:
+        sections.append("\n".join(overview))
+
+    inherited_briefing = _normalize_subagent_delegation_briefing(
+        metadata.get("delegation_briefing")
+    )
+    if inherited_briefing:
+        sections.append(f"Inherited delegation context:\n{inherited_briefing}")
+
+    parent_prompt = metadata.get("prompt")
+    if isinstance(parent_prompt, str) and parent_prompt.strip():
+        sections.append(f"Parent assigned task:\n{parent_prompt.strip()}")
+
+    if not sections:
+        return None
+    return _normalize_subagent_delegation_briefing("\n\n".join(sections))
+
+
 def _subagent_task_metadata(
     cfg: dict,
     *,
@@ -305,7 +742,10 @@ def _subagent_task_metadata(
     explicit_skill_names: list[str] | tuple[str, ...] | None,
     explicit_tool_name: str | None,
     parent_task_id: str | None,
+    delegation_briefing: str | None,
     agent_name: str | None,
+    agent_definition_name: str | None,
+    agent_instructions: str | None,
     allowed_routes: list[str] | tuple[str, ...] | None,
 ) -> dict:
     normalized_prompt = _normalize_subagent_prompt(prompt)
@@ -329,6 +769,13 @@ def _subagent_task_metadata(
     normalized_agent_name = (
         str(agent_name).strip() if isinstance(agent_name, str) and agent_name.strip() else None
     )
+    normalized_agent_definition_name = (
+        str(agent_definition_name).strip()
+        if isinstance(agent_definition_name, str) and agent_definition_name.strip()
+        else None
+    )
+    normalized_agent_instructions = _normalize_subagent_instructions(agent_instructions)
+    normalized_delegation_briefing = _normalize_subagent_delegation_briefing(delegation_briefing)
     normalized_allowed_routes = _normalize_subagent_allowed_routes(
         allowed_routes,
         explicit_tool_name=normalized_tool_name,
@@ -346,7 +793,10 @@ def _subagent_task_metadata(
         "explicit_tool_name": normalized_tool_name,
         "allowed_routes": normalized_allowed_routes,
         "parent_task_id": normalized_parent_task_id,
+        "delegation_briefing": normalized_delegation_briefing,
         "agent_name": normalized_agent_name,
+        "agent_definition_name": normalized_agent_definition_name,
+        "agent_instructions": normalized_agent_instructions,
         "max_turns": 1,
     }
 
@@ -368,6 +818,75 @@ def _subagent_result_summary(turn_payload: dict) -> dict:
         "tool_name": tool_payload.get("name") if tool_payload else None,
         "tool_request": copy.deepcopy(tool_payload.get("request")) if tool_payload else None,
         "execution_summary": copy.deepcopy(turn_payload.get("execution", {}).get("summary") or {}),
+    }
+
+
+def _normalized_task_string(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _normalized_task_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        candidate = _normalized_task_string(item)
+        if candidate is None or candidate in seen:
+            continue
+        cleaned.append(candidate)
+        seen.add(candidate)
+    return cleaned
+
+
+def _subagent_task_context(summary: dict) -> dict | None:
+    try:
+        if normalize_task_kind(summary.get("kind"), "task kind") != TASK_KIND_SUBAGENT:
+            return None
+    except ValueError:
+        return None
+
+    metadata = _task_metadata(summary)
+    prompt = _normalized_task_string(metadata.get("prompt"))
+    agent_instructions = _normalized_task_string(metadata.get("agent_instructions"))
+    delegation_briefing = _normalized_task_string(metadata.get("delegation_briefing"))
+    explicit_tool_name = _normalized_task_string(metadata.get("explicit_tool_name"))
+    explicit_skill_names = _normalized_task_string_list(metadata.get("explicit_skill_names"))
+    attachments = _normalized_subagent_attachments(metadata.get("attachments"))
+    try:
+        allowed_routes = _normalize_subagent_allowed_routes(
+            metadata.get("allowed_routes"),
+            explicit_tool_name=explicit_tool_name,
+        )
+    except ValueError:
+        allowed_routes = _normalized_task_string_list(metadata.get("allowed_routes"))
+
+    prompt_sections: list[str] = []
+    if agent_instructions:
+        prompt_sections.append("agent_instructions")
+    if delegation_briefing:
+        prompt_sections.append("delegation_briefing")
+    if prompt:
+        prompt_sections.append("assigned_task")
+
+    return {
+        "has_prior_history": False,
+        "history_message_count": 0,
+        "prompt_sections": prompt_sections,
+        "prompt_section_count": len(prompt_sections),
+        "prompt_char_count": len(prompt or ""),
+        "has_agent_instructions": bool(agent_instructions),
+        "agent_instructions_char_count": len(agent_instructions or ""),
+        "has_delegation_briefing": bool(delegation_briefing),
+        "delegation_briefing_char_count": len(delegation_briefing or ""),
+        "attachment_count": len(attachments),
+        "explicit_skill_names": explicit_skill_names,
+        "explicit_tool_name": explicit_tool_name,
+        "allowed_routes": allowed_routes,
     }
 
 
@@ -406,6 +925,26 @@ def _task_counts(task_summaries: list[dict]) -> tuple[dict[str, int], dict[str, 
         by_status[status] = by_status.get(status, 0) + 1
         by_kind[kind] = by_kind.get(kind, 0) + 1
     return by_status, by_kind
+
+
+def _task_lineage_summary(task_summaries: list[dict]) -> dict:
+    root_task_count = 0
+    child_task_count = 0
+    parent_task_count = 0
+
+    for task in task_summaries:
+        if _task_parent_task_id(task) is None:
+            root_task_count += 1
+        else:
+            child_task_count += 1
+        if _task_child_task_ids(task):
+            parent_task_count += 1
+
+    return {
+        "root_task_count": root_task_count,
+        "child_task_count": child_task_count,
+        "parent_task_count": parent_task_count,
+    }
 
 
 def list_agent_tasks(
@@ -458,6 +997,7 @@ def list_agent_tasks(
         reverse=True,
     )
     by_status, by_kind = _task_counts(tasks)
+    lineage = _task_lineage_summary(tasks)
     active_task_count = sum(1 for task in tasks if _task_is_active(task))
     restartable_task_count = sum(1 for task in tasks if _task_is_resumable(task))
     payload = {
@@ -472,6 +1012,7 @@ def list_agent_tasks(
         "restartable_task_count": restartable_task_count,
         "by_status": by_status,
         "by_kind": by_kind,
+        "lineage": lineage,
         "tasks": [_task_list_payload(task) for task in tasks],
     }
     if errors:
@@ -479,9 +1020,17 @@ def list_agent_tasks(
     return payload
 
 
-def describe_agent_task(cfg: dict, task_id: str, *, tail: int = 20) -> dict:
+def describe_agent_task(
+    cfg: dict,
+    task_id: str,
+    *,
+    tail: int = 20,
+    transcript_tail: int | None = None,
+) -> dict:
     if tail < 0:
         raise TaskManagerError("tail must be zero or greater")
+    if transcript_tail is not None and transcript_tail < 0:
+        raise TaskManagerError("transcript_tail must be zero or greater")
 
     settings = resolve_agent_task_manager_settings(cfg)
     summary = _read_task_summary(settings, task_id)
@@ -491,18 +1040,25 @@ def describe_agent_task(cfg: dict, task_id: str, *, tail: int = 20) -> dict:
 
     log_lines = _task_log_lines(log_path)
 
-    task_payload = copy.deepcopy(summary)
-    task_payload["active"] = _task_is_active(summary)
-    task_payload["restartable"] = _task_is_resumable(summary)
-    task_payload["process_running"] = _task_process_running(summary)
+    task_payload = _task_detail_payload(summary)
+    transcript_payload = _task_transcript_payload(
+        settings,
+        summary,
+        tail=tail if transcript_tail is None else transcript_tail,
+    )
+    if transcript_payload is not None:
+        task_payload["transcript_path"] = transcript_payload["transcript_path"]
 
-    return {
+    payload = {
         **settings,
         "task": task_payload,
         "log_path": str(log_path.resolve()),
         "log_line_count": len(log_lines),
         "log_tail": log_lines[-tail:] if tail else [],
     }
+    if transcript_payload is not None:
+        payload["transcript"] = transcript_payload
+    return payload
 
 
 def attach_agent_task(
@@ -526,15 +1082,11 @@ def attach_agent_task(
     safe_cursor = min(cursor, len(log_lines))
     attached_lines = log_lines[safe_cursor : safe_cursor + limit]
     process_running = _task_process_running(summary)
+    task_payload = _task_detail_payload(summary, process_running=process_running)
 
     return {
         **settings,
-        "task": {
-            **copy.deepcopy(summary),
-            "active": _task_is_active(summary),
-            "restartable": _task_is_resumable(summary),
-            "process_running": process_running,
-        },
+        "task": task_payload,
         "log_path": str(log_path.resolve()),
         "cursor": cursor,
         "next_cursor": safe_cursor + len(attached_lines),
@@ -566,17 +1118,22 @@ def summarize_agent_tasks(
     tasks = listing["tasks"]
     active_tasks = [task for task in tasks if task.get("active")]
     restartable_tasks = [task for task in tasks if task.get("restartable")]
+    tasks_with_children = [task for task in tasks if int(task.get("child_task_count", 0) or 0) > 0]
+    lineage = copy.deepcopy(listing.get("lineage") or {})
+    lineage["tasks_with_children"] = copy.deepcopy(tasks_with_children[:recent_limit])
     return {
         "enabled": listing["enabled"],
         "root_dir": listing["root_dir"],
         "tasks_dir": listing["tasks_dir"],
         "logs_dir": listing["logs_dir"],
+        "transcripts_dir": listing["transcripts_dir"],
         "filters": copy.deepcopy(listing["filters"]),
         "task_count": listing["task_count"],
         "active_task_count": listing["active_task_count"],
         "restartable_task_count": listing["restartable_task_count"],
         "by_status": copy.deepcopy(listing["by_status"]),
         "by_kind": copy.deepcopy(listing["by_kind"]),
+        "lineage": lineage,
         "recent_limit": recent_limit,
         "recent_tasks": copy.deepcopy(tasks[:recent_limit]),
         "active_tasks": copy.deepcopy(active_tasks[:recent_limit]),
@@ -590,6 +1147,8 @@ def start_subagent_task(
     config_path: str,
     prompt: str,
     *,
+    agent_definition_name: str | None = None,
+    agent_instructions: str | None = None,
     source: str = "operator",
     request_source: str | None = None,
     section: str | None = None,
@@ -597,6 +1156,7 @@ def start_subagent_task(
     explicit_skill_names: list[str] | tuple[str, ...] | None = None,
     explicit_tool_name: str | None = None,
     parent_task_id: str | None = None,
+    delegation_briefing: str | None = None,
     agent_name: str | None = None,
     allowed_routes: list[str] | tuple[str, ...] | None = None,
     task_metadata: dict | None = None,
@@ -605,18 +1165,50 @@ def start_subagent_task(
     ensure_agent_task_manager_layout(settings)
 
     _validate_parent_task_link(settings, parent_task_id)
+
+    resolved_agent_definition_name = None
+    resolved_agent_instructions = _normalize_subagent_instructions(agent_instructions)
+    resolved_section = section
+    resolved_explicit_skill_names = list(explicit_skill_names or [])
+    resolved_explicit_tool_name = explicit_tool_name
+    resolved_agent_name = agent_name
+    resolved_allowed_routes = list(allowed_routes or [])
+
+    if isinstance(agent_definition_name, str) and agent_definition_name.strip():
+        if resolved_agent_instructions is None:
+            agent_defaults = resolve_agent_definition_task_defaults(cfg, agent_definition_name)
+            resolved_agent_definition_name = agent_defaults["agent_definition_name"]
+            resolved_agent_instructions = agent_defaults["instructions"]
+            if resolved_section is None:
+                resolved_section = agent_defaults["section"]
+            resolved_explicit_skill_names = [
+                *agent_defaults["explicit_skill_names"],
+                *resolved_explicit_skill_names,
+            ]
+            if resolved_explicit_tool_name is None:
+                resolved_explicit_tool_name = agent_defaults["explicit_tool_name"]
+            if not resolved_allowed_routes:
+                resolved_allowed_routes = list(agent_defaults["allowed_routes"])
+            if resolved_agent_name is None:
+                resolved_agent_name = agent_defaults["title"]
+        else:
+            resolved_agent_definition_name = str(agent_definition_name).strip()
+
     metadata = _subagent_task_metadata(
         cfg,
         prompt=prompt,
         task_source=source,
         request_source=request_source,
-        section=section,
+        section=resolved_section,
         attachments=attachments,
-        explicit_skill_names=explicit_skill_names,
-        explicit_tool_name=explicit_tool_name,
+        explicit_skill_names=resolved_explicit_skill_names,
+        explicit_tool_name=resolved_explicit_tool_name,
         parent_task_id=parent_task_id,
-        agent_name=agent_name,
-        allowed_routes=allowed_routes,
+        delegation_briefing=delegation_briefing,
+        agent_name=resolved_agent_name,
+        agent_definition_name=resolved_agent_definition_name,
+        agent_instructions=resolved_agent_instructions,
+        allowed_routes=resolved_allowed_routes,
     )
     if isinstance(task_metadata, dict):
         metadata.update(copy.deepcopy(task_metadata))
@@ -804,6 +1396,10 @@ def _run_subagent_turn(cfg: dict, summary: dict) -> dict:
 
     metadata = _task_metadata(summary)
     prompt = _normalize_subagent_prompt(metadata.get("prompt"))
+    agent_instructions = _normalize_subagent_instructions(metadata.get("agent_instructions"))
+    delegation_briefing = _normalize_subagent_delegation_briefing(
+        metadata.get("delegation_briefing")
+    )
     explicit_tool_name = metadata.get("explicit_tool_name")
     allowed_routes = _normalize_subagent_allowed_routes(
         metadata.get("allowed_routes"),
@@ -829,16 +1425,30 @@ def _run_subagent_turn(cfg: dict, summary: dict) -> dict:
     settings = resolve_agent_shell_settings(cfg)
     system_prompt, _ = resolve_agent_shell_system_prompt(cfg)
     completion_fn = build_completion_fn(settings)
+    execution_prompt = _compose_subagent_execution_prompt(
+        prompt,
+        agent_instructions=agent_instructions,
+        delegation_briefing=delegation_briefing,
+    )
+    parent_task_id = (
+        str(summary.get("task_id")).strip()
+        if isinstance(summary.get("task_id"), str) and str(summary.get("task_id")).strip()
+        else None
+    )
+    child_delegation_briefing = _build_subagent_delegation_briefing(summary)
     return run_agent_turn(
         cfg,
         settings,
-        prompt,
+        execution_prompt,
+        config_path=str(summary.get("config_path") or "config.yaml"),
         system_prompt=system_prompt,
         history_messages=[],
         source=str(metadata.get("request_source") or summary.get("source") or "subagent"),
         section=section,
         attachments=attachments,
         explicit_tool_name=explicit_tool_name,
+        parent_task_id=parent_task_id,
+        delegation_briefing=child_delegation_briefing,
         explicit_skill_names=list(metadata.get("explicit_skill_names") or []),
         pinned_skill_names=[],
         completion_fn=completion_fn,
@@ -893,6 +1503,13 @@ def resume_agent_task(
             cfg,
             config_path,
             _normalize_subagent_prompt(metadata.get("prompt")),
+            agent_definition_name=(
+                str(metadata.get("agent_definition_name"))
+                if isinstance(metadata.get("agent_definition_name"), str)
+                and str(metadata.get("agent_definition_name")).strip()
+                else None
+            ),
+            agent_instructions=_normalize_subagent_instructions(metadata.get("agent_instructions")),
             source=source,
             request_source=(
                 str(metadata.get("request_source"))
@@ -914,6 +1531,9 @@ def resume_agent_task(
                 if isinstance(metadata.get("parent_task_id"), str)
                 and str(metadata.get("parent_task_id")).strip()
                 else None
+            ),
+            delegation_briefing=_normalize_subagent_delegation_briefing(
+                metadata.get("delegation_briefing")
             ),
             agent_name=(
                 str(metadata.get("agent_name"))
@@ -987,6 +1607,7 @@ def run_task_worker(
     settings = resolve_agent_task_manager_settings(cfg)
     summary = _read_task_summary(settings, task_id)
     cancel_state = {"requested": False, "signal": None}
+    normalized_kind: str | None = None
 
     def _handle_cancel(signum, _frame) -> None:
         cancel_state["requested"] = True
@@ -1004,6 +1625,13 @@ def run_task_worker(
 
     try:
         normalized_kind = normalize_task_kind(kind)
+        if normalized_kind in {TASK_KIND_WORKFLOW, TASK_KIND_DREAM}:
+            transcript_event = _task_transcript_event(
+                updated_summary,
+                event_type=TASK_TRANSCRIPT_EVENT_STARTED,
+            )
+            if transcript_event is not None:
+                _append_task_transcript_record(settings, updated_summary, transcript_event)
         if normalized_kind == TASK_KIND_WORKFLOW:
             if not isinstance(workflow_name, str) or not workflow_name.strip():
                 raise TaskManagerError("workflow task requires a workflow name")
@@ -1019,6 +1647,7 @@ def run_task_worker(
         elif normalized_kind == TASK_KIND_SUBAGENT:
             _log_task_event("subagent task started", {"task_id": task_id})
             turn_payload = _run_subagent_turn(cfg, updated_summary)
+            _write_task_transcript_turn(settings, updated_summary, turn_payload)
             updated_summary["result"] = _subagent_result_summary(turn_payload)
             _log_task_event(
                 "subagent task completed",
@@ -1053,11 +1682,20 @@ def run_task_worker(
         updated_summary["exit_code"] = 1
         updated_summary["error"] = str(exc)
     finally:
-        updated_summary["completed_at"] = current_utc_timestamp()
-        updated_summary["pid"] = os.getpid()
-        updated_summary = _write_task_summary(settings, updated_summary)
-        signal.signal(signal.SIGTERM, previous_sigterm)
-        signal.signal(signal.SIGINT, previous_sigint)
+        try:
+            updated_summary["completed_at"] = current_utc_timestamp()
+            updated_summary["pid"] = os.getpid()
+            if normalized_kind in {TASK_KIND_WORKFLOW, TASK_KIND_DREAM}:
+                transcript_event = _task_transcript_event(
+                    updated_summary,
+                    event_type=_task_transcript_event_type(updated_summary.get("status")),
+                )
+                if transcript_event is not None:
+                    _append_task_transcript_record(settings, updated_summary, transcript_event)
+            updated_summary = _write_task_summary(settings, updated_summary)
+        finally:
+            signal.signal(signal.SIGTERM, previous_sigterm)
+            signal.signal(signal.SIGINT, previous_sigint)
 
     return updated_summary
 
@@ -1104,6 +1742,11 @@ def parse_args() -> argparse.Namespace:
     show_parser = subparsers.add_parser("show", help="Show one task summary and recent logs")
     show_parser.add_argument("task_id", help="Task id to inspect")
     show_parser.add_argument("--tail", type=int, default=20, help="Recent log lines to include")
+    show_parser.add_argument(
+        "--transcript-tail",
+        type=int,
+        help="Recent structured transcript records to include. Defaults to --tail.",
+    )
 
     start_workflow_parser = subparsers.add_parser(
         "start-workflow",
@@ -1137,6 +1780,10 @@ def parse_args() -> argparse.Namespace:
         help="Start a bounded background subagent task",
     )
     start_subagent_parser.add_argument(
+        "--agent",
+        help="Optional local agent definition id or alias.",
+    )
+    start_subagent_parser.add_argument(
         "--prompt",
         required=True,
         help="Prompt for the background subagent worker.",
@@ -1166,6 +1813,10 @@ def parse_args() -> argparse.Namespace:
     start_subagent_parser.add_argument(
         "--parent-task-id",
         help="Optional parent task id for explicit child linkage.",
+    )
+    start_subagent_parser.add_argument(
+        "--briefing",
+        help="Optional delegation briefing passed into the subagent prompt.",
     )
     start_subagent_parser.add_argument(
         "--agent-name",
@@ -1237,7 +1888,12 @@ def main() -> int:
             return 0
         if args.command == "show":
             validate_agent_task_manager_config(cfg)
-            payload = describe_agent_task(cfg, args.task_id, tail=args.tail)
+            payload = describe_agent_task(
+                cfg,
+                args.task_id,
+                tail=args.tail,
+                transcript_tail=args.transcript_tail,
+            )
             print(__import__("json").dumps(payload, indent=2, sort_keys=False))
             return 0
         if args.command == "start-workflow":
@@ -1264,12 +1920,14 @@ def main() -> int:
                 cfg,
                 args.config,
                 args.prompt,
+                agent_definition_name=args.agent,
                 source=args.source,
                 section=args.section,
                 attachments=args.attachment,
                 explicit_skill_names=args.skill,
                 explicit_tool_name=args.tool_name,
                 parent_task_id=args.parent_task_id,
+                delegation_briefing=args.briefing,
                 agent_name=args.agent_name,
                 allowed_routes=args.allow_route,
             )

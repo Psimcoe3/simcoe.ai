@@ -8,6 +8,11 @@ import json
 import shlex
 from typing import Callable
 
+from agent_registry import (
+    describe_agent_definition,
+    list_agent_definitions,
+    resolve_agent_registry_settings,
+)
 from agent_skill_registry import (
     describe_agent_skill,
     list_agent_skills,
@@ -44,6 +49,7 @@ _COMMAND_ORDER = (
     "session",
     "commands",
     "skills",
+    "agents",
     "tools",
     "providers",
     "route",
@@ -101,6 +107,15 @@ _COMMAND_SPECS = {
             "/skills clear",
         ],
     },
+    "agents": {
+        "name": "agents",
+        "display_name": "Agents",
+        "description": "List local markdown subagent definitions or inspect one named agent.",
+        "aliases": [],
+        "category": "inspection",
+        "access_mode": COMMAND_ACCESS_READ_ONLY,
+        "usage_examples": ["/agents", "/agents list", "/agents show <name>"],
+    },
     "tools": {
         "name": "tools",
         "display_name": "Tools",
@@ -149,11 +164,13 @@ _COMMAND_SPECS = {
             "/tasks status",
             "/tasks list --status running",
             "/tasks show <task-id>",
+            "/tasks show <task-id> --tail 10 --transcript-tail 2",
             "/tasks attach <task-id>",
             "/tasks start workflow <name>",
             "/tasks start workflow <name> --var key=value",
             "/tasks start dream",
             '/tasks start subagent --prompt "Summarize the source section."',
+            '/tasks start subagent --prompt "Review the answer." --briefing "Check NEC grounding references first."',
             "/tasks cancel <task-id>",
             "/tasks resume <task-id>",
         ],
@@ -348,8 +365,40 @@ def _parse_task_attach_options(option_args: list[str]) -> dict[str, int]:
     return parsed
 
 
+def _parse_task_show_options(option_args: list[str]) -> dict[str, int | None]:
+    parsed: dict[str, int | None] = {
+        "tail": 20,
+        "transcript_tail": None,
+    }
+    index = 0
+    while index < len(option_args):
+        if index + 1 >= len(option_args):
+            raise ValueError(
+                "Usage: /tasks show <task-id> [--tail <count>] [--transcript-tail <count>]"
+            )
+        flag = option_args[index].lower()
+        value = option_args[index + 1]
+        if flag == "--tail":
+            try:
+                parsed["tail"] = int(value)
+            except ValueError as exc:
+                raise ValueError("/tasks show --tail must be an integer") from exc
+        elif flag == "--transcript-tail":
+            try:
+                parsed["transcript_tail"] = int(value)
+            except ValueError as exc:
+                raise ValueError("/tasks show --transcript-tail must be an integer") from exc
+        else:
+            raise ValueError(
+                "Usage: /tasks show <task-id> [--tail <count>] [--transcript-tail <count>]"
+            )
+        index += 2
+    return parsed
+
+
 def _parse_task_subagent_options(option_args: list[str]) -> dict[str, object]:
     parsed: dict[str, object] = {
+        "agent_definition_name": None,
         "prompt": None,
         "source": "agent_shell_subagent",
         "section": None,
@@ -357,6 +406,7 @@ def _parse_task_subagent_options(option_args: list[str]) -> dict[str, object]:
         "skill_names": [],
         "tool_name": None,
         "parent_task_id": None,
+        "delegation_briefing": None,
         "agent_name": None,
         "allowed_routes": [],
     }
@@ -364,11 +414,13 @@ def _parse_task_subagent_options(option_args: list[str]) -> dict[str, object]:
     while index < len(option_args):
         if index + 1 >= len(option_args):
             raise ValueError(
-                "Usage: /tasks start subagent --prompt <prompt> [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--agent-name <name>] [--allow-route <route>]"
+                "Usage: /tasks start subagent --prompt <prompt> [--agent <name>] [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--briefing <text>] [--agent-name <name>] [--allow-route <route>]"
             )
         flag = option_args[index].lower()
         value = option_args[index + 1]
-        if flag == "--prompt":
+        if flag == "--agent":
+            parsed["agent_definition_name"] = value
+        elif flag == "--prompt":
             parsed["prompt"] = value
         elif flag == "--source":
             parsed["source"] = value
@@ -382,19 +434,21 @@ def _parse_task_subagent_options(option_args: list[str]) -> dict[str, object]:
             parsed["tool_name"] = value
         elif flag == "--parent-task-id":
             parsed["parent_task_id"] = value
+        elif flag == "--briefing":
+            parsed["delegation_briefing"] = value
         elif flag == "--agent-name":
             parsed["agent_name"] = value
         elif flag == "--allow-route":
             parsed["allowed_routes"].append(value)
         else:
             raise ValueError(
-                "Usage: /tasks start subagent --prompt <prompt> [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--agent-name <name>] [--allow-route <route>]"
+                "Usage: /tasks start subagent --prompt <prompt> [--agent <name>] [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--briefing <text>] [--agent-name <name>] [--allow-route <route>]"
             )
         index += 2
 
     if not isinstance(parsed["prompt"], str) or not str(parsed["prompt"]).strip():
         raise ValueError(
-            "Usage: /tasks start subagent --prompt <prompt> [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--agent-name <name>] [--allow-route <route>]"
+            "Usage: /tasks start subagent --prompt <prompt> [--agent <name>] [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--briefing <text>] [--agent-name <name>] [--allow-route <route>]"
         )
     return parsed
 
@@ -577,6 +631,27 @@ def execute_agent_command(
         except ValueError as exc:
             return {"exit": False, "response": str(exc)}
         return {"exit": False, "response": json.dumps(payload, indent=2, sort_keys=False)}
+    if command == "agents":
+        try:
+            if len(parts) == 1 or (len(parts) >= 2 and parts[1].lower() == "list"):
+                settings_payload = resolve_agent_registry_settings(cfg)
+                agents = list_agent_definitions(cfg)
+                payload = {
+                    "enabled": settings_payload["enabled"],
+                    "root_dir": settings_payload["root_dir"],
+                    "agent_count": len(agents),
+                    "agents": agents,
+                }
+            elif len(parts) >= 3 and parts[1].lower() == "show":
+                payload = describe_agent_definition(cfg, parts[2])
+            else:
+                return {
+                    "exit": False,
+                    "response": "Usage: /agents | /agents list | /agents show <name>",
+                }
+        except ValueError as exc:
+            return {"exit": False, "response": str(exc)}
+        return {"exit": False, "response": json.dumps(payload, indent=2, sort_keys=False)}
     if command == "tools":
         if len(parts) == 1 or (len(parts) >= 2 and parts[1].lower() == "list"):
             tools = list_agent_tools(cfg)
@@ -652,7 +727,13 @@ def execute_agent_command(
                     recent_limit=int(options["recent_limit"] or 5),
                 )
             elif len(parts) >= 3 and parts[1].lower() == "show":
-                payload = describe_agent_task(cfg, parts[2])
+                options = _parse_task_show_options(parts[3:])
+                payload = describe_agent_task(
+                    cfg,
+                    parts[2],
+                    tail=int(options["tail"] or 20),
+                    transcript_tail=options["transcript_tail"],
+                )
             elif len(parts) >= 3 and parts[1].lower() == "attach":
                 options = _parse_task_attach_options(parts[3:])
                 payload = attach_agent_task(
@@ -697,6 +778,12 @@ def execute_agent_command(
                         cfg,
                         config_path,
                         str(options["prompt"]),
+                        agent_definition_name=(
+                            str(options["agent_definition_name"])
+                            if isinstance(options["agent_definition_name"], str)
+                            and str(options["agent_definition_name"]).strip()
+                            else None
+                        ),
                         source=str(options["source"]),
                         section=(
                             str(options["section"])
@@ -718,6 +805,12 @@ def execute_agent_command(
                             and str(options["parent_task_id"]).strip()
                             else None
                         ),
+                        delegation_briefing=(
+                            str(options["delegation_briefing"])
+                            if isinstance(options["delegation_briefing"], str)
+                            and str(options["delegation_briefing"]).strip()
+                            else None
+                        ),
                         agent_name=(
                             str(options["agent_name"])
                             if isinstance(options["agent_name"], str)
@@ -732,7 +825,7 @@ def execute_agent_command(
                         "response": (
                             "Usage: /tasks start workflow <name> [--var key=value] "
                             "| /tasks start dream "
-                            "| /tasks start subagent --prompt <prompt> [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--agent-name <name>] [--allow-route <route>]"
+                            "| /tasks start subagent --prompt <prompt> [--agent <name>] [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--agent-name <name>] [--allow-route <route>]"
                         ),
                     }
             elif len(parts) >= 3 and parts[1].lower() == "cancel":
@@ -745,11 +838,11 @@ def execute_agent_command(
                     "response": (
                         "Usage: /tasks | /tasks list [--kind <kind>] [--status <status>] [--source <source>] "
                         "| /tasks status [--kind <kind>] [--status <status>] [--source <source>] [--recent-limit <count>] "
-                        "| /tasks show <task-id> "
+                        "| /tasks show <task-id> [--tail <count>] [--transcript-tail <count>] "
                         "| /tasks attach <task-id> [--cursor <cursor>] [--limit <count>] "
                         "| /tasks start workflow <name> [--var key=value] "
                         "| /tasks start dream "
-                        "| /tasks start subagent --prompt <prompt> [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--agent-name <name>] [--allow-route <route>] "
+                        "| /tasks start subagent --prompt <prompt> [--agent <name>] [--source <source>] [--section <section>] [--attachment <path>] [--skill <name>] [--tool-name <tool>] [--parent-task-id <task-id>] [--agent-name <name>] [--allow-route <route>] "
                         "| /tasks cancel <task-id> | /tasks resume <task-id>"
                     ),
                 }

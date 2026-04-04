@@ -228,11 +228,16 @@ skill_registry:
   max_active_skills: 2
   max_instruction_chars: 2400
 
+agent_registry:
+  enabled: true
+  root_dir: "agents"
+
 agent_task_manager:
   enabled: true
   root_dir: "data/agent_tasks"
   tasks_dir: "data/agent_tasks/tasks"
   logs_dir: "data/agent_tasks/logs"
+  transcripts_dir: "data/agent_tasks/transcripts"
 
 agent_shell:
   enabled: true
@@ -244,6 +249,7 @@ agent_shell:
   max_turns: 40
   temperature: 0.2
   max_output_tokens: 512
+  history_turn_window: 6
   ollama_base_url: "http://localhost:11434/v1"
   openai_api_key_env: "OPENAI_API_KEY"
   include_memory_in_text_routes: false

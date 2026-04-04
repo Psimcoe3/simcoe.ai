@@ -325,10 +325,12 @@ make inspect-shell CONFIG=config.yaml ARGS='--session-id agent-shell-123456789ab
 
 - `workflows/registry.yaml` is a checked-in local workflow manifest for repeatable operator jobs such as memory seeding, retrieval corpus refresh, benchmark refresh, and release verification.
 - `skills/*.md` is a checked-in local markdown skill library with YAML frontmatter and instruction bodies for operator-facing runtime guidance.
+- `agents/*.md` is a checked-in local markdown agent library for named subagent workers with bounded routes, skill defaults, and reusable review instructions.
 - `scripts/workflow_registry.py` can list, validate, show, dry-run, and execute those workflows using the current Python environment and selected config.
 - `scripts/agent_task_manager.py` can launch those workflows, plus dream-memory consolidation, as managed background tasks with persisted JSON summaries and log files.
+- `scripts/agent_registry.py` loads named subagent definitions from disk and supplies defaults for bounded background workers.
 - `scripts/agent_skill_registry.py` loads skill definitions, resolves aliases, and can attach matched skill guidance to model-routed shell turns.
-- `scripts/orchestration_inspect.py` exposes operator inspection views for hook rules, provider ordering, local agent command, skill, tool, and task metadata, saved execution summaries from evaluation results, and persisted local agent shell sessions.
+- `scripts/orchestration_inspect.py` exposes operator inspection views for hook rules, provider ordering, local agent command, skill, agent, tool, and task metadata, saved execution summaries from evaluation results, and persisted local agent shell sessions.
 - These surfaces are intentionally local and config-driven. They are not a plugin marketplace and do not fetch remote tools or instructions.
 
 ### 5. Build Retrieval And Benchmark Assets
@@ -344,6 +346,7 @@ make inspect-shell CONFIG=config.yaml ARGS='--session-id agent-shell-123456789ab
 - `scripts/build_source_registry.py` snapshots the configured external root into a machine-readable registry manifest with stable asset IDs, file hashes, and ingestion recommendations.
 - Registry entries now include a suggested repo-managed destination path so selected external assets can be mirrored into this repo in a predictable layout.
 - `scripts/materialize_sources.py` copies selected registry assets into `sources/managed/<namespace>/<runtime_owner>/<asset_kind>/...` and writes a materialization manifest.
+- Staged archive imports can now run through a deduped canonical bucket view first: `scripts/organize_staged_references.py` writes `bucketed/manifests/bucket_manifest.json`, and `scripts/import_staged_reference_batch.py` will prefer that manifest automatically when present so duplicate extracted files do not inflate the registry or alter repo-managed paths.
 - `scripts/ingest_reference_folder.py`, `scripts/revit_ingestion.py`, and `scripts/build_estimate_index.py` now stamp output records with `record_id` and a `data_contract` block.
 - Contract-marked non-SFT records default to `review_state: review_required` and `sft_candidate: false`.
 - `scripts/build_catalog_data.py` refuses to promote contract-marked unreviewed records into training examples unless `--allow_contract_override` is passed deliberately.
@@ -425,11 +428,12 @@ For local operator workflows and inspection:
 make workflow-list CONFIG=config.electrician.yaml
 make workflow-show CONFIG=config.electrician.yaml WORKFLOW=retrieval-refresh
 make workflow-run CONFIG=config.electrician.yaml WORKFLOW=benchmark-refresh ARGS='--dry-run'
+make workflow-run CONFIG=config.electrician.yaml WORKFLOW=staged-reference-import ARGS='--var batch_name=downloads_reference_import_20260402_checked --var archive_list_file=/tmp/downloads_reference_archives.txt --dry-run'
 make task-list CONFIG=config.electrician.yaml
 make task-status CONFIG=config.electrician.yaml
 make task-attach CONFIG=config.electrician.yaml TASK_ID=agent-task-123456789abc ARGS='--cursor 0 --limit 20'
 make task-start-workflow CONFIG=config.electrician.yaml WORKFLOW=benchmark-refresh ARGS='--var out=evals/results_electrician.json'
-make task-start-subagent CONFIG=config.electrician.yaml ARGS='--prompt "Check whether retrieval coverage is missing conduit support references." --source operator.review --parent-task-id agent-task-123456789abc'
+make task-start-subagent CONFIG=config.electrician.yaml ARGS='--prompt "Check whether retrieval coverage is missing conduit support references." --source operator.review --parent-task-id agent-task-123456789abc --briefing "Prefer the latest grounded conduit support notes before generic guidance."'
 make inspect-tasks CONFIG=config.electrician.yaml
 make inspect-hooks CONFIG=config.electrician.yaml
 make inspect-providers CONFIG=config.electrician.yaml
@@ -524,19 +528,21 @@ make inspect-commands CONFIG=config.yaml
 make inspect-commands CONFIG=config.yaml ARGS='--command-name workflow'
 make inspect-skills CONFIG=config.yaml
 make inspect-skills CONFIG=config.yaml ARGS='--skill-name electrical-estimating'
+make inspect-agents CONFIG=config.yaml
+make inspect-agents CONFIG=config.yaml ARGS='--agent-name estimate-reviewer'
 make inspect-tools CONFIG=config.yaml
 make inspect-tools CONFIG=config.yaml ARGS='--tool-name estimate_lookup'
 make inspect-tasks CONFIG=config.yaml
-make inspect-tasks CONFIG=config.yaml ARGS='--task-id agent-task-123456789abc --tail 10'
+make inspect-tasks CONFIG=config.yaml ARGS='--task-id agent-task-123456789abc --tail 10 --transcript-tail 2'
 make task-status CONFIG=config.yaml
 make task-attach CONFIG=config.yaml TASK_ID=agent-task-123456789abc ARGS='--cursor 0 --limit 20'
 make task-resume CONFIG=config.yaml TASK_ID=agent-task-123456789abc
-make task-start-subagent CONFIG=config.yaml ARGS='--prompt "Summarize missing source gaps in the latest estimate response." --source operator.review --skill electrical-estimating --tool estimate_lookup'
+make task-start-subagent CONFIG=config.yaml ARGS='--agent estimate-reviewer --prompt "Summarize missing source gaps in the latest estimate response." --source operator.review --briefing "Focus on verified NEC grounding references and unresolved estimate assumptions."'
 make inspect-shell CONFIG=config.yaml
 make inspect-shell CONFIG=config.yaml ARGS='--session-id agent-shell-123456789abc --tail 3'
 ```
 
-Shell sessions persist under `agent_shell.root_dir` and keep a JSON session summary plus a JSONL transcript per session. For text and retrieval turns, the shell can attach matching local skill guidance from `skills/*.md` before the user instruction is sent to the model, and you can now force skills explicitly with repeated `--skill` flags for one-shot prompts or persist them in a session with `/skills pin <name>`, queue them for one turn with `/skills use <name>`, inspect current state with `/skills active`, and clear them with `/skills clear`. Managed background work persists separately under `agent_task_manager.root_dir`, and the shell now exposes `/tasks`, `/tasks list --status running`, `/tasks status`, `/tasks show <task-id>`, `/tasks attach <task-id>`, `/tasks start workflow <name>`, `/tasks start dream`, `/tasks start subagent --prompt <text>`, `/tasks cancel <task-id>`, and `/tasks resume <task-id>` for local workflow, dream, and bounded subagent jobs. Attach reads incremental task log output with cursor support so interrupted operators can rejoin a running task, and subagent tasks carry optional parent task ids, request context, skill lists, and deterministic-tool restrictions for one-turn delegated work. Inside the shell, `/help` includes the expanded `/skills` and `/tasks` surfaces alongside `/commands`, `/tools`, `/session`, `/route`, `/providers`, and `/workflow list|show`.
+Shell sessions persist under `agent_shell.root_dir` and keep a JSON session summary plus a JSONL transcript per session. Older turns are now compacted into a rolling `history_summary_text` field, and the shell injects that condensed summary ahead of only the most recent turns so long-running sessions do not rely on replaying the full transcript into every model prompt. The replay window is now configurable with `agent_shell.history_turn_window`, so operators can tune prompt continuity versus prompt size instead of relying on a fixed six-turn window. `/session`, `--show-session`, and `make inspect-shell` now expose a `history` block that shows how many turns were summarized, how many recent turns are still replayed directly, how many older turns were omitted entirely, and how many chat messages are actually fed back into the model. For text and retrieval turns, the shell can attach matching local skill guidance from `skills/*.md` before the user instruction is sent to the model, and you can now force skills explicitly with repeated `--skill` flags for one-shot prompts or persist them in a session with `/skills pin <name>`, queue them for one turn with `/skills use <name>`, inspect current state with `/skills active`, and clear them with `/skills clear`. Named subagent workers live under `agents/*.md`, are discoverable via `/agents`, and can supply reusable instructions plus default routes, skills, and tool restrictions for task-backed workers. Managed background work persists separately under `agent_task_manager.root_dir`, and the shell now exposes `/tasks`, `/tasks list --status running`, `/tasks status`, `/tasks show <task-id>`, `/tasks attach <task-id>`, `/tasks start workflow <name>`, `/tasks start dream`, and `/tasks start subagent --prompt <text>` for local workflow, dream, and bounded subagent jobs. Attach reads incremental task log output with cursor support so interrupted operators can rejoin a running task, and all managed task kinds now persist structured JSONL transcript records under `agent_task_manager.transcripts_dir`: workflow and dream tasks record lifecycle events, while subagent tasks keep the full structured turn payload. `/tasks show <task-id>` surfaces a `transcript` block for any task with persisted records, and subagent jobs still add a `subagent_context` block for composed prompt inputs plus the reconstructed execution summary from their saved turn data. Use `--transcript-tail` on `make inspect-tasks` or `/tasks show <task-id> --transcript-tail <count>` when you want a different structured-record window than the plain log tail. Subagent tasks can now be started directly from named agent definitions with `/tasks start subagent --agent <name> --prompt <text>` plus an optional `--briefing <text>` block for explicit child-worker context. The `/tools` surface now also includes `delegate_to_subagent`, so prompts like `Delegate to estimate-reviewer: review the latest estimate answer.` can start a named background worker directly from the shell and return a follow-up task id. When that delegation happens inside a managed subagent task, the spawned child task now keeps the parent task linkage and inherits a compact delegation briefing built from the parent task context, so lineage, prompt composition, structured execution detail, and handoff context all remain visible under `/tasks show <task-id>`, `/tasks`, and `/tasks status`. Inside the shell, `/help` includes the expanded `/skills`, `/agents`, and `/tasks` surfaces alongside `/commands`, `/tools`, `/session`, `/route`, `/providers`, and `/workflow list|show`.
 
 ---
 
@@ -730,6 +736,60 @@ make source-materialize CONFIG=config.electrician.yaml \
 ```
 
 That command copies matching files into `sources/managed/electricalai_docs/...` and records the copy set in `data/registry/materialized_sources.json`.
+
+For archive-backed imports, the staged-batch path is now:
+
+```bash
+# Stage one archive directly from the external source directory
+make stage-archives BATCH=smoke_test_schedule STAGE_ARCHIVE_NAME='SCHEDULE.zip' STAGE_ARCHIVES_OVERWRITE=1
+
+# Stage a larger selection from a one-archive-per-line text file
+cat > /tmp/downloads_reference_archives.txt <<'EOF'
+001 - DOCUMENTS.7z
+004 - PREFAB.7z
+E107_L7 MGH_MAIN_EL_RM_LAYERED_CND_LAYOUT_REV01_10-08-2025.7z
+SCHEDULE.zip
+Z.7z
+12 - 120048TUR - MGH - 4B CAMBRIDGE ST C-S-3-001.zip.chunk.0001
+12 - 120048TUR - MGH - 4B CAMBRIDGE ST C-S-3-001.zip.chunk.0002
+12 - 120048TUR - MGH - 4B CAMBRIDGE ST C-S-3-001.zip.chunk.0003
+12 - 120048TUR - MGH - 4B CAMBRIDGE ST C-S-3-001.zip.chunk.0004
+12 - 120048TUR - MGH - 4B CAMBRIDGE ST C-S-3-001.zip.chunk.0005
+12 - 120048TUR - MGH - 4B CAMBRIDGE ST C-S-3-001.zip.chunk.0006
+12 - 120048TUR - MGH - 4B CAMBRIDGE ST C-S-3-001.zip.chunk.0007
+12 - 120048TUR - MGH - 4B CAMBRIDGE ST C-S-3-001.zip.chunk.0008
+12 - 120048TUR - MGH - 4B CAMBRIDGE ST C-S-3-001.zip.chunk.0009
+12 - 120048TUR - MGH - 4B CAMBRIDGE ST C-S-3-001.zip.chunk.0010
+EOF
+make stage-archives BATCH=downloads_reference_import_20260402_checked STAGE_ARCHIVE_LIST_FILE=/tmp/downloads_reference_archives.txt STAGE_ARCHIVES_OVERWRITE=1
+
+# Rebuild the deduped canonical review view for one staged batch
+make stage-organize BATCH=downloads_reference_import_20260402_checked
+
+# Rebuild the bucketed view and import actionable assets in one step
+make stage-import BATCH=downloads_reference_import_20260402_checked CONFIG=config.electrician.yaml
+
+# Inspect the import selection without copying files
+make stage-import BATCH=downloads_reference_import_20260402_checked CONFIG=config.electrician.yaml STAGE_IMPORT_DRY_RUN=1
+
+# Include manual-review assets when a staged batch has no retrieval, multimodal, or geometry-rules matches
+make stage-import BATCH=smoke_make_schedule CONFIG=config.electrician.yaml STAGE_IMPORT_DRY_RUN=1 STAGE_IMPORT_INCLUDE_MANUAL_REVIEW=1
+
+# Force a raw extracted-tree import instead of the canonical bucketed view
+make stage-import BATCH=downloads_reference_import_20260402_checked CONFIG=config.electrician.yaml STAGE_IMPORT_USE_EXTRACTED=1
+
+# Archive the machine-readable manifests and reclaim the staged-batch working tree
+make stage-retire BATCH=downloads_reference_import_20260402_checked STAGE_RETIRE_OVERWRITE=1
+
+# Preview retirement or keep the batch in place after writing the archived manifest snapshot
+make stage-retire BATCH=downloads_reference_import_20260402_checked STAGE_RETIRE_DRY_RUN=1
+make stage-retire BATCH=downloads_reference_import_20260402_checked STAGE_RETIRE_KEEP_BATCH=1 STAGE_RETIRE_OVERWRITE=1
+
+# Run the standard stage -> organize -> import flow from the checked-in workflow registry
+make workflow-run CONFIG=config.electrician.yaml WORKFLOW=staged-reference-import ARGS='--var batch_name=downloads_reference_import_20260402_checked --var archive_list_file=/tmp/downloads_reference_archives.txt --dry-run'
+```
+
+`make stage-archives` wraps `scripts/stage_reference_archives.py`; when you use `STAGE_ARCHIVE_LIST_FILE`, the text file can include blank lines and `#` comments for review notes. `make stage-import` runs `scripts/organize_staged_references.py` first, then `scripts/import_staged_reference_batch.py`. When `bucketed/manifests/bucket_manifest.json` exists, the import step uses that deduped canonical view automatically; use `STAGE_IMPORT_USE_EXTRACTED=1` when you need the raw extracted tree instead. The default import selection only includes `retrieval`, `multimodal`, and `geometry_rules` assets, so add `STAGE_IMPORT_INCLUDE_MANUAL_REVIEW=1` when a batch is valid but only contains manual-review assets. `make stage-retire` writes an archived manifest bundle under `data/staging/reference_archive_batches/_archived/<batch>/` and, by default, removes the original staged batch after confirming an import manifest exists.
 
 When records carry a `data_contract` block, `build_catalog_data.py` will block automatic SFT conversion unless the record is explicitly marked reviewed/approved and `sft_candidate: true`.
 

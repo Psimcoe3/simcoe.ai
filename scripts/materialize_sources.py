@@ -169,9 +169,24 @@ def source_path_for_asset(asset: dict, registry_root: Path) -> Path:
     return registry_root / str(asset.get("relative_path") or "")
 
 
-def main() -> int:
-    args = parse_args()
-    cfg = load_config(args.config)
+def materialize_registry_assets(
+    *,
+    cfg: dict,
+    config_path: str,
+    registry: dict,
+    registry_path: str,
+    repo_dir_override: str | None = None,
+    out_manifest_override: str | None = None,
+    registry_ids: list[str] | None = None,
+    relative_paths: list[str] | None = None,
+    path_prefixes: list[str] | None = None,
+    asset_kinds: list[str] | None = None,
+    runtime_owners: list[str] | None = None,
+    pipelines: list[str] | None = None,
+    copy_all: bool = False,
+    overwrite: bool = False,
+    dry_run: bool = False,
+) -> dict:
     validate_source_registry_config(cfg)
     validate_managed_sources_config(cfg)
 
@@ -180,29 +195,27 @@ def main() -> int:
         raise SystemExit("Config must define a source_registry section")
     managed_sources_cfg = cfg.get("managed_sources") if isinstance(cfg.get("managed_sources"), dict) else {}
 
-    registry_path = args.registry or source_registry["manifest_path"]
-    require_file(registry_path, "Source registry manifest")
-    registry = read_json_file(registry_path)
-
     assets = registry.get("assets")
     if not isinstance(assets, list):
         raise SystemExit("Registry manifest is missing an assets array")
 
-    if not (args.copy_all or args.registry_id or args.relative_path or args.path_prefix):
+    if not (copy_all or registry_ids or relative_paths or path_prefixes):
         raise SystemExit(
-            "Choose assets with --registry-id, --relative-path, --path-prefix, or use --copy-all"
+            "Choose assets with registry_ids, relative_paths, path_prefixes, or use copy_all=True"
         )
 
     registry_root = Path(str(registry.get("root") or source_registry["root"]))
-    repo_dir = args.repo_dir or repo_sync_dir(source_registry)
-    out_manifest = args.out_manifest or materialized_manifest_path(source_registry)
-    namespace = source_registry_namespace(source_registry, str(registry_root))
+    repo_dir = repo_dir_override or repo_sync_dir(source_registry)
+    out_manifest = out_manifest_override or materialized_manifest_path(source_registry)
+    repo_sync = registry.get("repo_sync") if isinstance(registry.get("repo_sync"), dict) else {}
+    namespace = str(repo_sync.get("namespace") or source_registry_namespace(source_registry, str(registry_root)))
     out_manifest_path = Path(out_manifest)
 
     for asset in assets:
         if not isinstance(asset, dict):
             continue
-        if isinstance(asset.get("repo_managed_path"), str) and asset.get("repo_managed_path").strip():
+        repo_managed_path = asset.get("repo_managed_path")
+        if isinstance(repo_managed_path, str) and repo_managed_path.strip():
             continue
         asset["repo_managed_path"] = resolve_repo_managed_path(
             relative_path=str(asset.get("relative_path") or ""),
@@ -213,11 +226,19 @@ def main() -> int:
             managed_sources_cfg=managed_sources_cfg,
         )
 
-    chosen_assets = selected_assets(assets, args)
+    selection_args = argparse.Namespace(
+        copy_all=copy_all,
+        registry_id=list(registry_ids or []),
+        relative_path=list(relative_paths or []),
+        path_prefix=list(path_prefixes or []),
+        asset_kind=list(asset_kinds or []),
+        runtime_owner=list(runtime_owners or []),
+        pipeline=list(pipelines or []),
+        overwrite=overwrite,
+        dry_run=dry_run,
+    )
+    chosen_assets = selected_assets(assets, selection_args)
     if not chosen_assets:
-        if args.copy_all and not assets:
-            print(f"Registry manifest {registry_path} contains no assets; nothing to materialize")
-            return 0
         raise SystemExit("No registry assets matched the provided selectors")
 
     copied = 0
@@ -228,16 +249,19 @@ def main() -> int:
     for asset in chosen_assets:
         source_path = source_path_for_asset(asset, registry_root)
         target_path = target_path_for_asset(asset, REPO_ROOT, repo_dir, namespace)
-        relative_target_path = target_path.relative_to(REPO_ROOT).as_posix()
+        if target_path.is_absolute() and (target_path == REPO_ROOT or REPO_ROOT in target_path.parents):
+            relative_target_path = target_path.relative_to(REPO_ROOT).as_posix()
+        else:
+            relative_target_path = str(target_path)
 
         status = "dry_run"
         if not source_path.is_file():
             status = "missing_source"
             errors.append(f"Missing source file: {source_path}")
-        elif target_path.exists() and not args.overwrite:
+        elif target_path.exists() and not overwrite:
             status = "already_present"
             already_present += 1
-        elif not args.dry_run:
+        elif not dry_run:
             target_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source_path, target_path)
             normalize_materialized_permissions(target_path)
@@ -295,7 +319,7 @@ def main() -> int:
     manifest = {
         "schema_version": 1,
         "generated_at": current_utc_timestamp(),
-        "config_path": str((REPO_ROOT / args.config).resolve()) if not Path(args.config).is_absolute() else str(Path(args.config).resolve()),
+        "config_path": str((REPO_ROOT / config_path).resolve()) if not Path(config_path).is_absolute() else str(Path(config_path).resolve()),
         "registry_manifest_path": str(Path(registry_path).resolve()),
         "registry_manifest_paths": sorted(set(registry_manifest_paths)),
         "registry_root": str(registry_root.resolve()),
@@ -304,15 +328,15 @@ def main() -> int:
             "root": repo_dir,
         },
         "selection": {
-            "copy_all": args.copy_all,
-            "registry_ids": args.registry_id,
-            "relative_paths": args.relative_path,
-            "path_prefixes": args.path_prefix,
-            "asset_kinds": args.asset_kind,
-            "runtime_owners": args.runtime_owner,
-            "pipelines": args.pipeline,
-            "overwrite": args.overwrite,
-            "dry_run": args.dry_run,
+            "copy_all": copy_all,
+            "registry_ids": list(registry_ids or []),
+            "relative_paths": list(relative_paths or []),
+            "path_prefixes": list(path_prefixes or []),
+            "asset_kinds": list(asset_kinds or []),
+            "runtime_owners": list(runtime_owners or []),
+            "pipelines": list(pipelines or []),
+            "overwrite": overwrite,
+            "dry_run": dry_run,
         },
         "summary": {
             "tracked_asset_count": len(merged_assets),
@@ -330,15 +354,47 @@ def main() -> int:
         raise SystemExit(
             f"Materialization wrote manifest to {out_manifest} but found {len(errors)} missing source files"
         )
+    return manifest
 
-    print(f"Selected {len(chosen_assets)} registry assets")
-    print(f"Manifest written to {out_manifest}")
+
+def main() -> int:
+    args = parse_args()
+    cfg = load_config(args.config)
+    validate_source_registry_config(cfg)
+    validate_managed_sources_config(cfg)
+
+    source_registry = cfg.get("source_registry")
+    if not isinstance(source_registry, dict):
+        raise SystemExit("Config must define a source_registry section")
+    registry_path = args.registry or source_registry["manifest_path"]
+    require_file(registry_path, "Source registry manifest")
+    registry = read_json_file(registry_path)
+    manifest = materialize_registry_assets(
+        cfg=cfg,
+        config_path=args.config,
+        registry=registry,
+        registry_path=registry_path,
+        repo_dir_override=args.repo_dir,
+        out_manifest_override=args.out_manifest,
+        registry_ids=args.registry_id,
+        relative_paths=args.relative_path,
+        path_prefixes=args.path_prefix,
+        asset_kinds=args.asset_kind,
+        runtime_owners=args.runtime_owner,
+        pipelines=args.pipeline,
+        copy_all=args.copy_all,
+        overwrite=args.overwrite,
+        dry_run=args.dry_run,
+    )
+
+    print(f"Selected {manifest['summary']['selected_count']} registry assets")
+    print(f"Manifest written to {args.out_manifest or materialized_manifest_path(source_registry)}")
     if args.dry_run:
         print("Dry run complete; no files were copied")
     else:
-        print(f"Copied {copied} files into {repo_dir}")
-        if already_present:
-            print(f"Skipped {already_present} files already present in the repo")
+        print(f"Copied {manifest['summary']['copied_count']} files into {manifest['repo_sync']['root']}")
+        if manifest['summary']['already_present_count']:
+            print(f"Skipped {manifest['summary']['already_present_count']} files already present in the repo")
     return 0
 
 

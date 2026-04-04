@@ -1,398 +1,696 @@
-use std::io::{self, Write};
-use std::path::PathBuf;
+use std::env;
+use std::fs;
+use std::io;
+use std::process::Command;
 
-use crate::args::{OutputFormat, PermissionMode};
-use crate::input::{LineEditor, ReadOutcome};
+use runtime::{CompactionConfig, ConversationRuntime, PermissionMode, Session};
+use serde_json::json;
+
+use crate::args::{
+    normalize_permission_mode, permission_mode_from_label, resolve_model_alias, AllowedToolSet,
+    CliOutputFormat,
+};
+use crate::format::{
+    format_auto_compaction_notice, format_compact_report, format_cost_report,
+    format_model_report, format_model_switch_report, format_permissions_report,
+    format_permissions_switch_report, format_resume_report, format_status_report,
+    render_config_report, render_diff_report, render_last_tool_debug_report, render_repl_help,
+    render_teleport_report, render_version_report, render_memory_report, status_context,
+    StatusUsage,
+};
 use crate::render::{Spinner, TerminalRenderer};
-use runtime::{ConversationClient, ConversationMessage, RuntimeError, StreamEvent, UsageSummary};
+use crate::session_manager::{
+    create_managed_session_handle, render_session_list, resolve_session_reference, SessionHandle,
+};
+use crate::{AnthropicRuntimeClient, CliPermissionPrompter, CliToolExecutor};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SessionConfig {
-    pub model: String,
-    pub permission_mode: PermissionMode,
-    pub config: Option<PathBuf>,
-    pub output_format: OutputFormat,
+pub(crate) struct LiveCli {
+    pub(crate) model: String,
+    pub(crate) allowed_tools: Option<AllowedToolSet>,
+    pub(crate) permission_mode: PermissionMode,
+    pub(crate) system_prompt: Vec<String>,
+    pub(crate) runtime: ConversationRuntime<AnthropicRuntimeClient, CliToolExecutor>,
+    pub(crate) session: SessionHandle,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SessionState {
-    pub turns: usize,
-    pub compacted_messages: usize,
-    pub last_model: String,
-    pub last_usage: UsageSummary,
-}
-
-impl SessionState {
-    #[must_use]
-    pub fn new(model: impl Into<String>) -> Self {
-        Self {
-            turns: 0,
-            compacted_messages: 0,
-            last_model: model.into(),
-            last_usage: UsageSummary::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CommandResult {
-    Continue,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SlashCommand {
-    Help,
-    Status,
-    Compact,
-    Unknown(String),
-}
-
-impl SlashCommand {
-    #[must_use]
-    pub fn parse(input: &str) -> Option<Self> {
-        let trimmed = input.trim();
-        if !trimmed.starts_with('/') {
-            return None;
-        }
-
-        let command = trimmed
-            .trim_start_matches('/')
-            .split_whitespace()
-            .next()
-            .unwrap_or_default();
-        Some(match command {
-            "help" => Self::Help,
-            "status" => Self::Status,
-            "compact" => Self::Compact,
-            other => Self::Unknown(other.to_string()),
-        })
-    }
-}
-
-struct SlashCommandHandler {
-    command: SlashCommand,
-    summary: &'static str,
-}
-
-const SLASH_COMMAND_HANDLERS: &[SlashCommandHandler] = &[
-    SlashCommandHandler {
-        command: SlashCommand::Help,
-        summary: "Show command help",
-    },
-    SlashCommandHandler {
-        command: SlashCommand::Status,
-        summary: "Show current session status",
-    },
-    SlashCommandHandler {
-        command: SlashCommand::Compact,
-        summary: "Compact local session history",
-    },
-];
-
-pub struct CliApp {
-    config: SessionConfig,
-    renderer: TerminalRenderer,
-    state: SessionState,
-    conversation_client: ConversationClient,
-    conversation_history: Vec<ConversationMessage>,
-}
-
-impl CliApp {
-    pub fn new(config: SessionConfig) -> Result<Self, RuntimeError> {
-        let state = SessionState::new(config.model.clone());
-        let conversation_client = ConversationClient::from_env(config.model.clone())?;
-        Ok(Self {
-            config,
-            renderer: TerminalRenderer::new(),
-            state,
-            conversation_client,
-            conversation_history: Vec::new(),
-        })
+#[allow(clippy::too_many_lines)]
+impl LiveCli {
+    pub(crate) fn new(
+        model: String,
+        enable_tools: bool,
+        allowed_tools: Option<AllowedToolSet>,
+        permission_mode: PermissionMode,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let system_prompt = crate::build_system_prompt()?;
+        let session = create_managed_session_handle()?;
+        let runtime = crate::build_runtime(
+            Session::new(),
+            model.clone(),
+            system_prompt.clone(),
+            enable_tools,
+            true,
+            allowed_tools.clone(),
+            permission_mode,
+        )?;
+        let cli = Self {
+            model,
+            allowed_tools,
+            permission_mode,
+            system_prompt,
+            runtime,
+            session,
+        };
+        cli.persist_session()?;
+        Ok(cli)
     }
 
-    pub fn run_repl(&mut self) -> io::Result<()> {
-        let mut editor = LineEditor::new("› ", Vec::new());
-        println!("Rusty Claude CLI interactive mode");
-        println!("Type /help for commands. Shift+Enter or Ctrl+J inserts a newline.");
+    pub(crate) fn startup_banner(&self) -> String {
+        let cwd = env::current_dir().map_or_else(
+            |_| "<unknown>".to_string(),
+            |path| path.display().to_string(),
+        );
+        format!(
+            "\x1b[38;5;196m\
+ ██████╗██╗      █████╗ ██╗    ██╗\n\
+██╔════╝██║     ██╔══██╗██║    ██║\n\
+██║     ██║     ███████║██║ █╗ ██║\n\
+██║     ██║     ██╔══██║██║███╗██║\n\
+╚██████╗███████╗██║  ██║╚███╔███╔╝\n\
+ ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝\x1b[0m \x1b[38;5;208mCode\x1b[0m 🦞\n\n\
+  \x1b[2mModel\x1b[0m            {}\n\
+  \x1b[2mPermissions\x1b[0m      {}\n\
+  \x1b[2mDirectory\x1b[0m        {}\n\
+  \x1b[2mSession\x1b[0m          {}\n\n\
+  Type \x1b[1m/help\x1b[0m for commands · \x1b[2mShift+Enter\x1b[0m for newline",
+            self.model,
+            self.permission_mode.as_str(),
+            cwd,
+            self.session.id,
+        )
+    }
 
-        loop {
-            match editor.read_line()? {
-                ReadOutcome::Submit(input) => {
-                    if input.trim().is_empty() {
-                        continue;
-                    }
-                    self.handle_submission(&input, &mut io::stdout())?;
+    pub(crate) fn run_turn(&mut self, input: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let mut spinner = Spinner::new();
+        let mut stdout = io::stdout();
+        spinner.tick(
+            "🦀 Thinking...",
+            TerminalRenderer::new().color_theme(),
+            &mut stdout,
+        )?;
+        let mut permission_prompter = CliPermissionPrompter::new(self.permission_mode);
+        let result = self.runtime.run_turn(input, Some(&mut permission_prompter));
+        match result {
+            Ok(summary) => {
+                spinner.finish(
+                    "✨ Done",
+                    TerminalRenderer::new().color_theme(),
+                    &mut stdout,
+                )?;
+                println!();
+                if let Some(event) = summary.auto_compaction {
+                    println!(
+                        "{}",
+                        format_auto_compaction_notice(event.removed_message_count)
+                    );
                 }
-                ReadOutcome::Cancel => continue,
-                ReadOutcome::Exit => break,
+                self.persist_session()?;
+                Ok(())
+            }
+            Err(error) => {
+                spinner.fail(
+                    "❌ Request failed",
+                    TerminalRenderer::new().color_theme(),
+                    &mut stdout,
+                )?;
+                Err(Box::new(error))
             }
         }
-
-        Ok(())
     }
 
-    pub fn run_prompt(&mut self, prompt: &str, out: &mut impl Write) -> io::Result<()> {
-        self.render_response(prompt, out)
-    }
-
-    pub fn handle_submission(
+    pub(crate) fn run_turn_with_output(
         &mut self,
         input: &str,
-        out: &mut impl Write,
-    ) -> io::Result<CommandResult> {
-        if let Some(command) = SlashCommand::parse(input) {
-            return self.dispatch_slash_command(command, out);
+        output_format: CliOutputFormat,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        match output_format {
+            CliOutputFormat::Text => self.run_turn(input),
+            CliOutputFormat::Json => self.run_prompt_json(input),
         }
-
-        self.state.turns += 1;
-        self.render_response(input, out)?;
-        Ok(CommandResult::Continue)
     }
 
-    fn dispatch_slash_command(
+    pub(crate) fn run_prompt_json(
         &mut self,
-        command: SlashCommand,
-        out: &mut impl Write,
-    ) -> io::Result<CommandResult> {
-        match command {
-            SlashCommand::Help => Self::handle_help(out),
-            SlashCommand::Status => self.handle_status(out),
-            SlashCommand::Compact => self.handle_compact(out),
-            SlashCommand::Unknown(name) => {
-                writeln!(out, "Unknown slash command: /{name}")?;
-                Ok(CommandResult::Continue)
-            }
-        }
-    }
-
-    fn handle_help(out: &mut impl Write) -> io::Result<CommandResult> {
-        writeln!(out, "Available commands:")?;
-        for handler in SLASH_COMMAND_HANDLERS {
-            let name = match handler.command {
-                SlashCommand::Help => "/help",
-                SlashCommand::Status => "/status",
-                SlashCommand::Compact => "/compact",
-                SlashCommand::Unknown(_) => continue,
-            };
-            writeln!(out, "  {name:<9} {}", handler.summary)?;
-        }
-        Ok(CommandResult::Continue)
-    }
-
-    fn handle_status(&mut self, out: &mut impl Write) -> io::Result<CommandResult> {
-        writeln!(
-            out,
-            "status: turns={} model={} permission-mode={:?} output-format={:?} last-usage={} in/{} out config={}",
-            self.state.turns,
-            self.state.last_model,
-            self.config.permission_mode,
-            self.config.output_format,
-            self.state.last_usage.input_tokens,
-            self.state.last_usage.output_tokens,
-            self.config
-                .config
-                .as_ref()
-                .map_or_else(|| String::from("<none>"), |path| path.display().to_string())
+        input: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let session = self.runtime.session().clone();
+        let mut runtime = crate::build_runtime(
+            session,
+            self.model.clone(),
+            self.system_prompt.clone(),
+            true,
+            false,
+            self.allowed_tools.clone(),
+            self.permission_mode,
         )?;
-        Ok(CommandResult::Continue)
-    }
-
-    fn handle_compact(&mut self, out: &mut impl Write) -> io::Result<CommandResult> {
-        self.state.compacted_messages += self.state.turns;
-        self.state.turns = 0;
-        self.conversation_history.clear();
-        writeln!(
-            out,
-            "Compacted session history into a local summary ({} messages total compacted).",
-            self.state.compacted_messages
-        )?;
-        Ok(CommandResult::Continue)
-    }
-
-    fn handle_stream_event(
-        renderer: &TerminalRenderer,
-        event: StreamEvent,
-        stream_spinner: &mut Spinner,
-        tool_spinner: &mut Spinner,
-        saw_text: &mut bool,
-        turn_usage: &mut UsageSummary,
-        out: &mut impl Write,
-    ) {
-        match event {
-            StreamEvent::TextDelta(delta) => {
-                if !*saw_text {
-                    let _ =
-                        stream_spinner.finish("Streaming response", renderer.color_theme(), out);
-                    *saw_text = true;
+        let mut permission_prompter = CliPermissionPrompter::new(self.permission_mode);
+        let summary = runtime.run_turn(input, Some(&mut permission_prompter))?;
+        self.runtime = runtime;
+        self.persist_session()?;
+        println!(
+            "{}",
+            json!({
+                "message": crate::final_assistant_text(&summary),
+                "model": self.model,
+                "iterations": summary.iterations,
+                "auto_compaction": summary.auto_compaction.map(|event| json!({
+                    "removed_messages": event.removed_message_count,
+                    "notice": format_auto_compaction_notice(event.removed_message_count),
+                })),
+                "tool_uses": crate::collect_tool_uses(&summary),
+                "tool_results": crate::collect_tool_results(&summary),
+                "usage": {
+                    "input_tokens": summary.usage.input_tokens,
+                    "output_tokens": summary.usage.output_tokens,
+                    "cache_creation_input_tokens": summary.usage.cache_creation_input_tokens,
+                    "cache_read_input_tokens": summary.usage.cache_read_input_tokens,
                 }
-                let _ = write!(out, "{delta}");
-                let _ = out.flush();
-            }
-            StreamEvent::ToolCallStart { name, input } => {
-                if *saw_text {
-                    let _ = writeln!(out);
-                }
-                let _ = tool_spinner.tick(
-                    &format!("Running tool `{name}` with {input}"),
-                    renderer.color_theme(),
-                    out,
-                );
-            }
-            StreamEvent::ToolCallResult {
-                name,
-                output,
-                is_error,
-            } => {
-                let label = if is_error {
-                    format!("Tool `{name}` failed")
-                } else {
-                    format!("Tool `{name}` completed")
-                };
-                let _ = tool_spinner.finish(&label, renderer.color_theme(), out);
-                let rendered_output = format!("### Tool `{name}`\n\n```text\n{output}\n```\n");
-                let _ = renderer.stream_markdown(&rendered_output, out);
-            }
-            StreamEvent::Usage(usage) => {
-                *turn_usage = usage;
-            }
-        }
-    }
-
-    fn write_turn_output(
-        &self,
-        summary: &runtime::TurnSummary,
-        out: &mut impl Write,
-    ) -> io::Result<()> {
-        match self.config.output_format {
-            OutputFormat::Text => {
-                writeln!(
-                    out,
-                    "\nToken usage: {} input / {} output",
-                    self.state.last_usage.input_tokens, self.state.last_usage.output_tokens
-                )?;
-            }
-            OutputFormat::Json => {
-                writeln!(
-                    out,
-                    "{}",
-                    serde_json::json!({
-                        "message": summary.assistant_text,
-                        "usage": {
-                            "input_tokens": self.state.last_usage.input_tokens,
-                            "output_tokens": self.state.last_usage.output_tokens,
-                        }
-                    })
-                )?;
-            }
-            OutputFormat::Ndjson => {
-                writeln!(
-                    out,
-                    "{}",
-                    serde_json::json!({
-                        "type": "message",
-                        "text": summary.assistant_text,
-                        "usage": {
-                            "input_tokens": self.state.last_usage.input_tokens,
-                            "output_tokens": self.state.last_usage.output_tokens,
-                        }
-                    })
-                )?;
-            }
-        }
+            })
+        );
         Ok(())
     }
 
-    fn render_response(&mut self, input: &str, out: &mut impl Write) -> io::Result<()> {
-        let mut stream_spinner = Spinner::new();
-        stream_spinner.tick(
-            "Opening conversation stream",
-            self.renderer.color_theme(),
-            out,
-        )?;
-
-        let mut turn_usage = UsageSummary::default();
-        let mut tool_spinner = Spinner::new();
-        let mut saw_text = false;
-        let renderer = &self.renderer;
-
-        let result =
-            self.conversation_client
-                .run_turn(&mut self.conversation_history, input, |event| {
-                    Self::handle_stream_event(
-                        renderer,
-                        event,
-                        &mut stream_spinner,
-                        &mut tool_spinner,
-                        &mut saw_text,
-                        &mut turn_usage,
-                        out,
-                    );
-                });
-
-        let summary = match result {
-            Ok(summary) => summary,
-            Err(error) => {
-                stream_spinner.fail(
-                    "Streaming response failed",
-                    self.renderer.color_theme(),
-                    out,
-                )?;
-                return Err(io::Error::other(error));
+    pub(crate) fn handle_repl_command(
+        &mut self,
+        command: commands::SlashCommand,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        Ok(match command {
+            commands::SlashCommand::Help => {
+                println!("{}", render_repl_help());
+                false
             }
-        };
-        self.state.last_usage = summary.usage.clone();
-        if saw_text {
-            writeln!(out)?;
-        } else {
-            stream_spinner.finish("Streaming response", self.renderer.color_theme(), out)?;
-        }
+            commands::SlashCommand::Status => {
+                self.print_status();
+                false
+            }
+            commands::SlashCommand::Bughunter { scope } => {
+                self.run_bughunter(scope.as_deref())?;
+                false
+            }
+            commands::SlashCommand::Commit => {
+                self.run_commit()?;
+                true
+            }
+            commands::SlashCommand::Pr { context } => {
+                self.run_pr(context.as_deref())?;
+                false
+            }
+            commands::SlashCommand::Issue { context } => {
+                self.run_issue(context.as_deref())?;
+                false
+            }
+            commands::SlashCommand::Ultraplan { task } => {
+                self.run_ultraplan(task.as_deref())?;
+                false
+            }
+            commands::SlashCommand::Teleport { target } => {
+                self.run_teleport(target.as_deref())?;
+                false
+            }
+            commands::SlashCommand::DebugToolCall => {
+                self.run_debug_tool_call()?;
+                false
+            }
+            commands::SlashCommand::Compact => {
+                self.compact()?;
+                false
+            }
+            commands::SlashCommand::Model { model } => self.set_model(model)?,
+            commands::SlashCommand::Permissions { mode } => self.set_permissions(mode)?,
+            commands::SlashCommand::Clear { confirm } => self.clear_session(confirm)?,
+            commands::SlashCommand::Cost => {
+                self.print_cost();
+                false
+            }
+            commands::SlashCommand::Resume { session_path } => self.resume_session(session_path)?,
+            commands::SlashCommand::Config { section } => {
+                Self::print_config(section.as_deref())?;
+                false
+            }
+            commands::SlashCommand::Memory => {
+                Self::print_memory()?;
+                false
+            }
+            commands::SlashCommand::Init => {
+                crate::run_init()?;
+                false
+            }
+            commands::SlashCommand::Diff => {
+                Self::print_diff()?;
+                false
+            }
+            commands::SlashCommand::Version => {
+                Self::print_version();
+                false
+            }
+            commands::SlashCommand::Export { path } => {
+                self.export_session(path.as_deref())?;
+                false
+            }
+            commands::SlashCommand::Session { action, target } => {
+                self.handle_session_command(action.as_deref(), target.as_deref())?
+            }
+            commands::SlashCommand::Unknown(name) => {
+                eprintln!("unknown slash command: /{name}");
+                false
+            }
+        })
+    }
 
-        self.write_turn_output(&summary, out)?;
-        let _ = turn_usage;
+    pub(crate) fn persist_session(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.runtime.session().save_to_path(&self.session.path)?;
         Ok(())
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    use crate::args::{OutputFormat, PermissionMode};
-
-    use super::{CommandResult, SessionConfig, SlashCommand};
-
-    #[test]
-    fn parses_required_slash_commands() {
-        assert_eq!(SlashCommand::parse("/help"), Some(SlashCommand::Help));
-        assert_eq!(SlashCommand::parse(" /status "), Some(SlashCommand::Status));
-        assert_eq!(
-            SlashCommand::parse("/compact now"),
-            Some(SlashCommand::Compact)
+    fn print_status(&self) {
+        let cumulative = self.runtime.usage().cumulative_usage();
+        let latest = self.runtime.usage().current_turn_usage();
+        println!(
+            "{}",
+            format_status_report(
+                &self.model,
+                StatusUsage {
+                    message_count: self.runtime.session().messages.len(),
+                    turns: self.runtime.usage().turns(),
+                    latest,
+                    cumulative,
+                    estimated_tokens: self.runtime.estimated_tokens(),
+                },
+                self.permission_mode.as_str(),
+                &status_context(Some(&self.session.path)).expect("status context should load"),
+            )
         );
     }
 
-    #[test]
-    fn help_output_lists_commands() {
-        let mut out = Vec::new();
-        let result = super::CliApp::handle_help(&mut out).expect("help succeeds");
-        assert_eq!(result, CommandResult::Continue);
-        let output = String::from_utf8_lossy(&out);
-        assert!(output.contains("/help"));
-        assert!(output.contains("/status"));
-        assert!(output.contains("/compact"));
-    }
-
-    #[test]
-    fn session_state_tracks_config_values() {
-        let config = SessionConfig {
-            model: "claude".into(),
-            permission_mode: PermissionMode::DangerFullAccess,
-            config: Some(PathBuf::from("settings.toml")),
-            output_format: OutputFormat::Text,
+    fn set_model(&mut self, model: Option<String>) -> Result<bool, Box<dyn std::error::Error>> {
+        let Some(model) = model else {
+            println!(
+                "{}",
+                format_model_report(
+                    &self.model,
+                    self.runtime.session().messages.len(),
+                    self.runtime.usage().turns(),
+                )
+            );
+            return Ok(false);
         };
 
-        assert_eq!(config.model, "claude");
-        assert_eq!(config.permission_mode, PermissionMode::DangerFullAccess);
-        assert_eq!(config.config, Some(PathBuf::from("settings.toml")));
+        let model = resolve_model_alias(&model).to_string();
+
+        if model == self.model {
+            println!(
+                "{}",
+                format_model_report(
+                    &self.model,
+                    self.runtime.session().messages.len(),
+                    self.runtime.usage().turns(),
+                )
+            );
+            return Ok(false);
+        }
+
+        let previous = self.model.clone();
+        let session = self.runtime.session().clone();
+        let message_count = session.messages.len();
+        self.runtime = crate::build_runtime(
+            session,
+            model.clone(),
+            self.system_prompt.clone(),
+            true,
+            true,
+            self.allowed_tools.clone(),
+            self.permission_mode,
+        )?;
+        self.model.clone_from(&model);
+        println!(
+            "{}",
+            format_model_switch_report(&previous, &model, message_count)
+        );
+        Ok(true)
+    }
+
+    fn set_permissions(
+        &mut self,
+        mode: Option<String>,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let Some(mode) = mode else {
+            println!(
+                "{}",
+                format_permissions_report(self.permission_mode.as_str())
+            );
+            return Ok(false);
+        };
+
+        let normalized = normalize_permission_mode(&mode).ok_or_else(|| {
+            format!(
+                "unsupported permission mode '{mode}'. Use read-only, workspace-write, or danger-full-access."
+            )
+        })?;
+
+        if normalized == self.permission_mode.as_str() {
+            println!("{}", format_permissions_report(normalized));
+            return Ok(false);
+        }
+
+        let previous = self.permission_mode.as_str().to_string();
+        let session = self.runtime.session().clone();
+        self.permission_mode = permission_mode_from_label(normalized);
+        self.runtime = crate::build_runtime(
+            session,
+            self.model.clone(),
+            self.system_prompt.clone(),
+            true,
+            true,
+            self.allowed_tools.clone(),
+            self.permission_mode,
+        )?;
+        println!(
+            "{}",
+            format_permissions_switch_report(&previous, normalized)
+        );
+        Ok(true)
+    }
+
+    fn clear_session(&mut self, confirm: bool) -> Result<bool, Box<dyn std::error::Error>> {
+        if !confirm {
+            println!(
+                "clear: confirmation required; run /clear --confirm to start a fresh session."
+            );
+            return Ok(false);
+        }
+
+        self.session = create_managed_session_handle()?;
+        self.runtime = crate::build_runtime(
+            Session::new(),
+            self.model.clone(),
+            self.system_prompt.clone(),
+            true,
+            true,
+            self.allowed_tools.clone(),
+            self.permission_mode,
+        )?;
+        println!(
+            "Session cleared\n  Mode             fresh session\n  Preserved model  {}\n  Permission mode  {}\n  Session          {}",
+            self.model,
+            self.permission_mode.as_str(),
+            self.session.id,
+        );
+        Ok(true)
+    }
+
+    fn print_cost(&self) {
+        let cumulative = self.runtime.usage().cumulative_usage();
+        println!("{}", format_cost_report(cumulative));
+    }
+
+    fn resume_session(
+        &mut self,
+        session_path: Option<String>,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let Some(session_ref) = session_path else {
+            println!("Usage: /resume <session-path>");
+            return Ok(false);
+        };
+
+        let handle = resolve_session_reference(&session_ref)?;
+        let session = Session::load_from_path(&handle.path)?;
+        let message_count = session.messages.len();
+        self.runtime = crate::build_runtime(
+            session,
+            self.model.clone(),
+            self.system_prompt.clone(),
+            true,
+            true,
+            self.allowed_tools.clone(),
+            self.permission_mode,
+        )?;
+        self.session = handle;
+        println!(
+            "{}",
+            format_resume_report(
+                &self.session.path.display().to_string(),
+                message_count,
+                self.runtime.usage().turns(),
+            )
+        );
+        Ok(true)
+    }
+
+    fn print_config(section: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        println!("{}", render_config_report(section)?);
+        Ok(())
+    }
+
+    fn print_memory() -> Result<(), Box<dyn std::error::Error>> {
+        println!("{}", render_memory_report()?);
+        Ok(())
+    }
+
+    fn print_diff() -> Result<(), Box<dyn std::error::Error>> {
+        println!("{}", render_diff_report()?);
+        Ok(())
+    }
+
+    fn print_version() {
+        println!("{}", render_version_report());
+    }
+
+    fn export_session(
+        &self,
+        requested_path: Option<&str>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let export_path = crate::resolve_export_path(requested_path, self.runtime.session())?;
+        fs::write(&export_path, crate::render_export_text(self.runtime.session()))?;
+        println!(
+            "Export\n  Result           wrote transcript\n  File             {}\n  Messages         {}",
+            export_path.display(),
+            self.runtime.session().messages.len(),
+        );
+        Ok(())
+    }
+
+    fn handle_session_command(
+        &mut self,
+        action: Option<&str>,
+        target: Option<&str>,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        match action {
+            None | Some("list") => {
+                println!("{}", render_session_list(&self.session.id)?);
+                Ok(false)
+            }
+            Some("switch") => {
+                let Some(target) = target else {
+                    println!("Usage: /session switch <session-id>");
+                    return Ok(false);
+                };
+                let handle = resolve_session_reference(target)?;
+                let session = Session::load_from_path(&handle.path)?;
+                let message_count = session.messages.len();
+                self.runtime = crate::build_runtime(
+                    session,
+                    self.model.clone(),
+                    self.system_prompt.clone(),
+                    true,
+                    true,
+                    self.allowed_tools.clone(),
+                    self.permission_mode,
+                )?;
+                self.session = handle;
+                println!(
+                    "Session switched\n  Active session   {}\n  File             {}\n  Messages         {}",
+                    self.session.id,
+                    self.session.path.display(),
+                    message_count,
+                );
+                Ok(true)
+            }
+            Some(other) => {
+                println!("Unknown /session action '{other}'. Use /session list or /session switch <session-id>.");
+                Ok(false)
+            }
+        }
+    }
+
+    fn compact(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let result = self.runtime.compact(CompactionConfig::default());
+        let removed = result.removed_message_count;
+        let kept = result.compacted_session.messages.len();
+        let skipped = removed == 0;
+        self.runtime = crate::build_runtime(
+            result.compacted_session,
+            self.model.clone(),
+            self.system_prompt.clone(),
+            true,
+            true,
+            self.allowed_tools.clone(),
+            self.permission_mode,
+        )?;
+        self.persist_session()?;
+        println!("{}", format_compact_report(removed, kept, skipped));
+        Ok(())
+    }
+
+    fn run_internal_prompt_text(
+        &self,
+        prompt: &str,
+        enable_tools: bool,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let session = self.runtime.session().clone();
+        let mut runtime = crate::build_runtime(
+            session,
+            self.model.clone(),
+            self.system_prompt.clone(),
+            enable_tools,
+            false,
+            self.allowed_tools.clone(),
+            self.permission_mode,
+        )?;
+        let mut permission_prompter = CliPermissionPrompter::new(self.permission_mode);
+        let summary = runtime.run_turn(prompt, Some(&mut permission_prompter))?;
+        Ok(crate::final_assistant_text(&summary).trim().to_string())
+    }
+
+    fn run_bughunter(&self, scope: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        let scope = scope.unwrap_or("the current repository");
+        let prompt = format!(
+            "You are /bughunter. Inspect {scope} and identify the most likely bugs or correctness issues. Prioritize concrete findings with file paths, severity, and suggested fixes. Use tools if needed."
+        );
+        println!("{}", self.run_internal_prompt_text(&prompt, true)?);
+        Ok(())
+    }
+
+    fn run_ultraplan(&self, task: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        let task = task.unwrap_or("the current repo work");
+        let prompt = format!(
+            "You are /ultraplan. Produce a deep multi-step execution plan for {task}. Include goals, risks, implementation sequence, verification steps, and rollback considerations. Use tools if needed."
+        );
+        println!("{}", self.run_internal_prompt_text(&prompt, true)?);
+        Ok(())
+    }
+
+    fn run_teleport(&self, target: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        let Some(target) = target.map(str::trim).filter(|value| !value.is_empty()) else {
+            println!("Usage: /teleport <symbol-or-path>");
+            return Ok(());
+        };
+
+        println!("{}", render_teleport_report(target)?);
+        Ok(())
+    }
+
+    fn run_debug_tool_call(&self) -> Result<(), Box<dyn std::error::Error>> {
+        println!("{}", render_last_tool_debug_report(self.runtime.session())?);
+        Ok(())
+    }
+
+    fn run_commit(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let status = crate::git_output(&["status", "--short"])?;
+        if status.trim().is_empty() {
+            println!("Commit\n  Result           skipped\n  Reason           no workspace changes");
+            return Ok(());
+        }
+
+        crate::git_status_ok(&["add", "-A"])?;
+        let staged_stat = crate::git_output(&["diff", "--cached", "--stat"])?;
+        let prompt = format!(
+            "Generate a git commit message in plain text Lore format only. Base it on this staged diff summary:\n\n{}\n\nRecent conversation context:\n{}",
+            crate::truncate_for_prompt(&staged_stat, 8_000),
+            crate::recent_user_context(self.runtime.session(), 6)
+        );
+        let message = crate::sanitize_generated_message(&self.run_internal_prompt_text(&prompt, false)?);
+        if message.trim().is_empty() {
+            return Err("generated commit message was empty".into());
+        }
+
+        let path = crate::write_temp_text_file("claw-commit-message.txt", &message)?;
+        let output = Command::new("git")
+            .args(["commit", "--file"])
+            .arg(&path)
+            .current_dir(env::current_dir()?)
+            .output()?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(format!("git commit failed: {stderr}").into());
+        }
+
+        println!(
+            "Commit\n  Result           created\n  Message file     {}\n\n{}",
+            path.display(),
+            message.trim(),
+        );
+        Ok(())
+    }
+
+    fn run_pr(&self, context: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        let staged = crate::git_output(&["diff", "--stat"])?;
+        let prompt = format!(
+            "Generate a pull request title and body from this conversation and diff summary. Output plain text in this format exactly:\nTITLE: <title>\nBODY:\n<body markdown>\n\nContext hint: {}\n\nDiff summary:\n{}",
+            context.unwrap_or("none"),
+            crate::truncate_for_prompt(&staged, 10_000)
+        );
+        let draft = crate::sanitize_generated_message(&self.run_internal_prompt_text(&prompt, false)?);
+        let (title, body) = crate::parse_titled_body(&draft)
+            .ok_or_else(|| "failed to parse generated PR title/body".to_string())?;
+
+        if crate::command_exists("gh") {
+            let body_path = crate::write_temp_text_file("claw-pr-body.md", &body)?;
+            let output = Command::new("gh")
+                .args(["pr", "create", "--title", &title, "--body-file"])
+                .arg(&body_path)
+                .current_dir(env::current_dir()?)
+                .output()?;
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                println!(
+                    "PR\n  Result           created\n  Title            {title}\n  URL              {}",
+                    if stdout.is_empty() { "<unknown>" } else { &stdout }
+                );
+                return Ok(());
+            }
+        }
+
+        println!("PR draft\n  Title            {title}\n\n{body}");
+        Ok(())
+    }
+
+    fn run_issue(&self, context: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        let prompt = format!(
+            "Generate a GitHub issue title and body from this conversation. Output plain text in this format exactly:\nTITLE: <title>\nBODY:\n<body markdown>\n\nContext hint: {}\n\nConversation context:\n{}",
+            context.unwrap_or("none"),
+            crate::truncate_for_prompt(&crate::recent_user_context(self.runtime.session(), 10), 10_000)
+        );
+        let draft = crate::sanitize_generated_message(&self.run_internal_prompt_text(&prompt, false)?);
+        let (title, body) = crate::parse_titled_body(&draft)
+            .ok_or_else(|| "failed to parse generated issue title/body".to_string())?;
+
+        if crate::command_exists("gh") {
+            let body_path = crate::write_temp_text_file("claw-issue-body.md", &body)?;
+            let output = Command::new("gh")
+                .args(["issue", "create", "--title", &title, "--body-file"])
+                .arg(&body_path)
+                .current_dir(env::current_dir()?)
+                .output()?;
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                println!(
+                    "Issue\n  Result           created\n  Title            {title}\n  URL              {}",
+                    if stdout.is_empty() { "<unknown>" } else { &stdout }
+                );
+                return Ok(());
+            }
+        }
+
+        println!("Issue draft\n  Title            {title}\n\n{body}");
+        Ok(())
     }
 }

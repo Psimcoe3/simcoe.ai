@@ -16,8 +16,12 @@
 #   make release-verify # validate release manifests/results without rerunning evaluation
 #   make gguf         # convert merged model to GGUF and register with Ollama
 #   make evaluate     # evaluate only (requires exported model)
+#   make stage-archives BATCH=batch_name STAGE_ARCHIVE_NAME='SCHEDULE.zip' # stage selected external archives into a batch
 #   make source-registry # snapshot the configured external source root into a registry manifest
 #   make source-materialize # copy selected registry assets into repo-managed sources/
+#   make stage-organize BATCH=batch_name # rebuild the deduped bucket view for one staged archive batch
+#   make stage-import BATCH=batch_name CONFIG=config.electrician.yaml # organize + import one staged archive batch
+#   make stage-retire BATCH=batch_name # archive manifests and prune one imported staged batch
 #   make retrieval-corpus # build a local retrieval corpus for source-grounded evaluation
 #   make golden-benchmark # build the curated golden benchmark from the checked-in spec
 #   make generate     # generate synthetic data using Ollama (requires running model)
@@ -52,12 +56,48 @@ GOLDEN_SOURCE      ?= $(RETRIEVAL_SOURCE)
 GOLDEN_SPEC        ?= evals/golden_electrician_spec.json
 GOLDEN_OUT         ?= evals/golden_electrician.jsonl
 GOLDEN_MANIFEST    ?= evals/golden_electrician.manifest.json
-QUALITY_PATHS      ?= scripts/agent_command_registry.py scripts/agent_shell.py scripts/agent_skill_registry.py scripts/agent_task_manager.py scripts/check_env.py scripts/context_providers.py scripts/deterministic_tool_utils.py scripts/hook_runtime.py scripts/indexed_memory.py scripts/orchestration_inspect.py scripts/prompt_templates.py scripts/request_router.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/runtime_contracts.py scripts/train.py scripts/validate_release_artifacts.py scripts/package_release_bundle.py scripts/workflow_registry.py tests
+STAGE_SOURCE_DIR   ?= /mnt/c/Users/Paul/Downloads
+STAGING_ROOT       ?= data/staging/reference_archive_batches
+STAGE_ARCHIVED_ROOT ?= $(STAGING_ROOT)/_archived
+STAGE_ARCHIVE_NAME ?=
+STAGE_ARCHIVE_LIST_FILE ?=
+STAGE_ARCHIVES_OVERWRITE ?=
+STAGE_LINK_MODE    ?= hardlink
+STAGE_IMPORT_RUNTIME_OWNERS ?= retrieval multimodal geometry_rules
+STAGE_IMPORT_BUCKET_MANIFEST ?=
+STAGE_IMPORT_USE_EXTRACTED ?=
+STAGE_IMPORT_INCLUDE_MANUAL_REVIEW ?=
+STAGE_IMPORT_SKIP_SHA256 ?=
+STAGE_IMPORT_OVERWRITE ?=
+STAGE_IMPORT_DRY_RUN ?=
+STAGE_RETIRE_ALLOW_WITHOUT_IMPORT ?=
+STAGE_RETIRE_KEEP_BATCH ?=
+STAGE_RETIRE_OVERWRITE ?=
+STAGE_RETIRE_DRY_RUN ?=
+STAGE_ARCHIVES_FLAGS = $(strip \
+	$(if $(STAGE_ARCHIVE_NAME),--archive "$(STAGE_ARCHIVE_NAME)") \
+	$(if $(STAGE_ARCHIVE_LIST_FILE),--archive-list-file "$(STAGE_ARCHIVE_LIST_FILE)") \
+	$(if $(STAGE_ARCHIVES_OVERWRITE),--overwrite))
+STAGE_IMPORT_FLAGS = $(strip \
+	$(foreach owner,$(STAGE_IMPORT_RUNTIME_OWNERS),--runtime-owner $(owner)) \
+	$(if $(STAGE_IMPORT_BUCKET_MANIFEST),--bucket-manifest "$(STAGE_IMPORT_BUCKET_MANIFEST)") \
+	$(if $(STAGE_IMPORT_USE_EXTRACTED),--use-extracted) \
+	$(if $(STAGE_IMPORT_INCLUDE_MANUAL_REVIEW),--include-manual-review) \
+	$(if $(STAGE_IMPORT_SKIP_SHA256),--skip-sha256) \
+	$(if $(STAGE_IMPORT_OVERWRITE),--overwrite) \
+	$(if $(STAGE_IMPORT_DRY_RUN),--dry-run))
+STAGE_RETIRE_FLAGS = $(strip \
+	$(if $(STAGE_ARCHIVED_ROOT),--archived-root "$(STAGE_ARCHIVED_ROOT)") \
+	$(if $(STAGE_RETIRE_ALLOW_WITHOUT_IMPORT),--allow-without-import) \
+	$(if $(STAGE_RETIRE_KEEP_BATCH),--keep-batch) \
+	$(if $(STAGE_RETIRE_OVERWRITE),--overwrite) \
+	$(if $(STAGE_RETIRE_DRY_RUN),--dry-run))
+QUALITY_PATHS      ?= scripts/agent_command_registry.py scripts/agent_registry.py scripts/agent_shell.py scripts/agent_skill_registry.py scripts/agent_task_manager.py scripts/check_env.py scripts/context_providers.py scripts/deterministic_tool_utils.py scripts/hook_runtime.py scripts/indexed_memory.py scripts/orchestration_inspect.py scripts/prompt_templates.py scripts/request_router.py scripts/retire_staged_reference_batch.py scripts/retrieval_utils.py scripts/revit_entity_lookup.py scripts/runtime_contracts.py scripts/train.py scripts/validate_release_artifacts.py scripts/package_release_bundle.py scripts/workflow_registry.py tests
 TEST_PATHS         ?= tests
 ARGS               ?=
 WORKFLOW           ?=
 
-.PHONY: all quality quality-release release-bundle release-verify lint test check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release agent-shell route-request memory-add memory-query memory-import memory-consolidate memory-rebuild-index workflow-list workflow-show workflow-validate workflow-run task-list task-status task-show task-attach task-start-workflow task-start-dream task-start-subagent task-cancel task-resume inspect-hooks inspect-providers inspect-commands inspect-skills inspect-tools inspect-tasks inspect-execution inspect-shell source-registry source-materialize retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest revit-lookup estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
+.PHONY: all quality quality-release release-bundle release-verify lint test check prepare train train-manifest export export-verify gguf evaluate evaluate-quick evaluate-release agent-shell route-request memory-add memory-query memory-import memory-consolidate memory-rebuild-index workflow-list workflow-show workflow-validate workflow-run task-list task-status task-show task-attach task-start-workflow task-start-dream task-start-subagent task-cancel task-resume inspect-hooks inspect-providers inspect-commands inspect-skills inspect-agents inspect-tools inspect-tasks inspect-execution inspect-shell source-registry source-materialize stage-archives stage-organize stage-import stage-retire retrieval-corpus golden-benchmark generate catalog scrape-public pdf-notes ingest-reference-folder merge-examples revit-ingest revit-lookup estimate-index estimate-lookup estimating-reference-examples estimating-canonical electrician-corpus clean help
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -226,6 +266,9 @@ inspect-commands: ## Inspect local agent shell command metadata (pass --command-
 inspect-skills: ## Inspect local markdown skill metadata (pass --skill-name via ARGS for one skill)
 	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) skills $(ARGS)
 
+inspect-agents: ## Inspect local markdown agent metadata (pass --agent-name via ARGS for one agent)
+	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) agents $(ARGS)
+
 inspect-tools: ## Inspect local agent tool metadata (pass --tool-name via ARGS for one tool)
 	$(PYTHON) scripts/orchestration_inspect.py --config $(CONFIG) tools $(ARGS)
 
@@ -243,6 +286,55 @@ source-registry: ## Build a registry manifest for the configured external source
 
 source-materialize: ## Copy selected registry assets into repo-managed sources/ (pass selectors via ARGS)
 	$(PYTHON) scripts/materialize_sources.py --config $(CONFIG) $(ARGS)
+
+stage-archives: ## Stage selected external archives into a repo-local batch (set BATCH=name and STAGE_ARCHIVE_NAME or STAGE_ARCHIVE_LIST_FILE)
+	@if [[ -z "$(BATCH)" ]]; then \
+		echo "Usage: make stage-archives BATCH=batch-name STAGE_ARCHIVE_NAME='SCHEDULE.zip' STAGE_ARCHIVES_OVERWRITE=1"; \
+		echo "   or: make stage-archives BATCH=batch-name STAGE_ARCHIVE_LIST_FILE=path/to/archive_selection.txt"; \
+		exit 1; \
+	fi
+	@if [[ -z "$(STAGE_ARCHIVE_NAME)" && -z "$(STAGE_ARCHIVE_LIST_FILE)" ]]; then \
+		echo "Provide STAGE_ARCHIVE_NAME='file.zip' or STAGE_ARCHIVE_LIST_FILE=path/to/archive_selection.txt"; \
+		exit 1; \
+	fi
+	$(PYTHON) scripts/stage_reference_archives.py \
+		--source-dir "$(STAGE_SOURCE_DIR)" \
+		--staging-root "$(STAGING_ROOT)" \
+		--batch-name "$(BATCH)" $(STAGE_ARCHIVES_FLAGS)
+
+stage-organize: ## Refresh the deduped bucketed review view for one staged archive batch (set BATCH=name)
+	@if [[ -z "$(BATCH)" ]]; then \
+		echo "Usage: make stage-organize BATCH=batch-name STAGING_ROOT=data/staging/reference_archive_batches"; \
+		exit 1; \
+	fi
+	$(PYTHON) scripts/organize_staged_references.py \
+		--batch-dir "$(STAGING_ROOT)/$(BATCH)" \
+		--link-mode $(STAGE_LINK_MODE) \
+		--overwrite
+
+stage-import: ## Refresh the bucketed view and import one staged archive batch into repo-managed sources/ (set BATCH=name)
+	@if [[ -z "$(BATCH)" ]]; then \
+		echo "Usage: make stage-import BATCH=batch-name CONFIG=config.electrician.yaml"; \
+		exit 1; \
+	fi
+	$(PYTHON) scripts/organize_staged_references.py \
+		--batch-dir "$(STAGING_ROOT)/$(BATCH)" \
+		--link-mode $(STAGE_LINK_MODE) \
+		--overwrite
+	$(PYTHON) scripts/import_staged_reference_batch.py \
+		--config $(CONFIG) \
+		--staging-root "$(STAGING_ROOT)" \
+		--batch-name "$(BATCH)" $(STAGE_IMPORT_FLAGS)
+
+stage-retire: ## Archive manifests for one staged batch and prune it after import (set BATCH=name)
+	@if [[ -z "$(BATCH)" ]]; then \
+		echo "Usage: make stage-retire BATCH=batch-name STAGE_RETIRE_DRY_RUN=1"; \
+		echo "   add STAGE_RETIRE_KEEP_BATCH=1 to archive manifests without deleting the source batch"; \
+		exit 1; \
+	fi
+	$(PYTHON) scripts/retire_staged_reference_batch.py \
+		--staging-root "$(STAGING_ROOT)" \
+		--batch-name "$(BATCH)" $(STAGE_RETIRE_FLAGS)
 
 retrieval-corpus: ## Build a deduplicated retrieval corpus from source-grounded examples
 	$(PYTHON) scripts/build_retrieval_corpus.py \

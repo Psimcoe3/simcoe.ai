@@ -202,3 +202,36 @@ def test_run_workflow_dry_run_skips_dream_side_effects(tmp_path) -> None:
 
     assert result["dream"] == {"enabled": True, "status": "not_run"}
     assert not (memory_root / "dream" / "state.json").exists()
+
+
+def test_checked_in_workflow_registry_includes_staged_reference_import() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    manifest_path = repo_root / "workflows" / "registry.yaml"
+    manifest = validate_workflow_manifest(yaml.safe_load(manifest_path.read_text(encoding="utf-8")))
+
+    assert "staged-reference-import" in manifest["workflows"]
+
+    cfg = {
+        "workflow_registry": {
+            "enabled": True,
+            "manifest_path": str(manifest_path),
+        }
+    }
+    rendered = render_workflow_steps(
+        cfg,
+        "config.electrician.yaml",
+        "staged-reference-import",
+        {
+            "batch_name": "downloads_reference_import_20260402_checked",
+            "archive_list_file": "/tmp/downloads_reference_archives.txt",
+        },
+    )
+
+    assert [step["name"] for step in rendered["steps"]] == [
+        "stage selected archives",
+        "organize staged references",
+        "import staged references",
+    ]
+    assert rendered["steps"][0]["argv"][1] == "scripts/stage_reference_archives.py"
+    assert rendered["steps"][1]["argv"][1] == "scripts/organize_staged_references.py"
+    assert rendered["steps"][2]["argv"][1] == "scripts/import_staged_reference_batch.py"

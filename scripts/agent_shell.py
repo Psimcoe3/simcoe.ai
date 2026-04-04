@@ -52,6 +52,10 @@ load_dotenv()
 SESSION_SCHEMA_VERSION = 1
 TURN_SCHEMA_VERSION = 1
 SUPPORTED_MODEL_ROUTES = {ROUTE_TEXT, ROUTE_RETRIEVAL}
+DEFAULT_SESSION_HISTORY_TURN_WINDOW = 6
+SESSION_HISTORY_SUMMARY_MAX_CHARS = 2000
+SESSION_HISTORY_SUMMARY_LINE_PROMPT_CHARS = 96
+SESSION_HISTORY_SUMMARY_LINE_RESPONSE_CHARS = 144
 
 _SYSTEM_PROMPT = """\
 You are a grounded local operator assistant for simcoe.ai.
@@ -75,6 +79,9 @@ def resolve_agent_shell_settings(cfg: dict) -> dict:
         "max_turns": int(agent_shell.get("max_turns", 40) or 40),
         "temperature": float(agent_shell.get("temperature", 0.2) or 0.2),
         "max_output_tokens": int(agent_shell.get("max_output_tokens", 512) or 512),
+        "history_turn_window": _normalized_session_history_turn_window(
+            agent_shell.get("history_turn_window")
+        ),
         "ollama_base_url": str(agent_shell.get("ollama_base_url") or "http://localhost:11434/v1"),
         "openai_api_key_env": str(agent_shell.get("openai_api_key_env") or "OPENAI_API_KEY"),
         "include_memory_in_text_routes": bool(
@@ -120,6 +127,126 @@ def _normalized_session_skill_names(value: object) -> list[str]:
     return cleaned
 
 
+def _normalized_session_history_summary_text(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _normalized_session_history_summary_turn_count(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return 0
+    return value
+
+
+def _normalized_session_history_turn_window(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return DEFAULT_SESSION_HISTORY_TURN_WINDOW
+    return value
+
+
+def _resolved_session_history_turn_window(
+    settings: dict | None = None,
+    session_summary: dict | None = None,
+) -> int:
+    if isinstance(session_summary, dict):
+        value = session_summary.get("history_turn_window")
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            return value
+    if isinstance(settings, dict):
+        value = settings.get("history_turn_window")
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            return value
+    return DEFAULT_SESSION_HISTORY_TURN_WINDOW
+
+
+def _compact_session_history_text(value: object, *, max_chars: int) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = " ".join(value.strip().split())
+    if not cleaned:
+        return None
+    if len(cleaned) <= max_chars:
+        return cleaned
+    return cleaned[: max_chars - 3].rstrip() + "..."
+
+
+def _session_history_summary_line(turn: dict) -> str | None:
+    prompt = _compact_session_history_text(
+        turn.get("user", {}).get("prompt") if isinstance(turn.get("user"), dict) else None,
+        max_chars=SESSION_HISTORY_SUMMARY_LINE_PROMPT_CHARS,
+    )
+    response = _compact_session_history_text(
+        turn.get("assistant", {}).get("response")
+        if isinstance(turn.get("assistant"), dict)
+        else None,
+        max_chars=SESSION_HISTORY_SUMMARY_LINE_RESPONSE_CHARS,
+    )
+    route = str(turn.get("route") or "unknown").strip() or "unknown"
+    if prompt and response:
+        return f"- [{route}] User: {prompt} | Assistant: {response}"
+    if prompt:
+        return f"- [{route}] User: {prompt}"
+    if response:
+        return f"- [{route}] Assistant: {response}"
+    return None
+
+
+def _build_session_history_summary(
+    turns: list[dict],
+    *,
+    history_turn_window: int = DEFAULT_SESSION_HISTORY_TURN_WINDOW,
+    max_chars: int = SESSION_HISTORY_SUMMARY_MAX_CHARS,
+) -> tuple[str | None, int]:
+    safe_window = max(1, history_turn_window)
+    if len(turns) <= safe_window:
+        return None, 0
+
+    older_turns = turns[:-safe_window]
+    selected_lines: list[str] = []
+    selected_turn_count = 0
+    for turn in reversed(older_turns):
+        line = _session_history_summary_line(turn)
+        if line is None:
+            continue
+        candidate_lines = list(reversed([line, *selected_lines]))
+        candidate_text = "\n".join(candidate_lines)
+        if len(candidate_text) > max_chars:
+            break
+        selected_lines.insert(0, line)
+        selected_turn_count += 1
+
+    if not selected_lines:
+        return None, 0
+    return "\n".join(selected_lines), selected_turn_count
+
+
+def _apply_session_history_summary(summary: dict, turns: list[dict]) -> tuple[dict, bool]:
+    normalized = copy.deepcopy(summary)
+    updated = False
+    history_turn_window = _resolved_session_history_turn_window(session_summary=normalized)
+    if normalized.get("history_turn_window") != history_turn_window:
+        normalized["history_turn_window"] = history_turn_window
+        updated = True
+    summary_text, summary_turn_count = _build_session_history_summary(
+        turns,
+        history_turn_window=history_turn_window,
+    )
+    normalized_summary_text = _normalized_session_history_summary_text(summary_text)
+    normalized_summary_turn_count = _normalized_session_history_summary_turn_count(
+        summary_turn_count
+    )
+
+    if normalized.get("history_summary_text") != normalized_summary_text:
+        normalized["history_summary_text"] = normalized_summary_text
+        updated = True
+    if normalized.get("history_summary_turn_count") != normalized_summary_turn_count:
+        normalized["history_summary_turn_count"] = normalized_summary_turn_count
+        updated = True
+    return normalized, updated
+
+
 def _normalize_session_summary(summary: dict) -> tuple[dict, bool]:
     normalized = copy.deepcopy(summary)
     updated = False
@@ -128,6 +255,24 @@ def _normalize_session_summary(summary: dict) -> tuple[dict, bool]:
         if normalized.get(field_name) != cleaned:
             normalized[field_name] = cleaned
             updated = True
+    history_summary_text = _normalized_session_history_summary_text(
+        normalized.get("history_summary_text")
+    )
+    if normalized.get("history_summary_text") != history_summary_text:
+        normalized["history_summary_text"] = history_summary_text
+        updated = True
+    history_summary_turn_count = _normalized_session_history_summary_turn_count(
+        normalized.get("history_summary_turn_count")
+    )
+    if normalized.get("history_summary_turn_count") != history_summary_turn_count:
+        normalized["history_summary_turn_count"] = history_summary_turn_count
+        updated = True
+    history_turn_window = _normalized_session_history_turn_window(
+        normalized.get("history_turn_window")
+    )
+    if normalized.get("history_turn_window") != history_turn_window:
+        normalized["history_turn_window"] = history_turn_window
+        updated = True
     return normalized, updated
 
 
@@ -175,10 +320,21 @@ def initialize_session(
         if summary_path.is_file():
             summary = read_json_file(str(summary_path))
             summary, summary_updated = _normalize_session_summary(summary)
+            resolved_history_turn_window = _resolved_session_history_turn_window(
+                settings,
+                summary,
+            )
+            if summary.get("history_turn_window") != resolved_history_turn_window:
+                summary["history_turn_window"] = resolved_history_turn_window
+                summary_updated = True
             transcript_path = _session_transcript_path(settings, session_id)
             transcript_path.parent.mkdir(parents=True, exist_ok=True)
             transcript_path.touch(exist_ok=True)
+            turns = read_session_turns(settings, session_id)
+            summary, history_updated = _apply_session_history_summary(summary, turns)
             if summary_updated:
+                persist_session_summary(settings, summary)
+            elif history_updated:
                 persist_session_summary(settings, summary)
             return summary
 
@@ -206,6 +362,9 @@ def initialize_session(
         "pinned_skills": [],
         "next_turn_skills": [],
         "last_skill_names": [],
+        "history_summary_text": None,
+        "history_summary_turn_count": 0,
+        "history_turn_window": _resolved_session_history_turn_window(settings),
         "system_prompt_metadata": copy.deepcopy(system_prompt_metadata),
     }
     write_json_file(str(_session_summary_path(settings, resolved_session_id)), summary)
@@ -227,8 +386,22 @@ def read_session_turns(settings: dict, session_id: str) -> list[dict]:
     return turns
 
 
-def _history_messages_from_turns(turns: list[dict], history_turn_window: int) -> list[dict]:
+def _history_messages_from_turns(
+    turns: list[dict],
+    history_turn_window: int,
+    *,
+    session_history_summary_text: str | None = None,
+) -> list[dict]:
     messages: list[dict] = []
+    if isinstance(session_history_summary_text, str) and session_history_summary_text.strip():
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    f"### Earlier Session Summary:\n{session_history_summary_text.strip()}"
+                ),
+            }
+        )
     for turn in turns[-max(1, history_turn_window) :]:
         user_prompt = (
             turn.get("user", {}).get("prompt") if isinstance(turn.get("user"), dict) else None
@@ -243,6 +416,44 @@ def _history_messages_from_turns(turns: list[dict], history_turn_window: int) ->
         if isinstance(assistant_response, str) and assistant_response.strip():
             messages.append({"role": "assistant", "content": assistant_response})
     return messages
+
+
+def build_session_history_messages(
+    settings: dict, session_summary: dict, turns: list[dict]
+) -> list[dict]:
+    return _history_messages_from_turns(
+        turns,
+        _resolved_session_history_turn_window(settings, session_summary),
+        session_history_summary_text=_normalized_session_history_summary_text(
+            session_summary.get("history_summary_text")
+        ),
+    )
+
+
+def _describe_session_history(summary: dict, turns: list[dict]) -> dict:
+    total_turn_count = len(turns)
+    history_turn_window = _resolved_session_history_turn_window(session_summary=summary)
+    recent_turn_count = min(total_turn_count, history_turn_window)
+    summary_turn_count = min(
+        _normalized_session_history_summary_turn_count(summary.get("history_summary_turn_count")),
+        max(0, total_turn_count - recent_turn_count),
+    )
+    summary_text = _normalized_session_history_summary_text(summary.get("history_summary_text"))
+    history_messages = _history_messages_from_turns(
+        turns,
+        history_turn_window,
+        session_history_summary_text=summary_text,
+    )
+    return {
+        "recent_turn_window": history_turn_window,
+        "total_turn_count": total_turn_count,
+        "recent_turn_count": recent_turn_count,
+        "summary_turn_count": summary_turn_count,
+        "omitted_turn_count": max(0, total_turn_count - recent_turn_count - summary_turn_count),
+        "has_summary": bool(summary_text),
+        "summary_char_count": len(summary_text or ""),
+        "message_count": len(history_messages),
+    }
 
 
 def build_instruction_prompt(instruction: str) -> str:
@@ -351,12 +562,24 @@ def execute_deterministic_tool_turn(
     *,
     route_name: str,
     explicit_tool_name: str | None = None,
+    config_path: str | None = None,
+    source: str | None = None,
+    section: str | None = None,
+    attachments: list[str] | None = None,
+    parent_task_id: str | None = None,
+    delegation_briefing: str | None = None,
 ) -> dict:
     return execute_inferred_agent_tool(
         cfg,
         prompt,
         route_name=route_name,
         explicit_tool_name=explicit_tool_name,
+        config_path=config_path,
+        source=source,
+        section=section,
+        attachments=attachments,
+        parent_task_id=parent_task_id,
+        delegation_briefing=delegation_briefing,
     )
 
 
@@ -365,12 +588,15 @@ def run_agent_turn(
     settings: dict,
     prompt: str,
     *,
+    config_path: str | None = None,
     system_prompt: str,
     history_messages: list[dict] | None = None,
     source: str | None = None,
     section: str | None = None,
     attachments: list[str] | None = None,
     explicit_tool_name: str | None = None,
+    parent_task_id: str | None = None,
+    delegation_briefing: str | None = None,
     explicit_skill_names: list[str] | None = None,
     pinned_skill_names: list[str] | None = None,
     completion_fn: Callable[[list[dict]], str] | None = None,
@@ -445,6 +671,12 @@ def run_agent_turn(
                 normalized_prompt,
                 route_name=route_name,
                 explicit_tool_name=explicit_tool_name,
+                config_path=config_path,
+                source=source,
+                section=section,
+                attachments=list(attachments or []),
+                parent_task_id=parent_task_id,
+                delegation_briefing=delegation_briefing,
             )
             assistant_response = tool_result["assistant_response"]
             assistant_source = "deterministic_tool"
@@ -616,6 +848,7 @@ def record_turn(
     updated_summary["pinned_skills"] = _normalized_session_skill_names(
         updated_summary.get("pinned_skills")
     )
+    updated_summary["history_turn_window"] = _resolved_session_history_turn_window(settings)
     if clear_next_turn_skills:
         updated_summary["next_turn_skills"] = []
     else:
@@ -628,6 +861,9 @@ def record_turn(
     if isinstance(route_name, str) and route_name.strip():
         route_counts[route_name] = int(route_counts.get(route_name, 0)) + 1
     updated_summary["route_counts"] = route_counts
+
+    turns = read_session_turns(settings, session_summary["session_id"])
+    updated_summary, _ = _apply_session_history_summary(updated_summary, turns)
 
     write_json_file(
         str(_session_summary_path(settings, session_summary["session_id"])),
@@ -643,6 +879,8 @@ def describe_agent_shell_session(settings: dict, session_id: str, *, tail: int =
 
     summary = read_json_file(str(summary_path))
     turns = read_session_turns(settings, session_id)
+    summary, _ = _apply_session_history_summary(summary, turns)
+    history = _describe_session_history(summary, turns)
     recent_turns = []
     for turn in turns[-max(0, tail) :]:
         recent_turns.append(
@@ -664,6 +902,7 @@ def describe_agent_shell_session(settings: dict, session_id: str, *, tail: int =
 
     return {
         "session": summary,
+        "history": history,
         "recent_turns": recent_turns,
     }
 
@@ -785,14 +1024,18 @@ def main() -> int:
         pending_next_turn_skills = _normalized_session_skill_names(
             session_summary.get("next_turn_skills")
         )
-        history_messages = _history_messages_from_turns(
-            read_session_turns(settings, session_summary["session_id"]),
-            int(settings["max_turns"]),
+        session_turns = read_session_turns(settings, session_summary["session_id"])
+        session_summary, _ = _apply_session_history_summary(session_summary, session_turns)
+        history_messages = build_session_history_messages(
+            settings,
+            session_summary,
+            session_turns,
         )
         turn_payload = run_agent_turn(
             cfg,
             settings,
             args.prompt,
+            config_path=str(session_summary.get("config_path") or args.config),
             system_prompt=system_prompt,
             history_messages=history_messages,
             source=args.source,
@@ -857,14 +1100,18 @@ def main() -> int:
         pending_next_turn_skills = _normalized_session_skill_names(
             session_summary.get("next_turn_skills")
         )
-        history_messages = _history_messages_from_turns(
-            read_session_turns(settings, session_summary["session_id"]),
-            int(settings["max_turns"]),
+        session_turns = read_session_turns(settings, session_summary["session_id"])
+        session_summary, _ = _apply_session_history_summary(session_summary, session_turns)
+        history_messages = build_session_history_messages(
+            settings,
+            session_summary,
+            session_turns,
         )
         turn_payload = run_agent_turn(
             cfg,
             settings,
             prompt,
+            config_path=str(session_summary.get("config_path") or args.config),
             system_prompt=system_prompt,
             history_messages=history_messages,
             explicit_skill_names=pending_next_turn_skills,

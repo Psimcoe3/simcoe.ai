@@ -92,3 +92,49 @@ workflows:
           - "scripts/validate_release_artifacts.py"
           - "--config"
           - "{config}"
+  staged-reference-import:
+    description: Stage a reviewed archive list, rebuild the deduped batch view, and import actionable assets into repo-managed sources.
+    tags:
+      - sources
+      - staging
+      - import
+    required_vars:
+      - batch_name
+      - archive_list_file
+    defaults:
+      source_dir: /mnt/c/Users/Paul/Downloads
+      staging_root: data/staging/reference_archive_batches
+      link_mode: hardlink
+    steps:
+      - name: stage selected archives
+        argv:
+          - "{python}"
+          - "scripts/stage_reference_archives.py"
+          - "--source-dir"
+          - "{source_dir}"
+          - "--staging-root"
+          - "{staging_root}"
+          - "--batch-name"
+          - "{batch_name}"
+          - "--archive-list-file"
+          - "{archive_list_file}"
+          - "--overwrite"
+      - name: organize staged references
+        argv:
+          - "{python}"
+          - "scripts/organize_staged_references.py"
+          - "--batch-dir"
+          - "{staging_root}/{batch_name}"
+          - "--link-mode"
+          - "{link_mode}"
+          - "--overwrite"
+      - name: import staged references
+        argv:
+          - "{python}"
+          - "scripts/import_staged_reference_batch.py"
+          - "--config"
+          - "{config}"
+          - "--staging-root"
+          - "{staging_root}"
+          - "--batch-name"
+          - "{batch_name}"

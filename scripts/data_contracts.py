@@ -45,6 +45,8 @@ IMAGE_EXTENSIONS = {
     ".png",
     ".jpg",
     ".jpeg",
+    ".heic",
+    ".heif",
     ".gif",
     ".webp",
     ".bmp",
@@ -56,6 +58,9 @@ TABULAR_EXTENSIONS = {
     ".tsv",
     ".xlsx",
     ".xls",
+    ".xlsm",
+    ".xlsb",
+    ".ods",
 }
 CAD_BIM_EXTENSIONS = {
     ".rfa",

@@ -1137,6 +1137,20 @@ def validate_skill_registry_config(cfg: dict) -> None:
     require_directory(root_dir, "Skill registry directory")
 
 
+def validate_agent_registry_config(cfg: dict) -> None:
+    agent_registry = cfg.get("agent_registry")
+    if agent_registry is None:
+        return
+
+    if not isinstance(agent_registry, dict):
+        fail("agent_registry must be a mapping when present")
+
+    require_keys(agent_registry, "agent_registry", {"enabled", "root_dir"})
+    require_bool(agent_registry["enabled"], "agent_registry.enabled")
+    root_dir = require_non_empty_string(agent_registry["root_dir"], "agent_registry.root_dir")
+    require_directory(root_dir, "Agent registry directory")
+
+
 def validate_agent_task_manager_config(cfg: dict) -> None:
     agent_task_manager = cfg.get("agent_task_manager")
     if agent_task_manager is None:
@@ -1148,7 +1162,7 @@ def validate_agent_task_manager_config(cfg: dict) -> None:
     require_keys(
         agent_task_manager,
         "agent_task_manager",
-        {"enabled", "root_dir", "tasks_dir", "logs_dir"},
+        {"enabled", "root_dir", "tasks_dir", "logs_dir", "transcripts_dir"},
     )
 
     require_bool(agent_task_manager["enabled"], "agent_task_manager.enabled")
@@ -1164,13 +1178,23 @@ def validate_agent_task_manager_config(cfg: dict) -> None:
         agent_task_manager["logs_dir"],
         "agent_task_manager.logs_dir",
     )
+    transcripts_dir = require_non_empty_string(
+        agent_task_manager["transcripts_dir"],
+        "agent_task_manager.transcripts_dir",
+    )
 
     if tasks_dir == logs_dir:
         fail("agent_task_manager.tasks_dir and agent_task_manager.logs_dir must be different")
+    if tasks_dir == transcripts_dir:
+        fail("agent_task_manager.tasks_dir and agent_task_manager.transcripts_dir must be different")
+    if logs_dir == transcripts_dir:
+        fail("agent_task_manager.logs_dir and agent_task_manager.transcripts_dir must be different")
     if not _path_is_within(root_dir, tasks_dir):
         fail("agent_task_manager.tasks_dir must live under agent_task_manager.root_dir")
     if not _path_is_within(root_dir, logs_dir):
         fail("agent_task_manager.logs_dir must live under agent_task_manager.root_dir")
+    if not _path_is_within(root_dir, transcripts_dir):
+        fail("agent_task_manager.transcripts_dir must live under agent_task_manager.root_dir")
 
 
 def validate_agent_shell_config(cfg: dict) -> None:
@@ -1194,6 +1218,7 @@ def validate_agent_shell_config(cfg: dict) -> None:
             "max_turns",
             "temperature",
             "max_output_tokens",
+            "history_turn_window",
             "ollama_base_url",
             "openai_api_key_env",
             "include_memory_in_text_routes",
@@ -1224,6 +1249,10 @@ def validate_agent_shell_config(cfg: dict) -> None:
     require_positive_int(
         agent_shell["max_output_tokens"],
         "agent_shell.max_output_tokens",
+    )
+    require_positive_int(
+        agent_shell["history_turn_window"],
+        "agent_shell.history_turn_window",
     )
     require_non_empty_string(
         agent_shell["ollama_base_url"],
@@ -1273,6 +1302,7 @@ def validate_orchestration_config(cfg: dict) -> None:
     validate_hooks_config(cfg)
     validate_workflow_registry_config(cfg)
     validate_skill_registry_config(cfg)
+    validate_agent_registry_config(cfg)
     validate_agent_task_manager_config(cfg)
     validate_agent_shell_config(cfg)
 

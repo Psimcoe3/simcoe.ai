@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import agent_tool_registry
 import json
 from pathlib import Path
 
 from agent_shell import (
+    _history_messages_from_turns,
+    build_session_history_messages,
     handle_shell_command,
     describe_agent_shell_session,
     initialize_session,
@@ -25,6 +28,7 @@ def _base_cfg(tmp_path: Path) -> dict:
     retrieval_corpus = tmp_path / "retrieval.jsonl"
     estimate_index = tmp_path / "estimate_index.jsonl"
     revit_index = tmp_path / "revit_index.jsonl"
+    agents_dir = tmp_path / "agents"
     skills_dir = tmp_path / "skills"
 
     (skills_dir / "electrical-estimating.md").parent.mkdir(parents=True, exist_ok=True)
@@ -79,6 +83,30 @@ def _base_cfg(tmp_path: Path) -> dict:
                 "avoid_when: []",
                 "---",
                 "Prefer exact family and type labels and say when grounded data is missing.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (agents_dir / "estimate-reviewer.md").parent.mkdir(parents=True, exist_ok=True)
+    (agents_dir / "estimate-reviewer.md").write_text(
+        "\n".join(
+            [
+                "---",
+                "id: estimate-reviewer",
+                "title: Estimate Reviewer",
+                "summary: Review estimate gaps.",
+                "aliases:",
+                "  - estimate-review",
+                "skill_names:",
+                "  - electrical-estimating",
+                "allowed_routes:",
+                "  - text",
+                "  - retrieval",
+                "use_when: []",
+                "avoid_when: []",
+                "---",
+                "Review grounded estimate gaps.",
                 "",
             ]
         ),
@@ -202,6 +230,7 @@ def _base_cfg(tmp_path: Path) -> dict:
             "max_turns": 10,
             "temperature": 0.2,
             "max_output_tokens": 256,
+            "history_turn_window": 6,
             "ollama_base_url": "http://localhost:11434/v1",
             "openai_api_key_env": "OPENAI_API_KEY",
             "include_memory_in_text_routes": False,
@@ -219,6 +248,10 @@ def _base_cfg(tmp_path: Path) -> dict:
             "root_dir": str(skills_dir),
             "max_active_skills": 2,
             "max_instruction_chars": 1200,
+        },
+        "agent_registry": {
+            "enabled": True,
+            "root_dir": str(agents_dir),
         },
         "system_prompts": {
             "library_path": "prompts/system_prompt_templates.yaml",
@@ -274,6 +307,87 @@ def test_run_agent_turn_executes_estimate_lookup(tmp_path: Path) -> None:
     assert turn["execution"]["deterministic_tool"]["subject_name"] == "estimate_lookup"
 
 
+def test_run_agent_turn_can_delegate_to_named_subagent(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    cfg = _base_cfg(tmp_path)
+    settings = resolve_agent_shell_settings(cfg)
+    system_prompt, _ = resolve_agent_shell_system_prompt(cfg)
+    captured: dict[str, object] = {}
+
+    def _fake_start_subagent_task(
+        cfg: dict,
+        config_path: str,
+        prompt: str,
+        *,
+        agent_definition_name: str | None = None,
+        agent_instructions: str | None = None,
+        source: str = "operator",
+        request_source: str | None = None,
+        section: str | None = None,
+        attachments: list[str] | None = None,
+        explicit_skill_names: list[str] | tuple[str, ...] | None = None,
+        explicit_tool_name: str | None = None,
+        parent_task_id: str | None = None,
+        delegation_briefing: str | None = None,
+        agent_name: str | None = None,
+        allowed_routes: list[str] | tuple[str, ...] | None = None,
+        task_metadata: dict | None = None,
+    ) -> dict:
+        captured["args"] = {
+            "config_path": config_path,
+            "prompt": prompt,
+            "agent_definition_name": agent_definition_name,
+            "source": source,
+            "request_source": request_source,
+            "parent_task_id": parent_task_id,
+            "delegation_briefing": delegation_briefing,
+        }
+        return {
+            "task_id": "agent-task-789",
+            "kind": "subagent",
+            "name": "Estimate Reviewer",
+            "status": "running",
+            "source": source,
+            "config_path": config_path,
+            "summary_path": str(tmp_path / "agent_tasks" / "tasks" / "agent-task-789.json"),
+            "log_path": str(tmp_path / "agent_tasks" / "logs" / "agent-task-789.log"),
+            "metadata": {
+                "agent_definition_name": agent_definition_name,
+                "parent_task_id": parent_task_id,
+            },
+        }
+
+    monkeypatch.setattr(agent_tool_registry, "start_subagent_task", _fake_start_subagent_task)
+
+    turn = run_agent_turn(
+        cfg,
+        settings,
+        "Delegate to estimate-reviewer: review the latest estimate answer.",
+        config_path="config.yaml",
+        system_prompt=system_prompt,
+        history_messages=[],
+        parent_task_id="agent-task-parent",
+        delegation_briefing="Check NEC grounding references before answering.",
+    )
+
+    assert turn["route"] == "deterministic_tool"
+    assert turn["tool"]["name"] == "delegate_to_subagent"
+    assert turn["tool"]["response"]["task"]["parent_task_id"] == "agent-task-parent"
+    assert "agent-task-789" in turn["assistant"]["response"]
+    assert turn["execution"]["deterministic_tool"]["subject_name"] == "delegate_to_subagent"
+    assert captured["args"] == {
+        "config_path": "config.yaml",
+        "prompt": "review the latest estimate answer.",
+        "agent_definition_name": "estimate-reviewer",
+        "source": "agent_shell_delegate",
+        "request_source": None,
+        "parent_task_id": "agent-task-parent",
+        "delegation_briefing": "Check NEC grounding references before answering.",
+    }
+
+
 def test_agent_shell_session_persists_and_reloads_turns(tmp_path: Path) -> None:
     cfg = _base_cfg(tmp_path)
     settings = resolve_agent_shell_settings(cfg)
@@ -308,6 +422,210 @@ def test_agent_shell_session_persists_and_reloads_turns(tmp_path: Path) -> None:
     assert turns[0]["assistant"]["response"] == "Stored answer"
     assert turns[0]["route"] == "text"
     assert payload["session"]["last_skill_names"] == []
+    assert payload["session"]["history_summary_text"] is None
+    assert payload["session"]["history_summary_turn_count"] == 0
+    assert payload["session"]["history_turn_window"] == 6
+    assert payload["history"] == {
+        "recent_turn_window": 6,
+        "total_turn_count": 1,
+        "recent_turn_count": 1,
+        "summary_turn_count": 0,
+        "omitted_turn_count": 0,
+        "has_summary": False,
+        "summary_char_count": 0,
+        "message_count": 2,
+    }
+
+
+def test_history_messages_from_turns_includes_session_summary_first() -> None:
+    turns = [
+        {
+            "user": {"prompt": "First question"},
+            "assistant": {"response": "First answer"},
+        },
+        {
+            "user": {"prompt": "Second question"},
+            "assistant": {"response": "Second answer"},
+        },
+    ]
+
+    messages = _history_messages_from_turns(
+        turns,
+        1,
+        session_history_summary_text="- [text] User: First question | Assistant: First answer",
+    )
+
+    assert messages[0] == {
+        "role": "system",
+        "content": (
+            "### Earlier Session Summary:\n- [text] User: First question | Assistant: First answer"
+        ),
+    }
+    assert messages[1:] == [
+        {"role": "user", "content": "Second question"},
+        {"role": "assistant", "content": "Second answer"},
+    ]
+
+
+def test_record_turn_updates_session_history_summary(tmp_path: Path) -> None:
+    cfg = _base_cfg(tmp_path)
+    settings = resolve_agent_shell_settings(cfg)
+    _, metadata = resolve_agent_shell_system_prompt(cfg)
+    session = initialize_session(
+        settings,
+        config_path="config.yaml",
+        system_prompt_metadata=metadata,
+    )
+
+    updated_session = session
+    for turn_index in range(8):
+        turn_payload = {
+            "schema_version": 1,
+            "turn_id": f"turn-{turn_index}",
+            "turn_index": turn_index,
+            "generated_at": f"2026-04-02T10:0{turn_index}:00Z",
+            "route": "text",
+            "runtime_owner": "text",
+            "user": {
+                "prompt": f"Question {turn_index}",
+                "source": None,
+                "section": None,
+                "attachments": [],
+            },
+            "assistant": {
+                "response": f"Answer {turn_index}",
+                "source": "model",
+                "provider": "ollama",
+                "model": "simcoe",
+            },
+            "error": None,
+            "route_decision": None,
+            "prompt_with_context": None,
+            "context_sections": [],
+            "provider_traces": [],
+            "skills": [],
+            "skill_prompt": None,
+            "tool": None,
+            "execution": {
+                "schema_version": 1,
+                "route": None,
+                "context_providers": [],
+                "deterministic_tool": None,
+                "summary": {"total": 0},
+            },
+        }
+        updated_session = record_turn(
+            settings,
+            updated_session,
+            turn_payload,
+            system_prompt_metadata=metadata,
+        )
+
+    assert updated_session["turn_count"] == 8
+    assert updated_session["history_summary_turn_count"] == 2
+    assert updated_session["history_summary_text"] is not None
+    assert "Question 0" in updated_session["history_summary_text"]
+    assert "Answer 1" in updated_session["history_summary_text"]
+
+    history_messages = build_session_history_messages(
+        settings,
+        updated_session,
+        read_session_turns(settings, updated_session["session_id"]),
+    )
+
+    assert history_messages[0]["role"] == "system"
+    assert "Earlier Session Summary" in history_messages[0]["content"]
+    assert history_messages[1]["content"] == "Question 2"
+
+    payload = describe_agent_shell_session(settings, updated_session["session_id"], tail=1)
+
+    assert payload["history"] == {
+        "recent_turn_window": 6,
+        "total_turn_count": 8,
+        "recent_turn_count": 6,
+        "summary_turn_count": 2,
+        "omitted_turn_count": 0,
+        "has_summary": True,
+        "summary_char_count": len(updated_session["history_summary_text"]),
+        "message_count": 13,
+    }
+
+
+def test_record_turn_uses_configured_history_window(tmp_path: Path) -> None:
+    cfg = _base_cfg(tmp_path)
+    cfg["agent_shell"]["history_turn_window"] = 4
+    settings = resolve_agent_shell_settings(cfg)
+    _, metadata = resolve_agent_shell_system_prompt(cfg)
+    session = initialize_session(
+        settings,
+        config_path="config.yaml",
+        system_prompt_metadata=metadata,
+    )
+
+    updated_session = session
+    for turn_index in range(8):
+        turn_payload = {
+            "schema_version": 1,
+            "turn_id": f"turn-{turn_index}",
+            "turn_index": turn_index,
+            "generated_at": f"2026-04-02T10:0{turn_index}:00Z",
+            "route": "text",
+            "runtime_owner": "text",
+            "user": {
+                "prompt": f"Question {turn_index}",
+                "source": None,
+                "section": None,
+                "attachments": [],
+            },
+            "assistant": {
+                "response": f"Answer {turn_index}",
+                "source": "model",
+                "provider": "ollama",
+                "model": "simcoe",
+            },
+            "error": None,
+            "route_decision": None,
+            "prompt_with_context": None,
+            "context_sections": [],
+            "provider_traces": [],
+            "skills": [],
+            "skill_prompt": None,
+            "tool": None,
+            "execution": {
+                "schema_version": 1,
+                "route": None,
+                "context_providers": [],
+                "deterministic_tool": None,
+                "summary": {"total": 0},
+            },
+        }
+        updated_session = record_turn(
+            settings,
+            updated_session,
+            turn_payload,
+            system_prompt_metadata=metadata,
+        )
+
+    history_messages = build_session_history_messages(
+        settings,
+        updated_session,
+        read_session_turns(settings, updated_session["session_id"]),
+    )
+    payload = describe_agent_shell_session(settings, updated_session["session_id"], tail=1)
+
+    assert updated_session["history_turn_window"] == 4
+    assert updated_session["history_summary_turn_count"] == 4
+    assert history_messages[1]["content"] == "Question 4"
+    assert payload["history"] == {
+        "recent_turn_window": 4,
+        "total_turn_count": 8,
+        "recent_turn_count": 4,
+        "summary_turn_count": 4,
+        "omitted_turn_count": 0,
+        "has_summary": True,
+        "summary_char_count": len(updated_session["history_summary_text"]),
+        "message_count": 9,
+    }
 
 
 def test_run_agent_turn_attaches_matching_skill_guidance(tmp_path: Path) -> None:
@@ -383,11 +701,12 @@ def test_handle_shell_command_lists_and_shows_tools(tmp_path: Path) -> None:
     show_payload = json.loads(show_result["response"])
 
     assert list_result["exit"] is False
-    assert list_payload["tool_count"] == 2
-    assert list_payload["enabled_count"] == 2
+    assert list_payload["tool_count"] == 3
+    assert list_payload["enabled_count"] == 3
     assert [tool["name"] for tool in list_payload["tools"]] == [
         "estimate_lookup",
         "revit_entity_lookup",
+        "delegate_to_subagent",
     ]
     assert show_payload["name"] == "estimate_lookup"
     assert show_payload["kind"] == "deterministic_tool"
@@ -417,6 +736,28 @@ def test_handle_shell_command_lists_and_shows_skills(tmp_path: Path) -> None:
     ]
     assert show_payload["name"] == "electrical-estimating"
     assert "Separate labor, material, and assumptions" in show_payload["instructions"]
+
+
+def test_handle_shell_command_lists_and_shows_agents(tmp_path: Path) -> None:
+    cfg = _base_cfg(tmp_path)
+    settings = resolve_agent_shell_settings(cfg)
+    system_prompt, metadata = resolve_agent_shell_system_prompt(cfg)
+    session = initialize_session(
+        settings,
+        config_path="config.yaml",
+        system_prompt_metadata=metadata,
+    )
+
+    list_result = handle_shell_command(cfg, settings, session, "/agents")
+    list_payload = json.loads(list_result["response"])
+    show_result = handle_shell_command(cfg, settings, session, "/agents show estimate-review")
+    show_payload = json.loads(show_result["response"])
+
+    assert list_result["exit"] is False
+    assert list_payload["agent_count"] == 1
+    assert list_payload["agents"][0]["name"] == "estimate-reviewer"
+    assert show_payload["name"] == "estimate-reviewer"
+    assert "Review grounded estimate gaps." in show_payload["instructions"]
 
 
 def test_handle_shell_command_can_pin_and_queue_skills(tmp_path: Path) -> None:
@@ -468,13 +809,14 @@ def test_handle_shell_command_lists_and_shows_commands(tmp_path: Path) -> None:
     show_payload = json.loads(show_result["response"])
 
     assert list_result["exit"] is False
-    assert list_payload["command_count"] == 10
+    assert list_payload["command_count"] == 11
     assert [command["name"] for command in list_payload["commands"]] == [
         "help",
         "exit",
         "session",
         "commands",
         "skills",
+        "agents",
         "tools",
         "providers",
         "route",
@@ -518,7 +860,10 @@ def test_handle_shell_command_lists_and_shows_tasks(tmp_path: Path) -> None:
                 "config_path": str((tmp_path / "config.yaml").resolve()),
                 "pid": 12345,
                 "source": "operator",
-                "metadata": {"workflow": "demo"},
+                "metadata": {
+                    "workflow": "demo",
+                    "child_task_ids": ["agent-task-456"],
+                },
                 "result": {"executed_steps": 1},
                 "error": None,
                 "exit_code": 0,
@@ -545,10 +890,15 @@ def test_handle_shell_command_lists_and_shows_tasks(tmp_path: Path) -> None:
     assert list_result["exit"] is False
     assert list_payload["task_count"] == 1
     assert list_payload["tasks"][0]["task_id"] == "agent-task-123"
+    assert list_payload["tasks"][0]["child_task_count"] == 1
     assert status_payload["task_count"] == 1
     assert status_payload["recent_tasks"][0]["task_id"] == "agent-task-123"
+    assert status_payload["lineage"]["parent_task_count"] == 1
+    assert status_payload["lineage"]["tasks_with_children"][0]["task_id"] == "agent-task-123"
     assert status_payload["restartable_task_count"] == 0
     assert show_payload["task"]["task_id"] == "agent-task-123"
+    assert show_payload["task"]["child_task_count"] == 1
+    assert show_payload["task"]["last_child_task_id"] == "agent-task-456"
     assert show_payload["log_tail"] == ["started", "finished"]
     assert attach_payload["attached_lines"] == ["finished"]
     assert attach_payload["next_cursor"] == 2

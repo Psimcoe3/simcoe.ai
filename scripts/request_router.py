@@ -65,6 +65,14 @@ TOOL_QUERY_PHRASES = (
     "lookup key",
 )
 
+DELEGATION_QUERY_PHRASES = (
+    "delegate to",
+    "start subagent",
+    "launch subagent",
+    "run subagent",
+    "subagent:",
+)
+
 RETRIEVAL_QUERY_PHRASES = (
     "summarize the electrical construction reference source",
     "what should",
@@ -93,10 +101,39 @@ def _has_enabled_tool(cfg: dict) -> bool:
     deterministic_tools = (
         cfg.get("deterministic_tools") if isinstance(cfg.get("deterministic_tools"), dict) else {}
     )
-    return any(
+    has_enabled_configured_tool = any(
         bool(tool_cfg.get("enabled", False))
         for tool_cfg in deterministic_tools.values()
         if isinstance(tool_cfg, dict)
+    )
+    agent_registry = (
+        cfg.get("agent_registry") if isinstance(cfg.get("agent_registry"), dict) else {}
+    )
+    agent_task_manager = (
+        cfg.get("agent_task_manager") if isinstance(cfg.get("agent_task_manager"), dict) else {}
+    )
+    delegate_tool_enabled = (
+        bool(agent_registry.get("enabled", False))
+        and bool(agent_task_manager.get("enabled", False))
+        and deterministic_tools.get("delegate_to_subagent", {}).get("enabled") is not False
+    )
+    return has_enabled_configured_tool or delegate_tool_enabled
+
+
+def _delegate_tool_enabled(cfg: dict) -> bool:
+    deterministic_tools = (
+        cfg.get("deterministic_tools") if isinstance(cfg.get("deterministic_tools"), dict) else {}
+    )
+    agent_registry = (
+        cfg.get("agent_registry") if isinstance(cfg.get("agent_registry"), dict) else {}
+    )
+    agent_task_manager = (
+        cfg.get("agent_task_manager") if isinstance(cfg.get("agent_task_manager"), dict) else {}
+    )
+    return (
+        bool(agent_registry.get("enabled", False))
+        and bool(agent_task_manager.get("enabled", False))
+        and deterministic_tools.get("delegate_to_subagent", {}).get("enabled") is not False
     )
 
 
@@ -281,7 +318,10 @@ def route_request(
     drawing_hints = _contains_phrase(
         combined_text, DRAWING_QUERY_PHRASES
     ) or _attachment_suggests_drawing(attachments)
+    delegation_hints = _contains_phrase(combined_text, DELEGATION_QUERY_PHRASES)
     tool_hints = explicit_tool or _contains_phrase(combined_text, TOOL_QUERY_PHRASES)
+    if delegation_hints and _delegate_tool_enabled(cfg):
+        tool_hints = True
     text_retrieval_hints = retrieval_hints or _contains_phrase(
         combined_text, RETRIEVAL_QUERY_PHRASES
     )

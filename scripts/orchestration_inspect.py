@@ -6,6 +6,11 @@ import json
 import os
 from pathlib import Path
 
+from agent_registry import (
+    describe_agent_definition,
+    list_agent_definitions,
+    resolve_agent_registry_settings,
+)
 from agent_command_registry import describe_agent_command, list_agent_commands
 from agent_skill_registry import (
     describe_agent_skill,
@@ -15,6 +20,7 @@ from agent_skill_registry import (
 from agent_task_manager import describe_agent_task, list_agent_tasks
 from agent_tool_registry import describe_agent_tool, list_agent_tools
 from config_validation import (
+    validate_agent_registry_config,
     validate_agent_shell_config,
     validate_agent_task_manager_config,
     validate_deterministic_tools_config,
@@ -103,6 +109,20 @@ def describe_agent_skills(cfg: dict, skill_name: str | None = None) -> dict:
     }
 
 
+def describe_agent_agents(cfg: dict, agent_name: str | None = None) -> dict:
+    if isinstance(agent_name, str) and agent_name.strip():
+        return describe_agent_definition(cfg, agent_name)
+
+    settings = resolve_agent_registry_settings(cfg)
+    agents = list_agent_definitions(cfg)
+    return {
+        "enabled": settings["enabled"],
+        "root_dir": settings["root_dir"],
+        "agent_count": len(agents),
+        "agents": agents,
+    }
+
+
 def describe_agent_tools(cfg: dict, tool_name: str | None = None) -> dict:
     if isinstance(tool_name, str) and tool_name.strip():
         return describe_agent_tool(cfg, tool_name)
@@ -115,9 +135,15 @@ def describe_agent_tools(cfg: dict, tool_name: str | None = None) -> dict:
     }
 
 
-def describe_agent_tasks(cfg: dict, task_id: str | None = None, *, tail: int = 20) -> dict:
+def describe_agent_tasks(
+    cfg: dict,
+    task_id: str | None = None,
+    *,
+    tail: int = 20,
+    transcript_tail: int | None = None,
+) -> dict:
     if isinstance(task_id, str) and task_id.strip():
-        return describe_agent_task(cfg, task_id, tail=tail)
+        return describe_agent_task(cfg, task_id, tail=tail, transcript_tail=transcript_tail)
 
     return list_agent_tasks(cfg)
 
@@ -139,12 +165,30 @@ def _resolve_agent_shell_settings(cfg: dict) -> dict:
     if not transcripts_dir.is_absolute():
         transcripts_dir = Path(os.path.abspath(str(transcripts_dir)))
 
+    history_turn_window = agent_shell.get("history_turn_window")
+    if isinstance(history_turn_window, bool) or not isinstance(history_turn_window, int):
+        history_turn_window = 6
+    elif history_turn_window <= 0:
+        history_turn_window = 6
+
     return {
         "enabled": bool(agent_shell.get("enabled", True)),
         "root_dir": str(root_dir),
         "sessions_dir": str(sessions_dir),
         "transcripts_dir": str(transcripts_dir),
+        "history_turn_window": history_turn_window,
     }
+
+
+def _agent_shell_history_turn_window(settings: dict, summary: dict | None = None) -> int:
+    if isinstance(summary, dict):
+        value = summary.get("history_turn_window")
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            return value
+    value = settings.get("history_turn_window")
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return 6
 
 
 def _agent_shell_session_summary_path(settings: dict, session_id: str) -> Path:
@@ -186,6 +230,54 @@ def _summarize_agent_shell_turn(turn: dict) -> dict:
     }
 
 
+def _agent_shell_history_overview(
+    *,
+    turn_count: int,
+    history_turn_window: int,
+    history_summary_text: str | None,
+    history_summary_turn_count: int,
+) -> dict:
+    recent_turn_window = max(1, int(history_turn_window or 0))
+    safe_turn_count = max(0, int(turn_count or 0))
+    recent_turn_count = min(safe_turn_count, recent_turn_window)
+    safe_summary_turn_count = min(
+        max(0, int(history_summary_turn_count or 0)),
+        max(0, safe_turn_count - recent_turn_count),
+    )
+    summary_text = history_summary_text.strip() if isinstance(history_summary_text, str) else ""
+    return {
+        "recent_turn_window": recent_turn_window,
+        "recent_turn_count": recent_turn_count,
+        "summary_turn_count": safe_summary_turn_count,
+        "omitted_turn_count": max(0, safe_turn_count - recent_turn_count - safe_summary_turn_count),
+        "has_summary": bool(summary_text),
+        "summary_char_count": len(summary_text),
+    }
+
+
+def _agent_shell_history_message_count_for_window(
+    turns: list[dict],
+    *,
+    history_turn_window: int,
+    has_summary: bool,
+) -> int:
+    count = 1 if has_summary else 0
+    for turn in turns[-max(1, history_turn_window) :]:
+        user_prompt = (
+            turn.get("user", {}).get("prompt") if isinstance(turn.get("user"), dict) else None
+        )
+        assistant_response = (
+            turn.get("assistant", {}).get("response")
+            if isinstance(turn.get("assistant"), dict)
+            else None
+        )
+        if isinstance(user_prompt, str) and user_prompt.strip():
+            count += 1
+        if isinstance(assistant_response, str) and assistant_response.strip():
+            count += 1
+    return count
+
+
 def _append_execution_envelopes_from_execution_block(
     execution: dict, envelopes: list[dict]
 ) -> None:
@@ -225,6 +317,18 @@ def describe_agent_shell_sessions(cfg: dict) -> dict:
                 )
                 continue
 
+            history_turn_window = _agent_shell_history_turn_window(settings, summary)
+            history_overview = _agent_shell_history_overview(
+                turn_count=int(summary.get("turn_count", 0) or 0),
+                history_turn_window=history_turn_window,
+                history_summary_text=(
+                    summary.get("history_summary_text")
+                    if isinstance(summary.get("history_summary_text"), str)
+                    else None
+                ),
+                history_summary_turn_count=int(summary.get("history_summary_turn_count", 0) or 0),
+            )
+
             sessions.append(
                 {
                     "session_id": str(summary.get("session_id") or summary_path.stem),
@@ -239,6 +343,13 @@ def describe_agent_shell_sessions(cfg: dict) -> dict:
                     "last_skill_names": copy.deepcopy(summary.get("last_skill_names") or []),
                     "pinned_skills": copy.deepcopy(summary.get("pinned_skills") or []),
                     "next_turn_skills": copy.deepcopy(summary.get("next_turn_skills") or []),
+                    "history_summary_turn_count": int(
+                        summary.get("history_summary_turn_count", 0) or 0
+                    ),
+                    "has_history_summary": bool(summary.get("history_summary_text")),
+                    "history_recent_turn_window": history_overview["recent_turn_window"],
+                    "history_recent_turn_count": history_overview["recent_turn_count"],
+                    "history_omitted_turn_count": history_overview["omitted_turn_count"],
                     "route_counts": copy.deepcopy(summary.get("route_counts") or {}),
                 }
             )
@@ -284,6 +395,22 @@ def describe_agent_shell_session(cfg: dict, session_id: str, *, tail: int = 5) -
 
     turns = _read_jsonl_records(resolved_transcript_path)
     recent_turns = [_summarize_agent_shell_turn(turn) for turn in turns[-max(0, tail) :]]
+    history_turn_window = _agent_shell_history_turn_window(settings, summary)
+    history = _agent_shell_history_overview(
+        turn_count=len(turns),
+        history_turn_window=history_turn_window,
+        history_summary_text=(
+            summary.get("history_summary_text")
+            if isinstance(summary.get("history_summary_text"), str)
+            else None
+        ),
+        history_summary_turn_count=int(summary.get("history_summary_turn_count", 0) or 0),
+    )
+    history["message_count"] = _agent_shell_history_message_count_for_window(
+        turns,
+        history_turn_window=history_turn_window,
+        has_summary=bool(history["has_summary"]),
+    )
 
     envelopes: list[dict] = []
     schema_version = None
@@ -300,6 +427,7 @@ def describe_agent_shell_session(cfg: dict, session_id: str, *, tail: int = 5) -
         "session_summary_path": str(summary_path.resolve()),
         "transcript_path": str(resolved_transcript_path.resolve()),
         "session": summary,
+        "history": history,
         "recent_turns": recent_turns,
         "execution": {
             "source": "reconstructed_from_agent_shell_transcript",
@@ -370,7 +498,7 @@ def describe_execution_results(cfg: dict, results_path: str | None = None) -> di
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Inspect hook, provider, command, skill, tool, task, execution, and agent shell session surfaces "
+            "Inspect hook, provider, command, skill, agent, tool, task, execution, and agent shell session surfaces "
             "from config and saved artifacts."
         )
     )
@@ -411,6 +539,11 @@ def parse_args() -> argparse.Namespace:
         default=20,
         help="Recent log lines to include when inspecting one saved task.",
     )
+    tasks_parser.add_argument(
+        "--transcript-tail",
+        type=int,
+        help="Recent structured transcript records to include. Defaults to --tail.",
+    )
     execution_parser = subparsers.add_parser("execution", help="Inspect saved execution summaries")
     execution_parser.add_argument(
         "--results",
@@ -423,6 +556,11 @@ def parse_args() -> argparse.Namespace:
     shell_parser.add_argument(
         "--session-id",
         help="Optional session id to inspect. Omit to list saved shell sessions.",
+    )
+    agents_parser = subparsers.add_parser("agents", help="Inspect local named agent definitions")
+    agents_parser.add_argument(
+        "--agent-name",
+        help="Optional agent definition name to inspect. Omit to list the local agent registry.",
     )
     shell_parser.add_argument(
         "--tail",
@@ -449,12 +587,20 @@ def main() -> int:
         elif args.command == "skills":
             validate_skill_registry_config(cfg)
             payload = describe_agent_skills(cfg, args.skill_name)
+        elif args.command == "agents":
+            validate_agent_registry_config(cfg)
+            payload = describe_agent_agents(cfg, args.agent_name)
         elif args.command == "tools":
             validate_deterministic_tools_config(cfg)
             payload = describe_agent_tools(cfg, args.tool_name)
         elif args.command == "tasks":
             validate_agent_task_manager_config(cfg)
-            payload = describe_agent_tasks(cfg, args.task_id, tail=args.tail)
+            payload = describe_agent_tasks(
+                cfg,
+                args.task_id,
+                tail=args.tail,
+                transcript_tail=args.transcript_tail,
+            )
         elif args.command == "execution":
             payload = describe_execution_results(cfg, args.results)
         elif args.command == "shell":
