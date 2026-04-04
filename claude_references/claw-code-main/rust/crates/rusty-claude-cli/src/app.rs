@@ -3,7 +3,7 @@ use std::fs;
 use std::io;
 use std::process::Command;
 
-use runtime::{CompactionConfig, ConversationRuntime, PermissionMode, Session};
+use runtime::{CompactionConfig, ConfigLoader, ConversationRuntime, PermissionMode, Session};
 use serde_json::json;
 
 use crate::args::{
@@ -11,17 +11,17 @@ use crate::args::{
     CliOutputFormat,
 };
 use crate::format::{
-    format_auto_compaction_notice, format_compact_report, format_cost_report,
-    format_model_report, format_model_switch_report, format_permissions_report,
-    format_permissions_switch_report, format_resume_report, format_status_report,
-    render_config_report, render_diff_report, render_last_tool_debug_report, render_repl_help,
-    render_teleport_report, render_version_report, render_memory_report, status_context,
-    StatusUsage,
+    format_auto_compaction_notice, format_compact_report, format_cost_report, format_model_report,
+    format_model_switch_report, format_permissions_report, format_permissions_switch_report,
+    format_resume_report, format_status_report, render_config_report, render_diff_report,
+    render_last_tool_debug_report, render_memory_report, render_repl_help, render_teleport_report,
+    render_version_report, status_context, StatusUsage,
 };
 use crate::render::{Spinner, TerminalRenderer};
 use crate::session_manager::{
     create_managed_session_handle, render_session_list, resolve_session_reference, SessionHandle,
 };
+use crate::tui::status_bar::StatusBarHandle;
 use crate::{AnthropicRuntimeClient, CliPermissionPrompter, CliToolExecutor};
 
 pub(crate) struct LiveCli {
@@ -31,6 +31,7 @@ pub(crate) struct LiveCli {
     pub(crate) system_prompt: Vec<String>,
     pub(crate) runtime: ConversationRuntime<AnthropicRuntimeClient, CliToolExecutor>,
     pub(crate) session: SessionHandle,
+    pub(crate) status_bar: StatusBarHandle,
 }
 
 #[allow(clippy::too_many_lines)]
@@ -43,6 +44,7 @@ impl LiveCli {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let system_prompt = crate::build_system_prompt()?;
         let session = create_managed_session_handle()?;
+        let status_bar = Self::create_status_bar(&model, permission_mode, &session);
         let runtime = crate::build_runtime(
             Session::new(),
             model.clone(),
@@ -51,6 +53,7 @@ impl LiveCli {
             true,
             allowed_tools.clone(),
             permission_mode,
+            Some(status_bar.clone()),
         )?;
         let cli = Self {
             model,
@@ -59,7 +62,9 @@ impl LiveCli {
             system_prompt,
             runtime,
             session,
+            status_bar,
         };
+        cli.sync_status_bar();
         cli.persist_session()?;
         Ok(cli)
     }
@@ -90,6 +95,9 @@ impl LiveCli {
     }
 
     pub(crate) fn run_turn(&mut self, input: &str) -> Result<(), Box<dyn std::error::Error>> {
+        self.status_bar
+            .begin_turn(self.runtime.usage().cumulative_usage());
+        let _ = self.status_bar.render();
         let mut spinner = Spinner::new();
         let mut stdout = io::stdout();
         spinner.tick(
@@ -113,6 +121,8 @@ impl LiveCli {
                         format_auto_compaction_notice(event.removed_message_count)
                     );
                 }
+                self.sync_status_bar();
+                let _ = self.status_bar.render();
                 self.persist_session()?;
                 Ok(())
             }
@@ -122,6 +132,8 @@ impl LiveCli {
                     TerminalRenderer::new().color_theme(),
                     &mut stdout,
                 )?;
+                self.sync_status_bar();
+                let _ = self.status_bar.render();
                 Err(Box::new(error))
             }
         }
@@ -151,6 +163,7 @@ impl LiveCli {
             false,
             self.allowed_tools.clone(),
             self.permission_mode,
+            None,
         )?;
         let mut permission_prompter = CliPermissionPrompter::new(self.permission_mode);
         let summary = runtime.run_turn(input, Some(&mut permission_prompter))?;
@@ -271,6 +284,14 @@ impl LiveCli {
         Ok(())
     }
 
+    pub(crate) fn render_status_bar(&self) -> io::Result<()> {
+        self.status_bar.render()
+    }
+
+    pub(crate) fn clear_status_bar(&self) -> io::Result<()> {
+        self.status_bar.clear()
+    }
+
     fn print_status(&self) {
         let cumulative = self.runtime.usage().cumulative_usage();
         let latest = self.runtime.usage().current_turn_usage();
@@ -329,8 +350,10 @@ impl LiveCli {
             true,
             self.allowed_tools.clone(),
             self.permission_mode,
+            Some(self.status_bar.clone()),
         )?;
         self.model.clone_from(&model);
+        self.sync_status_bar();
         println!(
             "{}",
             format_model_switch_report(&previous, &model, message_count)
@@ -372,7 +395,9 @@ impl LiveCli {
             true,
             self.allowed_tools.clone(),
             self.permission_mode,
+            Some(self.status_bar.clone()),
         )?;
+        self.sync_status_bar();
         println!(
             "{}",
             format_permissions_switch_report(&previous, normalized)
@@ -397,7 +422,9 @@ impl LiveCli {
             true,
             self.allowed_tools.clone(),
             self.permission_mode,
+            Some(self.status_bar.clone()),
         )?;
+        self.sync_status_bar();
         println!(
             "Session cleared\n  Mode             fresh session\n  Preserved model  {}\n  Permission mode  {}\n  Session          {}",
             self.model,
@@ -432,8 +459,10 @@ impl LiveCli {
             true,
             self.allowed_tools.clone(),
             self.permission_mode,
+            Some(self.status_bar.clone()),
         )?;
         self.session = handle;
+        self.sync_status_bar();
         println!(
             "{}",
             format_resume_report(
@@ -469,7 +498,10 @@ impl LiveCli {
         requested_path: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let export_path = crate::resolve_export_path(requested_path, self.runtime.session())?;
-        fs::write(&export_path, crate::render_export_text(self.runtime.session()))?;
+        fs::write(
+            &export_path,
+            crate::render_export_text(self.runtime.session()),
+        )?;
         println!(
             "Export\n  Result           wrote transcript\n  File             {}\n  Messages         {}",
             export_path.display(),
@@ -504,8 +536,10 @@ impl LiveCli {
                     true,
                     self.allowed_tools.clone(),
                     self.permission_mode,
+                    Some(self.status_bar.clone()),
                 )?;
                 self.session = handle;
+                self.sync_status_bar();
                 println!(
                     "Session switched\n  Active session   {}\n  File             {}\n  Messages         {}",
                     self.session.id,
@@ -534,7 +568,9 @@ impl LiveCli {
             true,
             self.allowed_tools.clone(),
             self.permission_mode,
+            Some(self.status_bar.clone()),
         )?;
+        self.sync_status_bar();
         self.persist_session()?;
         println!("{}", format_compact_report(removed, kept, skipped));
         Ok(())
@@ -554,6 +590,7 @@ impl LiveCli {
             false,
             self.allowed_tools.clone(),
             self.permission_mode,
+            None,
         )?;
         let mut permission_prompter = CliPermissionPrompter::new(self.permission_mode);
         let summary = runtime.run_turn(prompt, Some(&mut permission_prompter))?;
@@ -593,6 +630,47 @@ impl LiveCli {
         Ok(())
     }
 
+    fn create_status_bar(
+        model: &str,
+        permission_mode: PermissionMode,
+        session: &SessionHandle,
+    ) -> StatusBarHandle {
+        let show_turn_duration = env::current_dir()
+            .ok()
+            .and_then(|cwd| ConfigLoader::default_for(cwd).load().ok())
+            .and_then(|config| {
+                config
+                    .get("showTurnDuration")
+                    .and_then(|value| value.as_bool())
+            })
+            .unwrap_or(false);
+        let git_branch = status_context(Some(&session.path))
+            .ok()
+            .and_then(|context| context.git_branch);
+
+        StatusBarHandle::new(
+            model.to_string(),
+            permission_mode.as_str().to_string(),
+            session.id.clone(),
+            git_branch,
+            show_turn_duration,
+        )
+    }
+
+    fn sync_status_bar(&self) {
+        self.status_bar.set_model(self.model.clone());
+        self.status_bar
+            .set_permission_mode(self.permission_mode.as_str().to_string());
+        self.status_bar.set_session_id(self.session.id.clone());
+        self.status_bar
+            .set_cumulative_usage(self.runtime.usage().cumulative_usage());
+        self.status_bar
+            .finish_turn(self.runtime.usage().cumulative_usage());
+        if let Ok(context) = status_context(Some(&self.session.path)) {
+            self.status_bar.set_git_branch(context.git_branch);
+        }
+    }
+
     fn run_commit(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let status = crate::git_output(&["status", "--short"])?;
         if status.trim().is_empty() {
@@ -607,7 +685,8 @@ impl LiveCli {
             crate::truncate_for_prompt(&staged_stat, 8_000),
             crate::recent_user_context(self.runtime.session(), 6)
         );
-        let message = crate::sanitize_generated_message(&self.run_internal_prompt_text(&prompt, false)?);
+        let message =
+            crate::sanitize_generated_message(&self.run_internal_prompt_text(&prompt, false)?);
         if message.trim().is_empty() {
             return Err("generated commit message was empty".into());
         }
@@ -638,7 +717,8 @@ impl LiveCli {
             context.unwrap_or("none"),
             crate::truncate_for_prompt(&staged, 10_000)
         );
-        let draft = crate::sanitize_generated_message(&self.run_internal_prompt_text(&prompt, false)?);
+        let draft =
+            crate::sanitize_generated_message(&self.run_internal_prompt_text(&prompt, false)?);
         let (title, body) = crate::parse_titled_body(&draft)
             .ok_or_else(|| "failed to parse generated PR title/body".to_string())?;
 
@@ -669,7 +749,8 @@ impl LiveCli {
             context.unwrap_or("none"),
             crate::truncate_for_prompt(&crate::recent_user_context(self.runtime.session(), 10), 10_000)
         );
-        let draft = crate::sanitize_generated_message(&self.run_internal_prompt_text(&prompt, false)?);
+        let draft =
+            crate::sanitize_generated_message(&self.run_internal_prompt_text(&prompt, false)?);
         let (title, body) = crate::parse_titled_body(&draft)
             .ok_or_else(|| "failed to parse generated issue title/body".to_string())?;
 

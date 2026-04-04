@@ -20,32 +20,30 @@ use api::{
     StreamEvent as ApiStreamEvent, ToolChoice, ToolDefinition, ToolResultContentBlock,
 };
 
+use app::LiveCli;
+use args::{default_permission_mode, parse_args, AllowedToolSet, CliAction};
 use commands::{
     render_slash_command_help, resume_supported_slash_commands, slash_command_specs, SlashCommand,
 };
-use app::LiveCli;
-use args::{
-    default_permission_mode, normalize_permission_mode, parse_args, permission_mode_from_label,
-    resolve_model_alias, AllowedToolSet, CliAction, CliOutputFormat,
-};
-use format::{
-    format_auto_compaction_notice, format_compact_report, format_cost_report,
-    format_resume_report, format_status_report, render_config_report, render_diff_report,
-    render_memory_report, render_repl_help, render_version_report, StatusContext, StatusUsage,
-};
 use compat_harness::{extract_manifest, UpstreamPaths};
+use format::{
+    format_compact_report, format_cost_report, format_status_report, render_config_report,
+    render_diff_report, render_memory_report, render_repl_help, render_version_report,
+    status_context, StatusUsage,
+};
 use init::initialize_repo;
-use render::{MarkdownStreamState, Spinner, TerminalRenderer};
+use render::{MarkdownStreamState, TerminalRenderer};
 use runtime::{
     clear_oauth_credentials, generate_pkce_pair, generate_state, load_system_prompt,
     parse_oauth_callback_request_target, save_oauth_credentials, ApiClient, ApiRequest,
-    AssistantEvent, CompactionConfig, ConfigLoader, ConfigSource, ContentBlock,
-    ConversationMessage, ConversationRuntime, MessageRole, OAuthAuthorizationRequest, OAuthConfig,
-    OAuthTokenExchangeRequest, PermissionMode, PermissionPolicy, ProjectContext, RuntimeError,
-    Session, TokenUsage, ToolError, ToolExecutor, UsageTracker,
+    AssistantEvent, CompactionConfig, ConfigLoader, ContentBlock, ConversationMessage,
+    ConversationRuntime, MessageRole, OAuthAuthorizationRequest, OAuthConfig,
+    OAuthTokenExchangeRequest, PermissionMode, PermissionPolicy, RuntimeError, Session, TokenUsage,
+    ToolError, ToolExecutor, UsageTracker,
 };
 use serde_json::json;
 use tools::{execute_tool, mvp_tool_specs, ToolSpec};
+use tui::status_bar::StatusBarHandle;
 
 const DEFAULT_MODEL: &str = "claude-opus-4-6";
 fn max_tokens_for_model(model: &str) -> u32 {
@@ -63,11 +61,7 @@ const GIT_SHA: Option<&str> = option_env!("GIT_SHA");
 
 fn main() {
     if let Err(error) = run() {
-        eprintln!(
-            "error: {error}
-
-Run `claw --help` for usage."
-        );
+        eprintln!("error: {error}\n\nRun `claw --help` for usage.");
         std::process::exit(1);
     }
 }
@@ -125,6 +119,112 @@ fn dump_manifests() {
             std::process::exit(1);
         }
     }
+}
+
+fn run_repl(
+    model: String,
+    allowed_tools: Option<AllowedToolSet>,
+    permission_mode: PermissionMode,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cli = LiveCli::new(model, true, allowed_tools, permission_mode)?;
+    let mut editor = input::LineEditor::new("> ", slash_command_completion_candidates());
+    println!("{}", cli.startup_banner());
+    let _ = cli.render_status_bar();
+
+    loop {
+        let _ = cli.render_status_bar();
+        match editor.read_line()? {
+            input::ReadOutcome::Submit(input) => {
+                let trimmed = input.trim().to_string();
+                if trimmed.is_empty() {
+                    let _ = cli.render_status_bar();
+                    continue;
+                }
+                if matches!(trimmed.as_str(), "/exit" | "/quit") {
+                    let _ = cli.clear_status_bar();
+                    cli.persist_session()?;
+                    break;
+                }
+                if let Some(command) = SlashCommand::parse(&trimmed) {
+                    let _ = cli.clear_status_bar();
+                    if cli.handle_repl_command(command)? {
+                        cli.persist_session()?;
+                    }
+                    let _ = cli.render_status_bar();
+                    continue;
+                }
+
+                editor.push_history(input);
+                let _ = cli.clear_status_bar();
+                let result = cli.run_turn(&trimmed);
+                let _ = cli.render_status_bar();
+                result?;
+            }
+            input::ReadOutcome::Cancel => {
+                println!();
+                let _ = cli.render_status_bar();
+            }
+            input::ReadOutcome::Exit => {
+                let _ = cli.clear_status_bar();
+                cli.persist_session()?;
+                break;
+            }
+        }
+    }
+
+    let _ = cli.clear_status_bar();
+    Ok(())
+}
+
+fn init_claude_md() -> Result<String, Box<dyn std::error::Error>> {
+    let cwd = env::current_dir()?;
+    Ok(initialize_repo(&cwd)?.render())
+}
+
+fn run_init() -> Result<(), Box<dyn std::error::Error>> {
+    println!("{}", init_claude_md()?);
+    Ok(())
+}
+
+fn git_output(args: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(env::current_dir()?)
+        .output()?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(format!("git {} failed: {stderr}", args.join(" ")).into());
+    }
+    Ok(String::from_utf8(output.stdout)?)
+}
+
+fn git_status_ok(args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(env::current_dir()?)
+        .output()?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(format!("git {} failed: {stderr}", args.join(" ")).into());
+    }
+    Ok(())
+}
+
+fn command_exists(name: &str) -> bool {
+    Command::new("which")
+        .arg(name)
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+fn write_temp_text_file(
+    file_name: &str,
+    contents: &str,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let path = std::env::temp_dir().join(file_name);
+    fs::write(&path, contents)?;
+    Ok(path)
 }
 
 fn print_bootstrap_plan() {
@@ -475,97 +575,6 @@ fn run_resume_command(
     }
 }
 
-fn run_repl(
-    model: String,
-    allowed_tools: Option<AllowedToolSet>,
-    permission_mode: PermissionMode,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut cli = LiveCli::new(model, true, allowed_tools, permission_mode)?;
-    let mut editor = input::LineEditor::new("> ", slash_command_completion_candidates());
-    println!("{}", cli.startup_banner());
-
-    loop {
-        match editor.read_line()? {
-            input::ReadOutcome::Submit(input) => {
-                let trimmed = input.trim().to_string();
-                if trimmed.is_empty() {
-                    continue;
-                }
-                if matches!(trimmed.as_str(), "/exit" | "/quit") {
-                    cli.persist_session()?;
-                    break;
-                }
-                if let Some(command) = SlashCommand::parse(&trimmed) {
-                .args(["issue", "create", "--title", &title, "--body-file"])
-                .arg(&body_path)
-                .current_dir(env::current_dir()?)
-                .output()?;
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                println!(
-                    "Issue\n  Result           created\n  Title            {title}\n  URL              {}",
-                    if stdout.is_empty() { "<unknown>" } else { &stdout }
-                );
-                return Ok(());
-            }
-        }
-
-        println!("Issue draft\n  Title            {title}\n\n{body}");
-        Ok(())
-    }
-}
-
-fn init_claude_md() -> Result<String, Box<dyn std::error::Error>> {
-    let cwd = env::current_dir()?;
-    Ok(initialize_repo(&cwd)?.render())
-}
-
-fn run_init() -> Result<(), Box<dyn std::error::Error>> {
-    println!("{}", init_claude_md()?);
-    Ok(())
-}
-
-fn git_output(args: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(env::current_dir()?)
-        .output()?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(format!("git {} failed: {stderr}", args.join(" ")).into());
-    }
-    Ok(String::from_utf8(output.stdout)?)
-}
-
-fn git_status_ok(args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(env::current_dir()?)
-        .output()?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(format!("git {} failed: {stderr}", args.join(" ")).into());
-    }
-    Ok(())
-}
-
-fn command_exists(name: &str) -> bool {
-    Command::new("which")
-        .arg(name)
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
-}
-
-fn write_temp_text_file(
-    filename: &str,
-    contents: &str,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let path = env::temp_dir().join(filename);
-    fs::write(&path, contents)?;
-    Ok(path)
-}
-
 fn recent_user_context(session: &Session, limit: usize) -> String {
     let requests = session
         .messages
@@ -730,11 +739,18 @@ fn build_runtime(
     emit_output: bool,
     allowed_tools: Option<AllowedToolSet>,
     permission_mode: PermissionMode,
+    status_bar: Option<StatusBarHandle>,
 ) -> Result<ConversationRuntime<AnthropicRuntimeClient, CliToolExecutor>, Box<dyn std::error::Error>>
 {
     Ok(ConversationRuntime::new_with_features(
         session,
-        AnthropicRuntimeClient::new(model, enable_tools, emit_output, allowed_tools.clone())?,
+        AnthropicRuntimeClient::new(
+            model,
+            enable_tools,
+            emit_output,
+            allowed_tools.clone(),
+            status_bar,
+        )?,
         CliToolExecutor::new(allowed_tools, emit_output),
         permission_policy(permission_mode),
         system_prompt,
@@ -795,6 +811,7 @@ struct AnthropicRuntimeClient {
     enable_tools: bool,
     emit_output: bool,
     allowed_tools: Option<AllowedToolSet>,
+    status_bar: Option<StatusBarHandle>,
 }
 
 impl AnthropicRuntimeClient {
@@ -803,6 +820,7 @@ impl AnthropicRuntimeClient {
         enable_tools: bool,
         emit_output: bool,
         allowed_tools: Option<AllowedToolSet>,
+        status_bar: Option<StatusBarHandle>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             runtime: tokio::runtime::Runtime::new()?,
@@ -812,6 +830,7 @@ impl AnthropicRuntimeClient {
             enable_tools,
             emit_output,
             allowed_tools,
+            status_bar,
         })
     }
 }
@@ -896,6 +915,9 @@ impl ApiClient for AnthropicRuntimeClient {
                                         .map_err(|error| RuntimeError::new(error.to_string()))?;
                                 }
                                 events.push(AssistantEvent::TextDelta(text));
+                                if let Some(status_bar) = self.status_bar.as_ref() {
+                                    let _ = status_bar.render();
+                                }
                             }
                         }
                         ContentBlockDelta::InputJsonDelta { partial_json } => {
@@ -919,12 +941,17 @@ impl ApiClient for AnthropicRuntimeClient {
                         }
                     }
                     ApiStreamEvent::MessageDelta(delta) => {
-                        events.push(AssistantEvent::Usage(TokenUsage {
+                        let usage = TokenUsage {
                             input_tokens: delta.usage.input_tokens,
                             output_tokens: delta.usage.output_tokens,
                             cache_creation_input_tokens: 0,
                             cache_read_input_tokens: 0,
-                        }));
+                        };
+                        if let Some(status_bar) = self.status_bar.as_ref() {
+                            status_bar.update_turn_usage(usage);
+                            let _ = status_bar.render();
+                        }
+                        events.push(AssistantEvent::Usage(usage));
                     }
                     ApiStreamEvent::MessageStop(_) => {
                         saw_stop = true;
@@ -932,6 +959,9 @@ impl ApiClient for AnthropicRuntimeClient {
                             write!(out, "{rendered}")
                                 .and_then(|()| out.flush())
                                 .map_err(|error| RuntimeError::new(error.to_string()))?;
+                        }
+                        if let Some(status_bar) = self.status_bar.as_ref() {
+                            let _ = status_bar.render();
                         }
                         events.push(AssistantEvent::MessageStop);
                     }
@@ -1630,18 +1660,18 @@ fn print_help() {
 
 #[cfg(test)]
 mod tests {
+    use crate::args::{normalize_permission_mode, resolve_model_alias, CliOutputFormat};
+
     use super::format::{
-        format_compact_report, format_cost_report, format_model_report,
-        format_model_switch_report, format_permissions_report,
-        format_permissions_switch_report, format_resume_report, format_status_report,
-        render_config_report, render_memory_report, render_repl_help, status_context,
-        StatusContext, StatusUsage,
+        format_compact_report, format_cost_report, format_model_report, format_model_switch_report,
+        format_permissions_report, format_permissions_switch_report, format_resume_report,
+        format_status_report, render_config_report, render_memory_report, render_repl_help,
+        status_context, StatusContext, StatusUsage,
     };
     use super::{
-        filter_tool_specs, format_tool_call_start, format_tool_result, normalize_permission_mode,
-        parse_args, parse_git_status_metadata, print_help_to, push_output_block,
-        resolve_model_alias, response_to_events, resume_supported_slash_commands, CliAction,
-        CliOutputFormat, SlashCommand, DEFAULT_MODEL,
+        filter_tool_specs, format_tool_call_start, format_tool_result, parse_args,
+        parse_git_status_metadata, print_help_to, push_output_block, response_to_events,
+        resume_supported_slash_commands, CliAction, SlashCommand, DEFAULT_MODEL,
     };
     use api::{MessageResponse, OutputContentBlock, Usage};
     use runtime::{AssistantEvent, ContentBlock, ConversationMessage, MessageRole, PermissionMode};

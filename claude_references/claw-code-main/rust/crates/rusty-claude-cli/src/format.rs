@@ -3,9 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use commands::render_slash_command_help;
-use runtime::{
-    ConfigLoader, ConfigSource, ContentBlock, MessageRole, ProjectContext, Session, TokenUsage,
-};
+use runtime::{ConfigLoader, ConfigSource, ContentBlock, ProjectContext, Session, TokenUsage};
 
 #[derive(Debug, Clone)]
 pub(crate) struct StatusContext {
@@ -333,7 +331,11 @@ pub(crate) fn render_memory_report() -> Result<String, Box<dyn std::error::Error
         lines.push("Discovered files".to_string());
         for (index, file) in project_context.instruction_files.iter().enumerate() {
             let preview = file.content.lines().next().unwrap_or("").trim();
-            let preview = if preview.is_empty() { "<empty>" } else { preview };
+            let preview = if preview.is_empty() {
+                "<empty>"
+            } else {
+                preview
+            };
             lines.push(format!("  {}. {}", index + 1, file.path.display()));
             lines.push(format!(
                 "     lines={} preview={}",
@@ -364,12 +366,13 @@ pub(crate) fn render_diff_report() -> Result<String, Box<dyn std::error::Error>>
     Ok(format!("Diff\n\n{}", diff.trim_end()))
 }
 
-pub(crate) fn render_teleport_report(
-    target: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+pub(crate) fn render_teleport_report(target: &str) -> Result<String, Box<dyn std::error::Error>> {
     let cwd = env::current_dir()?;
 
-    let file_list = Command::new("rg").args(["--files"]).current_dir(&cwd).output()?;
+    let file_list = Command::new("rg")
+        .args(["--files"])
+        .current_dir(&cwd)
+        .output()?;
     let file_matches = if file_list.status.success() {
         String::from_utf8(file_list.stdout)?
             .lines()
