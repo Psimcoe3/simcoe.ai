@@ -244,9 +244,10 @@ async fn surfaces_retry_exhaustion_for_persistent_retryable_errors() {
 }
 
 #[tokio::test]
-#[ignore = "requires SIMCOE_AI_API_KEY and network access"]
+#[ignore = "requires SIMCOE_AI_API_KEY, SIMCOE_AI_BASE_URL, and network access"]
 async fn live_stream_smoke_test() {
-    let client = SimcoeApiClient::from_env().expect("SIMCOE_AI_API_KEY must be set");
+    let client =
+        SimcoeApiClient::from_env().expect("SIMCOE_AI_API_KEY and SIMCOE_AI_BASE_URL must be set");
     let mut stream = client
         .stream_message(&MessageRequest {
             model: std::env::var("SIMCOE_AI_MODEL")

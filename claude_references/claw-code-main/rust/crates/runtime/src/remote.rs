@@ -4,7 +4,6 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-pub const DEFAULT_REMOTE_BASE_URL: &str = "https://api.anthropic.com";
 pub const DEFAULT_SESSION_TOKEN_PATH: &str = "/run/ccr/session_token";
 pub const DEFAULT_SYSTEM_CA_BUNDLE: &str = "/etc/ssl/certs/ca-certificates.crt";
 
@@ -81,7 +80,7 @@ impl RemoteSessionContext {
                 .get("SIMCOE_AI_BASE_URL")
                 .filter(|value| !value.is_empty())
                 .cloned()
-                .unwrap_or_else(|| DEFAULT_REMOTE_BASE_URL.to_string()),
+                .unwrap_or_default(),
         }
     }
 }
@@ -124,6 +123,7 @@ impl UpstreamProxyBootstrap {
         self.remote.enabled
             && self.upstream_proxy_enabled
             && self.remote.session_id.is_some()
+            && !self.remote.base_url.is_empty()
             && self.token.is_some()
     }
 
@@ -297,6 +297,32 @@ mod tests {
         let bootstrap = UpstreamProxyBootstrap::from_env_map(&env);
         assert!(!bootstrap.should_enable());
         assert!(!bootstrap.state_for_port(8080).enabled);
+    }
+
+    #[test]
+    fn bootstrap_requires_remote_base_url() {
+        let root = temp_dir();
+        let token_path = root.join("session_token");
+        fs::create_dir_all(&root).expect("temp dir");
+        fs::write(&token_path, "secret-token\n").expect("write token");
+
+        let env = BTreeMap::from([
+            ("SIMCOE_AI_REMOTE".to_string(), "1".to_string()),
+            ("CCR_UPSTREAM_PROXY_ENABLED".to_string(), "true".to_string()),
+            (
+                "SIMCOE_AI_REMOTE_SESSION_ID".to_string(),
+                "session-123".to_string(),
+            ),
+            (
+                "CCR_SESSION_TOKEN_PATH".to_string(),
+                token_path.to_string_lossy().into_owned(),
+            ),
+        ]);
+
+        let bootstrap = UpstreamProxyBootstrap::from_env_map(&env);
+        assert!(!bootstrap.should_enable());
+
+        fs::remove_dir_all(root).expect("cleanup temp dir");
     }
 
     #[test]

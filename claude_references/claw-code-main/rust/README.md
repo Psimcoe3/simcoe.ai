@@ -25,10 +25,11 @@ cargo build --release
 Set your API credentials:
 
 ```bash
+export SIMCOE_AI_BASE_URL="https://your-simcoe-endpoint"
 export SIMCOE_AI_API_KEY="your-key"
-# Or use a proxy / alternate upstream
-export SIMCOE_AI_BASE_URL="https://your-proxy.com"
 ```
+
+`SIMCOE_AI_BASE_URL` is required for live API calls. There is no built-in upstream default.
 
 Or authenticate via OAuth:
 

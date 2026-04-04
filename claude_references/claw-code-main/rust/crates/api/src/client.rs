@@ -11,7 +11,6 @@ use crate::error::ApiError;
 use crate::sse::SseParser;
 use crate::types::{MessageRequest, MessageResponse, StreamEvent};
 
-const DEFAULT_BASE_URL: &str = "https://api.anthropic.com";
 const API_VERSION_HEADER_VALUE: &str = "2023-06-01";
 const REQUEST_ID_HEADER: &str = "request-id";
 const ALT_REQUEST_ID_HEADER: &str = "x-request-id";
@@ -120,7 +119,7 @@ impl SimcoeApiClient {
         Self {
             http: reqwest::Client::new(),
             auth: AuthSource::ApiKey(api_key.into()),
-            base_url: DEFAULT_BASE_URL.to_string(),
+            base_url: String::new(),
             max_retries: DEFAULT_MAX_RETRIES,
             initial_backoff: DEFAULT_INITIAL_BACKOFF,
             max_backoff: DEFAULT_MAX_BACKOFF,
@@ -132,7 +131,7 @@ impl SimcoeApiClient {
         Self {
             http: reqwest::Client::new(),
             auth,
-            base_url: DEFAULT_BASE_URL.to_string(),
+            base_url: String::new(),
             max_retries: DEFAULT_MAX_RETRIES,
             initial_backoff: DEFAULT_INITIAL_BACKOFF,
             max_backoff: DEFAULT_MAX_BACKOFF,
@@ -140,7 +139,7 @@ impl SimcoeApiClient {
     }
 
     pub fn from_env() -> Result<Self, ApiError> {
-        Ok(Self::from_auth(AuthSource::from_env_or_saved()?).with_base_url(read_base_url()))
+        Ok(Self::from_auth(AuthSource::from_env_or_saved()?).with_base_url(read_base_url()?))
     }
 
     #[must_use]
@@ -314,6 +313,9 @@ impl SimcoeApiClient {
         &self,
         request: &MessageRequest,
     ) -> Result<reqwest::Response, ApiError> {
+        if self.base_url.trim().is_empty() {
+            return Err(ApiError::MissingBaseUrl);
+        }
         let request_url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
         let request_builder = self
             .http
@@ -433,7 +435,7 @@ fn resolve_saved_oauth_token_set(
     let Some(refresh_token) = token_set.refresh_token.clone() else {
         return Err(ApiError::ExpiredOAuthToken);
     };
-    let client = SimcoeApiClient::from_auth(AuthSource::None).with_base_url(read_base_url());
+    let client = SimcoeApiClient::from_auth(AuthSource::None);
     let refreshed = client_runtime_block_on(async {
         client
             .refresh_oauth_token(
@@ -517,12 +519,8 @@ fn read_auth_token() -> Option<String> {
     read_auth_token_env().ok().and_then(std::convert::identity)
 }
 
-#[must_use]
-pub fn read_base_url() -> String {
-    read_env_non_empty(SIMCOE_BASE_URL_ENV_VAR)
-        .ok()
-        .and_then(std::convert::identity)
-        .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
+pub fn read_base_url() -> Result<String, ApiError> {
+    read_env_non_empty(SIMCOE_BASE_URL_ENV_VAR)?.ok_or(ApiError::MissingBaseUrl)
 }
 
 fn request_id_from_headers(headers: &reqwest::header::HeaderMap) -> Option<String> {
@@ -697,6 +695,25 @@ mod tests {
         let error = super::read_api_key().expect_err("empty key should error");
         assert!(matches!(error, crate::error::ApiError::MissingApiKey));
         std::env::remove_var("SIMCOE_AI_AUTH_TOKEN");
+    }
+
+    #[test]
+    fn read_base_url_requires_presence() {
+        let _guard = env_lock();
+        std::env::remove_var("SIMCOE_AI_BASE_URL");
+        let error = super::read_base_url().expect_err("missing base url should error");
+        assert!(matches!(error, crate::error::ApiError::MissingBaseUrl));
+    }
+
+    #[test]
+    fn read_base_url_reads_env() {
+        let _guard = env_lock();
+        std::env::set_var("SIMCOE_AI_BASE_URL", "https://simcoe.test");
+        assert_eq!(
+            super::read_base_url().expect("base url should load"),
+            "https://simcoe.test"
+        );
+        std::env::remove_var("SIMCOE_AI_BASE_URL");
     }
 
     #[test]

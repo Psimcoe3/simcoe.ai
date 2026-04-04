@@ -4,9 +4,9 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 use api::{
-    read_base_url, ContentBlockDelta, InputContentBlock, InputMessage, MessageRequest,
-    MessageResponse, OutputContentBlock, SimcoeApiClient, StreamEvent as ApiStreamEvent,
-    ToolChoice, ToolDefinition, ToolResultContentBlock,
+    ContentBlockDelta, InputContentBlock, InputMessage, MessageRequest, MessageResponse,
+    OutputContentBlock, SimcoeApiClient, StreamEvent as ApiStreamEvent, ToolChoice, ToolDefinition,
+    ToolResultContentBlock,
 };
 use reqwest::blocking::Client;
 use runtime::{
@@ -1644,9 +1644,7 @@ struct SimcoeRuntimeClient {
 
 impl SimcoeRuntimeClient {
     fn new(model: String, allowed_tools: BTreeSet<String>) -> Result<Self, String> {
-        let client = SimcoeApiClient::from_env()
-            .map_err(|error| error.to_string())?
-            .with_base_url(read_base_url());
+        let client = SimcoeApiClient::from_env().map_err(|error| error.to_string())?;
         Ok(Self {
             runtime: tokio::runtime::Runtime::new().map_err(|error| error.to_string())?,
             client,

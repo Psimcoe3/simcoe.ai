@@ -5,6 +5,7 @@ use std::time::Duration;
 #[derive(Debug)]
 pub enum ApiError {
     MissingApiKey,
+    MissingBaseUrl,
     ExpiredOAuthToken,
     Auth(String),
     InvalidApiKeyEnv(VarError),
@@ -37,6 +38,7 @@ impl ApiError {
             Self::Api { retryable, .. } => *retryable,
             Self::RetriesExhausted { last_error, .. } => last_error.is_retryable(),
             Self::MissingApiKey
+            | Self::MissingBaseUrl
             | Self::ExpiredOAuthToken
             | Self::Auth(_)
             | Self::InvalidApiKeyEnv(_)
@@ -55,6 +57,12 @@ impl Display for ApiError {
                 write!(
                     f,
                     "SIMCOE_AI_AUTH_TOKEN or SIMCOE_AI_API_KEY is not set; export one before calling the Simcoe AI API"
+                )
+            }
+            Self::MissingBaseUrl => {
+                write!(
+                    f,
+                    "SIMCOE_AI_BASE_URL is not set; configure it before calling the Simcoe AI API"
                 )
             }
             Self::ExpiredOAuthToken => {

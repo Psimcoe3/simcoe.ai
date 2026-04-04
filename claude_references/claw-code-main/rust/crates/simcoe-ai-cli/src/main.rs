@@ -280,7 +280,7 @@ fn run_login() -> Result<(), Box<dyn std::error::Error>> {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "oauth state mismatch").into());
     }
 
-    let client = SimcoeApiClient::from_auth(AuthSource::None).with_base_url(api::read_base_url());
+    let client = SimcoeApiClient::from_auth(AuthSource::None);
     let exchange_request =
         OAuthTokenExchangeRequest::from_config(oauth, code, state, pkce.verifier, redirect_uri);
     let runtime = tokio::runtime::Runtime::new()?;
@@ -838,7 +838,8 @@ fn resolve_cli_auth_source() -> Result<AuthSource, Box<dyn std::error::Error>> {
 
 fn build_runtime_api_client() -> Result<SimcoeApiClient, RuntimeError> {
     let auth = resolve_cli_auth_source().map_err(|error| RuntimeError::new(error.to_string()))?;
-    Ok(SimcoeApiClient::from_auth(auth).with_base_url(api::read_base_url()))
+    let base_url = api::read_base_url().map_err(|error| RuntimeError::new(error.to_string()))?;
+    Ok(SimcoeApiClient::from_auth(auth).with_base_url(base_url))
 }
 
 impl ApiClient for SimcoeRuntimeClient {
