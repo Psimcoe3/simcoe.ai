@@ -233,26 +233,21 @@ fn print_bootstrap_plan() {
     }
 }
 
-fn default_oauth_config() -> OAuthConfig {
-    OAuthConfig {
-        client_id: String::from("9d1c250a-e61b-44d9-88ed-5944d1962f5e"),
-        authorize_url: String::from("https://platform.claude.com/oauth/authorize"),
-        token_url: String::from("https://platform.claude.com/v1/oauth/token"),
-        callback_port: None,
-        manual_redirect_url: None,
-        scopes: vec![
-            String::from("user:profile"),
-            String::from("user:inference"),
-            String::from("user:sessions:claude_code"),
-        ],
-    }
+fn oauth_config_for_login<'a>(
+    oauth: Option<&'a OAuthConfig>,
+) -> Result<&'a OAuthConfig, io::Error> {
+    oauth.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "missing oauth config; add an `oauth` block to .simcoe.json before running `claw login`",
+        )
+    })
 }
 
 fn run_login() -> Result<(), Box<dyn std::error::Error>> {
     let cwd = env::current_dir()?;
     let config = ConfigLoader::default_for(&cwd).load()?;
-    let default_oauth = default_oauth_config();
-    let oauth = config.oauth().unwrap_or(&default_oauth);
+    let oauth = oauth_config_for_login(config.oauth())?;
     let callback_port = oauth.callback_port.unwrap_or(DEFAULT_OAUTH_CALLBACK_PORT);
     let redirect_uri = runtime::loopback_redirect_uri(callback_port);
     let pkce = generate_pkce_pair()?;
@@ -805,7 +800,6 @@ impl runtime::PermissionPrompter for CliPermissionPrompter {
 
 struct SimcoeRuntimeClient {
     runtime: tokio::runtime::Runtime,
-    client: SimcoeApiClient,
     model: String,
     enable_tools: bool,
     emit_output: bool,
@@ -823,8 +817,6 @@ impl SimcoeRuntimeClient {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             runtime: tokio::runtime::Runtime::new()?,
-            client: SimcoeApiClient::from_auth(resolve_cli_auth_source()?)
-                .with_base_url(api::read_base_url()),
             model,
             enable_tools,
             emit_output,
@@ -844,9 +836,15 @@ fn resolve_cli_auth_source() -> Result<AuthSource, Box<dyn std::error::Error>> {
     })?)
 }
 
+fn build_runtime_api_client() -> Result<SimcoeApiClient, RuntimeError> {
+    let auth = resolve_cli_auth_source().map_err(|error| RuntimeError::new(error.to_string()))?;
+    Ok(SimcoeApiClient::from_auth(auth).with_base_url(api::read_base_url()))
+}
+
 impl ApiClient for SimcoeRuntimeClient {
     #[allow(clippy::too_many_lines)]
     fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>, RuntimeError> {
+        let client = build_runtime_api_client()?;
         let message_request = MessageRequest {
             model: self.model.clone(),
             max_tokens: max_tokens_for_model(&self.model),
@@ -867,8 +865,7 @@ impl ApiClient for SimcoeRuntimeClient {
         };
 
         self.runtime.block_on(async {
-            let mut stream = self
-                .client
+            let mut stream = client
                 .stream_message(&message_request)
                 .await
                 .map_err(|error| RuntimeError::new(error.to_string()))?;
@@ -983,8 +980,7 @@ impl ApiClient for SimcoeRuntimeClient {
                 return Ok(events);
             }
 
-            let response = self
-                .client
+            let response = client
                 .send_message(&MessageRequest {
                     stream: false,
                     ..message_request.clone()
@@ -1668,9 +1664,10 @@ mod tests {
         status_context, StatusContext, StatusUsage,
     };
     use super::{
-        filter_tool_specs, format_tool_call_start, format_tool_result, parse_args,
-        parse_git_status_metadata, print_help_to, push_output_block, response_to_events,
-        resume_supported_slash_commands, CliAction, SlashCommand, DEFAULT_MODEL,
+        filter_tool_specs, format_tool_call_start, format_tool_result, oauth_config_for_login,
+        parse_args, parse_git_status_metadata, print_help_to, push_output_block,
+        response_to_events, resume_supported_slash_commands, CliAction, SimcoeRuntimeClient,
+        SlashCommand, DEFAULT_MODEL,
     };
     use api::{MessageResponse, OutputContentBlock, Usage};
     use runtime::{AssistantEvent, ContentBlock, ConversationMessage, MessageRole, PermissionMode};
@@ -1687,6 +1684,20 @@ mod tests {
                 permission_mode: PermissionMode::DangerFullAccess,
             }
         );
+    }
+
+    #[test]
+    fn runtime_client_initializes_without_auth() {
+        assert!(
+            SimcoeRuntimeClient::new(DEFAULT_MODEL.to_string(), true, false, None, None,).is_ok()
+        );
+    }
+
+    #[test]
+    fn login_requires_explicit_oauth_config() {
+        let error = oauth_config_for_login(None).expect_err("login should require oauth config");
+        assert!(error.to_string().contains("missing oauth config"));
+        assert!(error.to_string().contains(".simcoe.json"));
     }
 
     #[test]

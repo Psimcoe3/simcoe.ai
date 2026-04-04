@@ -33,6 +33,7 @@ export SIMCOE_AI_BASE_URL="https://your-proxy.com"
 Or authenticate via OAuth:
 
 ```bash
+# requires an `oauth` block in your resolved runtime config, e.g. `.simcoe.json`
 claw login
 ```
 
