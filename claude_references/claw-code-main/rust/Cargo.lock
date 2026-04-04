@@ -1174,23 +1174,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
-name = "rusty-claude-cli"
-version = "0.1.0"
-dependencies = [
- "api",
- "commands",
- "compat-harness",
- "crossterm",
- "pulldown-cmark",
- "runtime",
- "rustyline",
- "serde_json",
- "syntect",
- "tokio",
- "tools",
-]
-
-[[package]]
 name = "rustyline"
 version = "15.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1334,6 +1317,23 @@ checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
 dependencies = [
  "errno",
  "libc",
+]
+
+[[package]]
+name = "simcoe-ai-cli"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "commands",
+ "compat-harness",
+ "crossterm",
+ "pulldown-cmark",
+ "runtime",
+ "rustyline",
+ "serde_json",
+ "syntect",
+ "tokio",
+ "tools",
 ]
 
 [[package]]

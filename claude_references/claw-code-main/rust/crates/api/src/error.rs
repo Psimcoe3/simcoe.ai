@@ -54,7 +54,7 @@ impl Display for ApiError {
             Self::MissingApiKey => {
                 write!(
                     f,
-                    "ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY is not set; export one before calling the Anthropic API"
+                    "SIMCOE_AI_AUTH_TOKEN or SIMCOE_AI_API_KEY is not set; export one before calling the Simcoe AI API"
                 )
             }
             Self::ExpiredOAuthToken => {
@@ -67,7 +67,7 @@ impl Display for ApiError {
             Self::InvalidApiKeyEnv(error) => {
                 write!(
                     f,
-                    "failed to read ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY: {error}"
+                    "failed to read SIMCOE_AI_AUTH_TOKEN / SIMCOE_AI_API_KEY: {error}"
                 )
             }
             Self::Http(error) => write!(f, "http error: {error}"),
@@ -83,17 +83,17 @@ impl Display for ApiError {
                 (Some(error_type), Some(message)) => {
                     write!(
                         f,
-                        "anthropic api returned {status} ({error_type}): {message}"
+                        "simcoe ai api returned {status} ({error_type}): {message}"
                     )
                 }
-                _ => write!(f, "anthropic api returned {status}: {body}"),
+                _ => write!(f, "simcoe ai api returned {status}: {body}"),
             },
             Self::RetriesExhausted {
                 attempts,
                 last_error,
             } => write!(
                 f,
-                "anthropic api failed after {attempts} attempts: {last_error}"
+                "simcoe ai api failed after {attempts} attempts: {last_error}"
             ),
             Self::InvalidSseFrame(message) => write!(f, "invalid sse frame: {message}"),
             Self::BackoffOverflow {

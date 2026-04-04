@@ -1,4 +1,4 @@
-# TUI Enhancement Plan — Claw Code (`rusty-claude-cli`)
+# TUI Enhancement Plan — Simcoe AI (`simcoe-ai-cli`)
 
 ## Executive Summary
 
@@ -12,9 +12,11 @@ This plan covers a comprehensive analysis of the current terminal user interface
 
 | Crate | Purpose | Lines | TUI Relevance |
 |---|---|---|---|
-| `rusty-claude-cli` | Main binary: REPL loop, arg parsing, rendering, API bridge | ~3,600 | **Primary TUI surface** |
+| `simcoe-ai-cli` | Main binary: REPL loop, arg parsing, rendering, API bridge | ~3,600 | **Primary TUI surface** |
 | `runtime` | Session, conversation loop, config, permissions, compaction | ~5,300 | Provides data/state |
-| `api` | Anthropic HTTP client + SSE streaming | ~1,500 | Provides stream events |
+| `api` | Simcoe AI HTTP client + SSE streaming | ~1,500 | Provides stream events |
+| 0.4 | **Create a `tui/` module** — Introduce `crates/simcoe-ai-cli/src/tui/mod.rs` as the namespace for all new TUI components: `status_bar.rs`, `layout.rs`, `tool_panel.rs`, etc. | S |
+crates/simcoe-ai-cli/src/
 | `commands` | Slash command metadata/parsing/help | ~470 | Drives command dispatch |
 | `tools` | 18 built-in tool implementations | ~3,500 | Tool execution display |
 
@@ -75,7 +77,7 @@ This plan covers a comprehensive analysis of the current terminal user interface
 | 0.1 | **Extract `LiveCli` into `app.rs`** — Move the entire `LiveCli` struct, its impl, and helpers (`format_*`, `render_*`, session management) out of `main.rs` into focused modules: `app.rs` (core), `format.rs` (report formatting), `session_manager.rs` (session CRUD) | M |
 | 0.2 | **Remove or merge the legacy `CliApp`** — The existing `app.rs` has an unused `CliApp` with its own `ConversationClient`-based rendering. Either delete it or merge its unique features (stream event handler pattern) into the active `LiveCli` | S |
 | 0.3 | **Extract `main.rs` arg parsing** — The current `parse_args()` is a hand-rolled parser that duplicates the clap-based `args.rs`. Consolidate on the hand-rolled parser (it's more feature-complete) and move it to `args.rs`, or adopt clap fully | S |
-| 0.4 | **Create a `tui/` module** — Introduce `crates/rusty-claude-cli/src/tui/mod.rs` as the namespace for all new TUI components: `status_bar.rs`, `layout.rs`, `tool_panel.rs`, etc. | S |
+| 0.4 | **Create a `tui/` module** — Introduce `crates/simcoe-ai-cli/src/tui/mod.rs` as the namespace for all new TUI components: `status_bar.rs`, `layout.rs`, `tool_panel.rs`, etc. | S |
 
 ### Phase 1: Status Bar & Live HUD
 
@@ -178,7 +180,7 @@ This plan covers a comprehensive analysis of the current terminal user interface
 ### Module Structure After Phase 0
 
 ```
-crates/rusty-claude-cli/src/
+crates/simcoe-ai-cli/src/
 ├── main.rs              # Entrypoint, arg dispatch only (~100 lines)
 ├── args.rs              # CLI argument parsing (consolidate existing two parsers)
 ├── app.rs               # LiveCli struct, REPL loop, turn execution

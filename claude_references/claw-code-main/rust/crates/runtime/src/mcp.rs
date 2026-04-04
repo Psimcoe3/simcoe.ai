@@ -1,6 +1,6 @@
 use crate::config::{McpServerConfig, ScopedMcpServerConfig};
 
-const CLAUDEAI_SERVER_PREFIX: &str = "claude.ai ";
+const SIMCOEAI_SERVER_PREFIX: &str = "simcoe.ai ";
 const CCR_PROXY_PATH_MARKERS: [&str; 2] = ["/v2/session_ingress/shttp/mcp/", "/v2/ccr-sessions/"];
 
 #[must_use]
@@ -13,7 +13,7 @@ pub fn normalize_name_for_mcp(name: &str) -> String {
         })
         .collect::<String>();
 
-    if name.starts_with(CLAUDEAI_SERVER_PREFIX) {
+    if name.starts_with(SIMCOEAI_SERVER_PREFIX) {
         normalized = collapse_underscores(&normalized)
             .trim_matches('_')
             .to_string();
@@ -73,7 +73,7 @@ pub fn mcp_server_signature(config: &McpServerConfig) -> Option<String> {
             Some(format!("url:{}", unwrap_ccr_proxy_url(&config.url)))
         }
         McpServerConfig::Ws(config) => Some(format!("url:{}", unwrap_ccr_proxy_url(&config.url))),
-        McpServerConfig::ClaudeAiProxy(config) => {
+        McpServerConfig::SimcoeAiProxy(config) => {
             Some(format!("url:{}", unwrap_ccr_proxy_url(&config.url)))
         }
         McpServerConfig::Sdk(_) => None,
@@ -110,8 +110,8 @@ pub fn scoped_mcp_config_hash(config: &ScopedMcpServerConfig) -> String {
             ws.headers_helper.as_deref().unwrap_or("")
         ),
         McpServerConfig::Sdk(sdk) => format!("sdk|{}", sdk.name),
-        McpServerConfig::ClaudeAiProxy(proxy) => {
-            format!("claudeai-proxy|{}|{}", proxy.url, proxy.id)
+        McpServerConfig::SimcoeAiProxy(proxy) => {
+            format!("simcoeai-proxy|{}|{}", proxy.url, proxy.id)
         }
     };
     stable_hex_hash(&rendered)
@@ -220,12 +220,12 @@ mod tests {
         assert_eq!(normalize_name_for_mcp("github.com"), "github_com");
         assert_eq!(normalize_name_for_mcp("tool name!"), "tool_name_");
         assert_eq!(
-            normalize_name_for_mcp("claude.ai Example   Server!!"),
-            "claude_ai_Example_Server"
+            normalize_name_for_mcp("simcoe.ai Example   Server!!"),
+            "simcoe_ai_Example_Server"
         );
         assert_eq!(
-            mcp_tool_name("claude.ai Example Server", "weather tool"),
-            "mcp__claude_ai_Example_Server__weather_tool"
+            mcp_tool_name("simcoe.ai Example Server", "weather tool"),
+            "mcp__simcoe_ai_Example_Server__weather_tool"
         );
     }
 

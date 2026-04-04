@@ -89,19 +89,19 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
     },
     SlashCommandSpec {
         name: "config",
-        summary: "Inspect Claude config files or merged sections",
+        summary: "Inspect Simcoe AI config files or merged sections",
         argument_hint: Some("[env|hooks|model]"),
         resume_supported: true,
     },
     SlashCommandSpec {
         name: "memory",
-        summary: "Inspect loaded Claude instruction memory files",
+        summary: "Inspect loaded Simcoe AI instruction memory files",
         argument_hint: None,
         resume_supported: true,
     },
     SlashCommandSpec {
         name: "init",
-        summary: "Create a starter CLAUDE.md for this repo",
+        summary: "Create a starter SIMCOE.md for this repo",
         argument_hint: None,
         resume_supported: true,
     },
@@ -435,9 +435,9 @@ mod tests {
             Some(SlashCommand::DebugToolCall)
         );
         assert_eq!(
-            SlashCommand::parse("/model claude-opus"),
+            SlashCommand::parse("/model simcoe-opus"),
             Some(SlashCommand::Model {
-                model: Some("claude-opus".to_string()),
+                model: Some("simcoe-opus".to_string()),
             })
         );
         assert_eq!(
@@ -585,7 +585,7 @@ mod tests {
                 .is_none()
         );
         assert!(
-            handle_slash_command("/model claude", &session, CompactionConfig::default()).is_none()
+            handle_slash_command("/model simcoe", &session, CompactionConfig::default()).is_none()
         );
         assert!(handle_slash_command(
             "/permissions read-only",

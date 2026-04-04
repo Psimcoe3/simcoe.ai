@@ -24,11 +24,11 @@ pub use compact::{
     get_compact_continuation_message, should_compact, CompactionConfig, CompactionResult,
 };
 pub use config::{
-    ConfigEntry, ConfigError, ConfigLoader, ConfigSource, McpClaudeAiProxyServerConfig,
-    McpConfigCollection, McpOAuthConfig, McpRemoteServerConfig, McpSdkServerConfig,
-    McpServerConfig, McpStdioServerConfig, McpTransport, McpWebSocketServerConfig, OAuthConfig,
+    ConfigEntry, ConfigError, ConfigLoader, ConfigSource, McpConfigCollection, McpOAuthConfig,
+    McpRemoteServerConfig, McpSdkServerConfig, McpServerConfig, McpSimcoeAiProxyServerConfig,
+    McpStdioServerConfig, McpTransport, McpWebSocketServerConfig, OAuthConfig,
     ResolvedPermissionMode, RuntimeConfig, RuntimeFeatureConfig, RuntimeHookConfig,
-    ScopedMcpServerConfig, CLAUDE_CODE_SETTINGS_SCHEMA_NAME,
+    ScopedMcpServerConfig, SIMCOE_AI_SETTINGS_SCHEMA_NAME,
 };
 pub use conversation::{
     auto_compaction_threshold_from_env, ApiClient, ApiRequest, AssistantEvent, AutoCompactionEvent,
@@ -45,8 +45,8 @@ pub use mcp::{
     scoped_mcp_config_hash, unwrap_ccr_proxy_url,
 };
 pub use mcp_client::{
-    McpClaudeAiProxyTransport, McpClientAuth, McpClientBootstrap, McpClientTransport,
-    McpRemoteTransport, McpSdkTransport, McpStdioTransport,
+    McpClientAuth, McpClientBootstrap, McpClientTransport, McpRemoteTransport, McpSdkTransport,
+    McpSimcoeAiProxyTransport, McpStdioTransport,
 };
 pub use mcp_stdio::{
     spawn_mcp_stdio_process, JsonRpcError, JsonRpcId, JsonRpcRequest, JsonRpcResponse,

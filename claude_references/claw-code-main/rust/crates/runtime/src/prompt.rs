@@ -35,7 +35,7 @@ impl From<ConfigError> for PromptBuildError {
 }
 
 pub const SYSTEM_PROMPT_DYNAMIC_BOUNDARY: &str = "__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__";
-pub const FRONTIER_MODEL_NAME: &str = "Claude Opus 4.6";
+pub const FRONTIER_MODEL_NAME: &str = "Simcoe Opus";
 const MAX_INSTRUCTION_FILE_CHARS: usize = 4_000;
 const MAX_TOTAL_INSTRUCTION_CHARS: usize = 12_000;
 
@@ -201,10 +201,10 @@ fn discover_instruction_files(cwd: &Path) -> std::io::Result<Vec<ContextFile>> {
     let mut files = Vec::new();
     for dir in directories {
         for candidate in [
-            dir.join("CLAUDE.md"),
-            dir.join("CLAUDE.local.md"),
-            dir.join(".claude").join("CLAUDE.md"),
-            dir.join(".claude").join("instructions.md"),
+            dir.join("SIMCOE.md"),
+            dir.join("SIMCOE.local.md"),
+            dir.join(".simcoe").join("SIMCOE.md"),
+            dir.join(".simcoe").join("instructions.md"),
         ] {
             push_context_file(&mut files, candidate)?;
         }
@@ -282,7 +282,7 @@ fn render_project_context(project_context: &ProjectContext) -> String {
     ];
     if !project_context.instruction_files.is_empty() {
         bullets.push(format!(
-            "Claude instruction files discovered: {}.",
+            "Simcoe AI instruction files discovered: {}.",
             project_context.instruction_files.len()
         ));
     }
@@ -301,7 +301,7 @@ fn render_project_context(project_context: &ProjectContext) -> String {
 }
 
 fn render_instruction_files(files: &[ContextFile]) -> String {
-    let mut sections = vec!["# Claude instructions".to_string()];
+    let mut sections = vec!["# Simcoe AI instructions".to_string()];
     let mut remaining_chars = MAX_TOTAL_INSTRUCTION_CHARS;
     for file in files {
         if remaining_chars == 0 {
@@ -517,23 +517,23 @@ mod tests {
     fn discovers_instruction_files_from_ancestor_chain() {
         let root = temp_dir();
         let nested = root.join("apps").join("api");
-        fs::create_dir_all(nested.join(".claude")).expect("nested claude dir");
-        fs::write(root.join("CLAUDE.md"), "root instructions").expect("write root instructions");
-        fs::write(root.join("CLAUDE.local.md"), "local instructions")
+        fs::create_dir_all(nested.join(".simcoe")).expect("nested simcoe dir");
+        fs::write(root.join("SIMCOE.md"), "root instructions").expect("write root instructions");
+        fs::write(root.join("SIMCOE.local.md"), "local instructions")
             .expect("write local instructions");
         fs::create_dir_all(root.join("apps")).expect("apps dir");
-        fs::create_dir_all(root.join("apps").join(".claude")).expect("apps claude dir");
-        fs::write(root.join("apps").join("CLAUDE.md"), "apps instructions")
+        fs::create_dir_all(root.join("apps").join(".simcoe")).expect("apps simcoe dir");
+        fs::write(root.join("apps").join("SIMCOE.md"), "apps instructions")
             .expect("write apps instructions");
         fs::write(
-            root.join("apps").join(".claude").join("instructions.md"),
-            "apps dot claude instructions",
+            root.join("apps").join(".simcoe").join("instructions.md"),
+            "apps dot simcoe instructions",
         )
-        .expect("write apps dot claude instructions");
-        fs::write(nested.join(".claude").join("CLAUDE.md"), "nested rules")
+        .expect("write apps dot simcoe instructions");
+        fs::write(nested.join(".simcoe").join("SIMCOE.md"), "nested rules")
             .expect("write nested rules");
         fs::write(
-            nested.join(".claude").join("instructions.md"),
+            nested.join(".simcoe").join("instructions.md"),
             "nested instructions",
         )
         .expect("write nested instructions");
@@ -551,7 +551,7 @@ mod tests {
                 "root instructions",
                 "local instructions",
                 "apps instructions",
-                "apps dot claude instructions",
+                "apps dot simcoe instructions",
                 "nested rules",
                 "nested instructions"
             ]
@@ -564,8 +564,8 @@ mod tests {
         let root = temp_dir();
         let nested = root.join("apps").join("api");
         fs::create_dir_all(&nested).expect("nested dir");
-        fs::write(root.join("CLAUDE.md"), "same rules\n\n").expect("write root");
-        fs::write(nested.join("CLAUDE.md"), "same rules\n").expect("write nested");
+        fs::write(root.join("SIMCOE.md"), "same rules\n\n").expect("write root");
+        fs::write(nested.join("SIMCOE.md"), "same rules\n").expect("write nested");
 
         let context = ProjectContext::discover(&nested, "2026-03-31").expect("context should load");
         assert_eq!(context.instruction_files.len(), 1);
@@ -593,8 +593,8 @@ mod tests {
     #[test]
     fn displays_context_paths_compactly() {
         assert_eq!(
-            display_context_path(Path::new("/tmp/project/.claude/CLAUDE.md")),
-            "CLAUDE.md"
+            display_context_path(Path::new("/tmp/project/.simcoe/SIMCOE.md")),
+            "SIMCOE.md"
         );
     }
 
@@ -607,7 +607,7 @@ mod tests {
             .current_dir(&root)
             .status()
             .expect("git init should run");
-        fs::write(root.join("CLAUDE.md"), "rules").expect("write instructions");
+        fs::write(root.join("SIMCOE.md"), "rules").expect("write instructions");
         fs::write(root.join("tracked.txt"), "hello").expect("write tracked file");
 
         let context =
@@ -615,7 +615,7 @@ mod tests {
 
         let status = context.git_status.expect("git status should be present");
         assert!(status.contains("## No commits yet on") || status.contains("## "));
-        assert!(status.contains("?? CLAUDE.md"));
+        assert!(status.contains("?? SIMCOE.md"));
         assert!(status.contains("?? tracked.txt"));
         assert!(context.git_diff.is_none());
 
@@ -665,12 +665,12 @@ mod tests {
     }
 
     #[test]
-    fn load_system_prompt_reads_claude_files_and_config() {
+    fn load_system_prompt_reads_simcoe_files_and_config() {
         let root = temp_dir();
-        fs::create_dir_all(root.join(".claude")).expect("claude dir");
-        fs::write(root.join("CLAUDE.md"), "Project rules").expect("write instructions");
+        fs::create_dir_all(root.join(".simcoe")).expect("simcoe dir");
+        fs::write(root.join("SIMCOE.md"), "Project rules").expect("write instructions");
         fs::write(
-            root.join(".claude").join("settings.json"),
+            root.join(".simcoe").join("settings.json"),
             r#"{"permissionMode":"acceptEdits"}"#,
         )
         .expect("write settings");
@@ -678,9 +678,9 @@ mod tests {
         let _guard = env_lock();
         let previous = std::env::current_dir().expect("cwd");
         let original_home = std::env::var("HOME").ok();
-        let original_claude_home = std::env::var("CLAUDE_CONFIG_HOME").ok();
+        let original_simcoe_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
         std::env::set_var("HOME", &root);
-        std::env::set_var("CLAUDE_CONFIG_HOME", root.join("missing-home"));
+        std::env::set_var("SIMCOE_CONFIG_HOME", root.join("missing-home"));
         std::env::set_current_dir(&root).expect("change cwd");
         let prompt = super::load_system_prompt(&root, "2026-03-31", "linux", "6.8")
             .expect("system prompt should load")
@@ -695,10 +695,10 @@ mod tests {
         } else {
             std::env::remove_var("HOME");
         }
-        if let Some(value) = original_claude_home {
-            std::env::set_var("CLAUDE_CONFIG_HOME", value);
+        if let Some(value) = original_simcoe_home {
+            std::env::set_var("SIMCOE_CONFIG_HOME", value);
         } else {
-            std::env::remove_var("CLAUDE_CONFIG_HOME");
+            std::env::remove_var("SIMCOE_CONFIG_HOME");
         }
 
         assert!(prompt.contains("Project rules"));
@@ -707,12 +707,12 @@ mod tests {
     }
 
     #[test]
-    fn renders_claude_code_style_sections_with_project_context() {
+    fn renders_simcoe_ai_style_sections_with_project_context() {
         let root = temp_dir();
-        fs::create_dir_all(root.join(".claude")).expect("claude dir");
-        fs::write(root.join("CLAUDE.md"), "Project rules").expect("write CLAUDE.md");
+        fs::create_dir_all(root.join(".simcoe")).expect("simcoe dir");
+        fs::write(root.join("SIMCOE.md"), "Project rules").expect("write SIMCOE.md");
         fs::write(
-            root.join(".claude").join("settings.json"),
+            root.join(".simcoe").join("settings.json"),
             r#"{"permissionMode":"acceptEdits"}"#,
         )
         .expect("write settings");
@@ -731,7 +731,7 @@ mod tests {
 
         assert!(prompt.contains("# System"));
         assert!(prompt.contains("# Project context"));
-        assert!(prompt.contains("# Claude instructions"));
+        assert!(prompt.contains("# Simcoe AI instructions"));
         assert!(prompt.contains("Project rules"));
         assert!(prompt.contains("permissionMode"));
         assert!(prompt.contains(SYSTEM_PROMPT_DYNAMIC_BOUNDARY));
@@ -748,12 +748,12 @@ mod tests {
     }
 
     #[test]
-    fn discovers_dot_claude_instructions_markdown() {
+    fn discovers_dot_simcoe_instructions_markdown() {
         let root = temp_dir();
         let nested = root.join("apps").join("api");
-        fs::create_dir_all(nested.join(".claude")).expect("nested claude dir");
+        fs::create_dir_all(nested.join(".simcoe")).expect("nested simcoe dir");
         fs::write(
-            nested.join(".claude").join("instructions.md"),
+            nested.join(".simcoe").join("instructions.md"),
             "instruction markdown",
         )
         .expect("write instructions.md");
@@ -762,7 +762,7 @@ mod tests {
         assert!(context
             .instruction_files
             .iter()
-            .any(|file| file.path.ends_with(".claude/instructions.md")));
+            .any(|file| file.path.ends_with(".simcoe/instructions.md")));
         assert!(
             render_instruction_files(&context.instruction_files).contains("instruction markdown")
         );
@@ -773,10 +773,10 @@ mod tests {
     #[test]
     fn renders_instruction_file_metadata() {
         let rendered = render_instruction_files(&[ContextFile {
-            path: PathBuf::from("/tmp/project/CLAUDE.md"),
+            path: PathBuf::from("/tmp/project/SIMCOE.md"),
             content: "Project rules".to_string(),
         }]);
-        assert!(rendered.contains("# Claude instructions"));
+        assert!(rendered.contains("# Simcoe AI instructions"));
         assert!(rendered.contains("scope: /tmp/project"));
         assert!(rendered.contains("Project rules"));
     }

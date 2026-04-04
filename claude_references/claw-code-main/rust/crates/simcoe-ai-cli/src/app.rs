@@ -7,8 +7,8 @@ use runtime::{CompactionConfig, ConfigLoader, ConversationRuntime, PermissionMod
 use serde_json::json;
 
 use crate::args::{
-    normalize_permission_mode, permission_mode_from_label, resolve_model_alias, AllowedToolSet,
-    CliOutputFormat,
+    brand_model_name, normalize_permission_mode, permission_mode_from_label, resolve_model_alias,
+    AllowedToolSet, CliOutputFormat,
 };
 use crate::format::{
     format_auto_compaction_notice, format_compact_report, format_cost_report, format_model_report,
@@ -22,14 +22,14 @@ use crate::session_manager::{
     create_managed_session_handle, render_session_list, resolve_session_reference, SessionHandle,
 };
 use crate::tui::status_bar::StatusBarHandle;
-use crate::{AnthropicRuntimeClient, CliPermissionPrompter, CliToolExecutor};
+use crate::{CliPermissionPrompter, CliToolExecutor, SimcoeRuntimeClient};
 
 pub(crate) struct LiveCli {
     pub(crate) model: String,
     pub(crate) allowed_tools: Option<AllowedToolSet>,
     pub(crate) permission_mode: PermissionMode,
     pub(crate) system_prompt: Vec<String>,
-    pub(crate) runtime: ConversationRuntime<AnthropicRuntimeClient, CliToolExecutor>,
+    pub(crate) runtime: ConversationRuntime<SimcoeRuntimeClient, CliToolExecutor>,
     pub(crate) session: SessionHandle,
     pub(crate) status_bar: StatusBarHandle,
 }
@@ -87,7 +87,7 @@ impl LiveCli {
   \x1b[2mDirectory\x1b[0m        {}\n\
   \x1b[2mSession\x1b[0m          {}\n\n\
   Type \x1b[1m/help\x1b[0m for commands · \x1b[2mShift+Enter\x1b[0m for newline",
-            self.model,
+            brand_model_name(&self.model),
             self.permission_mode.as_str(),
             cwd,
             self.session.id,

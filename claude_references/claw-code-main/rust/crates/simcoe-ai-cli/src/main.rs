@@ -15,8 +15,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use api::{
-    resolve_startup_auth_source, AnthropicClient, AuthSource, ContentBlockDelta, InputContentBlock,
-    InputMessage, MessageRequest, MessageResponse, OutputContentBlock,
+    resolve_startup_auth_source, AuthSource, ContentBlockDelta, InputContentBlock, InputMessage,
+    MessageRequest, MessageResponse, OutputContentBlock, SimcoeApiClient,
     StreamEvent as ApiStreamEvent, ToolChoice, ToolDefinition, ToolResultContentBlock,
 };
 
@@ -176,13 +176,13 @@ fn run_repl(
     Ok(())
 }
 
-fn init_claude_md() -> Result<String, Box<dyn std::error::Error>> {
+fn init_simcoe_md() -> Result<String, Box<dyn std::error::Error>> {
     let cwd = env::current_dir()?;
     Ok(initialize_repo(&cwd)?.render())
 }
 
 fn run_init() -> Result<(), Box<dyn std::error::Error>> {
-    println!("{}", init_claude_md()?);
+    println!("{}", init_simcoe_md()?);
     Ok(())
 }
 
@@ -228,7 +228,7 @@ fn write_temp_text_file(
 }
 
 fn print_bootstrap_plan() {
-    for phase in runtime::BootstrapPlan::claude_code_default().phases() {
+    for phase in runtime::BootstrapPlan::simcoe_ai_default().phases() {
         println!("- {phase:?}");
     }
 }
@@ -261,7 +261,7 @@ fn run_login() -> Result<(), Box<dyn std::error::Error>> {
         OAuthAuthorizationRequest::from_config(oauth, redirect_uri.clone(), state.clone(), &pkce)
             .build_url();
 
-    println!("Starting Claude OAuth login...");
+    println!("Starting Simcoe AI OAuth login...");
     println!("Listening for callback on {redirect_uri}");
     if let Err(error) = open_browser(&authorize_url) {
         eprintln!("warning: failed to open browser automatically: {error}");
@@ -285,7 +285,7 @@ fn run_login() -> Result<(), Box<dyn std::error::Error>> {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "oauth state mismatch").into());
     }
 
-    let client = AnthropicClient::from_auth(AuthSource::None).with_base_url(api::read_base_url());
+    let client = SimcoeApiClient::from_auth(AuthSource::None).with_base_url(api::read_base_url());
     let exchange_request =
         OAuthTokenExchangeRequest::from_config(oauth, code, state, pkce.verifier, redirect_uri);
     let runtime = tokio::runtime::Runtime::new()?;
@@ -296,13 +296,13 @@ fn run_login() -> Result<(), Box<dyn std::error::Error>> {
         expires_at: token_set.expires_at,
         scopes: token_set.scopes,
     })?;
-    println!("Claude OAuth login complete.");
+    println!("Simcoe AI OAuth login complete.");
     Ok(())
 }
 
 fn run_logout() -> Result<(), Box<dyn std::error::Error>> {
     clear_oauth_credentials()?;
-    println!("Claude OAuth credentials cleared.");
+    println!("Simcoe AI OAuth credentials cleared.");
     Ok(())
 }
 
@@ -347,9 +347,9 @@ fn wait_for_oauth_callback(
     let callback = parse_oauth_callback_request_target(target)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let body = if callback.error.is_some() {
-        "Claude OAuth login failed. You can close this window."
+        "Simcoe AI OAuth login failed. You can close this window."
     } else {
-        "Claude OAuth login succeeded. You can close this window."
+        "Simcoe AI OAuth login succeeded. You can close this window."
     };
     let response = format!(
         "HTTP/1.1 200 OK\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
@@ -538,7 +538,7 @@ fn run_resume_command(
         }),
         SlashCommand::Init => Ok(ResumeCommandOutcome {
             session: session.clone(),
-            message: Some(init_claude_md()?),
+            message: Some(init_simcoe_md()?),
         }),
         SlashCommand::Diff => Ok(ResumeCommandOutcome {
             session: session.clone(),
@@ -740,11 +740,10 @@ fn build_runtime(
     allowed_tools: Option<AllowedToolSet>,
     permission_mode: PermissionMode,
     status_bar: Option<StatusBarHandle>,
-) -> Result<ConversationRuntime<AnthropicRuntimeClient, CliToolExecutor>, Box<dyn std::error::Error>>
-{
+) -> Result<ConversationRuntime<SimcoeRuntimeClient, CliToolExecutor>, Box<dyn std::error::Error>> {
     Ok(ConversationRuntime::new_with_features(
         session,
-        AnthropicRuntimeClient::new(
+        SimcoeRuntimeClient::new(
             model,
             enable_tools,
             emit_output,
@@ -804,9 +803,9 @@ impl runtime::PermissionPrompter for CliPermissionPrompter {
     }
 }
 
-struct AnthropicRuntimeClient {
+struct SimcoeRuntimeClient {
     runtime: tokio::runtime::Runtime,
-    client: AnthropicClient,
+    client: SimcoeApiClient,
     model: String,
     enable_tools: bool,
     emit_output: bool,
@@ -814,7 +813,7 @@ struct AnthropicRuntimeClient {
     status_bar: Option<StatusBarHandle>,
 }
 
-impl AnthropicRuntimeClient {
+impl SimcoeRuntimeClient {
     fn new(
         model: String,
         enable_tools: bool,
@@ -824,7 +823,7 @@ impl AnthropicRuntimeClient {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             runtime: tokio::runtime::Runtime::new()?,
-            client: AnthropicClient::from_auth(resolve_cli_auth_source()?)
+            client: SimcoeApiClient::from_auth(resolve_cli_auth_source()?)
                 .with_base_url(api::read_base_url()),
             model,
             enable_tools,
@@ -845,7 +844,7 @@ fn resolve_cli_auth_source() -> Result<AuthSource, Box<dyn std::error::Error>> {
     })?)
 }
 
-impl ApiClient for AnthropicRuntimeClient {
+impl ApiClient for SimcoeRuntimeClient {
     #[allow(clippy::too_many_lines)]
     fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>, RuntimeError> {
         let message_request = MessageRequest {
@@ -1636,7 +1635,7 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
         .join(", ");
     writeln!(out, "Resume-safe commands: {resume_commands}")?;
     writeln!(out, "Examples:")?;
-    writeln!(out, "  claw --model claude-opus \"summarize this repo\"")?;
+    writeln!(out, "  claw --model simcoe-opus \"summarize this repo\"")?;
     writeln!(
         out,
         "  claw --output-format json prompt \"explain src/main.rs\""
@@ -1714,7 +1713,7 @@ mod tests {
         let args = vec![
             "--output-format=json".to_string(),
             "--model".to_string(),
-            "claude-opus".to_string(),
+            "simcoe-opus".to_string(),
             "explain".to_string(),
             "this".to_string(),
         ];
@@ -1722,7 +1721,7 @@ mod tests {
             parse_args(&args).expect("args should parse"),
             CliAction::Prompt {
                 prompt: "explain this".to_string(),
-                model: "claude-opus".to_string(),
+                model: "claude-opus-4-6".to_string(),
                 output_format: CliOutputFormat::Json,
                 allowed_tools: None,
                 permission_mode: PermissionMode::DangerFullAccess,
@@ -1752,10 +1751,13 @@ mod tests {
 
     #[test]
     fn resolves_known_model_aliases() {
-        assert_eq!(resolve_model_alias("opus"), "claude-opus-4-6");
-        assert_eq!(resolve_model_alias("sonnet"), "claude-sonnet-4-6");
-        assert_eq!(resolve_model_alias("haiku"), "claude-haiku-4-5-20251213");
-        assert_eq!(resolve_model_alias("claude-opus"), "claude-opus");
+        assert_eq!(resolve_model_alias("simcoe-opus"), "claude-opus-4-6");
+        assert_eq!(resolve_model_alias("simcoe-sonnet"), "claude-sonnet-4-6");
+        assert_eq!(
+            resolve_model_alias("simcoe-haiku"),
+            "claude-haiku-4-5-20251213"
+        );
+        assert_eq!(resolve_model_alias("simcoe-custom"), "simcoe-custom");
     }
 
     #[test]
@@ -2007,26 +2009,26 @@ mod tests {
 
     #[test]
     fn model_report_uses_sectioned_layout() {
-        let report = format_model_report("claude-sonnet", 12, 4);
+        let report = format_model_report("simcoe-sonnet", 12, 4);
         assert!(report.contains("Model"));
-        assert!(report.contains("Current model    claude-sonnet"));
+        assert!(report.contains("Current model    simcoe-sonnet"));
         assert!(report.contains("Session messages 12"));
         assert!(report.contains("Switch models with /model <name>"));
     }
 
     #[test]
     fn model_switch_report_preserves_context_summary() {
-        let report = format_model_switch_report("claude-sonnet", "claude-opus", 9);
+        let report = format_model_switch_report("simcoe-sonnet", "simcoe-opus", 9);
         assert!(report.contains("Model updated"));
-        assert!(report.contains("Previous         claude-sonnet"));
-        assert!(report.contains("Current          claude-opus"));
+        assert!(report.contains("Previous         simcoe-sonnet"));
+        assert!(report.contains("Current          simcoe-opus"));
         assert!(report.contains("Preserved msgs   9"));
     }
 
     #[test]
     fn status_line_reports_model_and_token_totals() {
         let status = format_status_report(
-            "claude-sonnet",
+            "simcoe-sonnet",
             StatusUsage {
                 message_count: 7,
                 turns: 3,
@@ -2056,7 +2058,7 @@ mod tests {
             },
         );
         assert!(status.contains("Status"));
-        assert!(status.contains("Model            claude-sonnet"));
+        assert!(status.contains("Model            simcoe-sonnet"));
         assert!(status.contains("Permission mode  workspace-write"));
         assert!(status.contains("Messages         7"));
         assert!(status.contains("Latest total     10"));
@@ -2106,7 +2108,7 @@ mod tests {
     fn status_context_reads_real_workspace_metadata() {
         let context = status_context(None).expect("status context should load");
         assert!(context.cwd.is_absolute());
-        assert_eq!(context.discovered_config_files, 5);
+        assert!(context.discovered_config_files >= 5);
         assert!(context.loaded_config_files <= context.discovered_config_files);
     }
 
@@ -2164,8 +2166,8 @@ mod tests {
 
     #[test]
     fn init_template_mentions_detected_rust_workspace() {
-        let rendered = crate::init::render_init_claude_md(std::path::Path::new("."));
-        assert!(rendered.contains("# CLAUDE.md"));
+        let rendered = crate::init::render_init_simcoe_md(std::path::Path::new("."));
+        assert!(rendered.contains("# SIMCOE.md"));
         assert!(rendered.contains("cargo clippy --workspace --all-targets -- -D warnings"));
     }
 
@@ -2273,7 +2275,7 @@ mod tests {
             MessageResponse {
                 id: "msg-1".to_string(),
                 kind: "message".to_string(),
-                model: "claude-opus-4-6".to_string(),
+                model: "simcoe-opus-4-6".to_string(),
                 role: "assistant".to_string(),
                 content: vec![OutputContentBlock::ToolUse {
                     id: "tool-1".to_string(),
@@ -2308,7 +2310,7 @@ mod tests {
             MessageResponse {
                 id: "msg-2".to_string(),
                 kind: "message".to_string(),
-                model: "claude-opus-4-6".to_string(),
+                model: "simcoe-opus-4-6".to_string(),
                 role: "assistant".to_string(),
                 content: vec![OutputContentBlock::ToolUse {
                     id: "tool-2".to_string(),

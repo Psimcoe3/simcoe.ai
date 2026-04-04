@@ -249,9 +249,9 @@ mod tests {
         let cost = usage.estimate_cost_usd();
         assert_eq!(format_usd(cost.input_cost_usd), "$15.0000");
         assert_eq!(format_usd(cost.output_cost_usd), "$37.5000");
-        let lines = usage.summary_lines_for_model("usage", Some("claude-sonnet-4-20250514"));
+        let lines = usage.summary_lines_for_model("usage", Some("simcoe-sonnet-4-20250514"));
         assert!(lines[0].contains("estimated_cost=$54.6750"));
-        assert!(lines[0].contains("model=claude-sonnet-4-20250514"));
+        assert!(lines[0].contains("model=simcoe-sonnet-4-20250514"));
         assert!(lines[1].contains("cache_read=$0.3000"));
     }
 
@@ -264,8 +264,8 @@ mod tests {
             cache_read_input_tokens: 0,
         };
 
-        let haiku = pricing_for_model("claude-haiku-4-5-20251001").expect("haiku pricing");
-        let opus = pricing_for_model("claude-opus-4-6").expect("opus pricing");
+        let haiku = pricing_for_model("simcoe-haiku-4-5-20251001").expect("haiku pricing");
+        let opus = pricing_for_model("simcoe-opus-4-6").expect("opus pricing");
         let haiku_cost = usage.estimate_cost_usd_with_pricing(haiku);
         let opus_cost = usage.estimate_cost_usd_with_pricing(opus);
         assert_eq!(format_usd(haiku_cost.total_cost_usd()), "$3.5000");

@@ -8,6 +8,8 @@ use crossterm::style::{Color, Print, ResetColor, SetBackgroundColor, SetForegrou
 use crossterm::terminal::{size, Clear, ClearType};
 use runtime::{format_usd, pricing_for_model, TokenUsage};
 
+use crate::args::brand_model_name;
+
 #[derive(Debug, Clone)]
 pub(crate) struct StatusBarHandle {
     inner: Arc<Mutex<StatusBarState>>,
@@ -291,7 +293,12 @@ fn build_segments<const N: usize>(segments: [Option<String>; N]) -> Vec<String> 
 }
 
 fn short_model(model: &str) -> String {
-    model.strip_prefix("claude-").unwrap_or(model).to_string()
+    match brand_model_name(model) {
+        "simcoe-opus" => "sim-opus".to_string(),
+        "simcoe-sonnet" => "sim-sonnet".to_string(),
+        "simcoe-haiku" => "sim-haiku".to_string(),
+        other => other.to_string(),
+    }
 }
 
 fn short_permission_mode(permission_mode: &str) -> &'static str {
@@ -363,7 +370,7 @@ mod tests {
 
     fn sample_state() -> StatusBarState {
         StatusBarState {
-            model: String::from("claude-opus-4-6"),
+            model: String::from("simcoe-opus-4-6"),
             permission_mode: String::from("workspace-write"),
             session_id: String::from("session-1234567890"),
             git_branch: Some(String::from("main")),
@@ -384,7 +391,7 @@ mod tests {
     fn renders_full_line_when_width_allows() {
         let line = sample_state().render_line(120);
 
-        assert!(line.contains("opus-4-6"));
+        assert!(line.contains("sim-opus"));
         assert!(line.contains("write"));
         assert!(line.contains("tok:2.0k"));
         assert!(line.contains("git:main"));

@@ -4,9 +4,9 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 use api::{
-    read_base_url, AnthropicClient, ContentBlockDelta, InputContentBlock, InputMessage,
-    MessageRequest, MessageResponse, OutputContentBlock, StreamEvent as ApiStreamEvent, ToolChoice,
-    ToolDefinition, ToolResultContentBlock,
+    read_base_url, ContentBlockDelta, InputContentBlock, InputMessage, MessageRequest,
+    MessageResponse, OutputContentBlock, SimcoeApiClient, StreamEvent as ApiStreamEvent,
+    ToolChoice, ToolDefinition, ToolResultContentBlock,
 };
 use reqwest::blocking::Client;
 use runtime::{
@@ -1459,14 +1459,14 @@ fn run_agent_job(job: &AgentJob) -> Result<(), String> {
 
 fn build_agent_runtime(
     job: &AgentJob,
-) -> Result<ConversationRuntime<AnthropicRuntimeClient, SubagentToolExecutor>, String> {
+) -> Result<ConversationRuntime<SimcoeRuntimeClient, SubagentToolExecutor>, String> {
     let model = job
         .manifest
         .model
         .clone()
         .unwrap_or_else(|| DEFAULT_AGENT_MODEL.to_string());
     let allowed_tools = job.allowed_tools.clone();
-    let api_client = AnthropicRuntimeClient::new(model, allowed_tools.clone())?;
+    let api_client = SimcoeRuntimeClient::new(model, allowed_tools.clone())?;
     let tool_executor = SubagentToolExecutor::new(allowed_tools);
     Ok(ConversationRuntime::new(
         Session::new(),
@@ -1537,7 +1537,7 @@ fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String> {
             "SendUserMessage",
             "PowerShell",
         ],
-        "claw-code-guide" => vec![
+        "simcoe-ai-guide" => vec![
             "read_file",
             "glob_search",
             "grep_search",
@@ -1635,16 +1635,16 @@ fn format_agent_terminal_output(status: &str, result: Option<&str>, error: Optio
     sections.join("")
 }
 
-struct AnthropicRuntimeClient {
+struct SimcoeRuntimeClient {
     runtime: tokio::runtime::Runtime,
-    client: AnthropicClient,
+    client: SimcoeApiClient,
     model: String,
     allowed_tools: BTreeSet<String>,
 }
 
-impl AnthropicRuntimeClient {
+impl SimcoeRuntimeClient {
     fn new(model: String, allowed_tools: BTreeSet<String>) -> Result<Self, String> {
-        let client = AnthropicClient::from_env()
+        let client = SimcoeApiClient::from_env()
             .map_err(|error| error.to_string())?
             .with_base_url(read_base_url());
         Ok(Self {
@@ -1656,7 +1656,7 @@ impl AnthropicRuntimeClient {
     }
 }
 
-impl ApiClient for AnthropicRuntimeClient {
+impl ApiClient for SimcoeRuntimeClient {
     fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>, RuntimeError> {
         let tools = tool_specs_for_allowed_tools(Some(&self.allowed_tools))
             .into_iter()
@@ -2087,7 +2087,7 @@ fn normalize_subagent_type(subagent_type: Option<&str>) -> String {
         "verification" | "verificationagent" | "verify" | "verifier" => {
             String::from("Verification")
         }
-        "claudecodeguide" | "claudecodeguideagent" | "guide" => String::from("claw-code-guide"),
+        "simcoeaiguide" | "simcoeaiguideagent" | "guide" => String::from("simcoe-ai-guide"),
         "statusline" | "statuslinesetup" => String::from("statusline-setup"),
         _ => trimmed.to_string(),
     }
@@ -2587,16 +2587,16 @@ fn config_file_for_scope(scope: ConfigScope) -> Result<PathBuf, String> {
     let cwd = std::env::current_dir().map_err(|error| error.to_string())?;
     Ok(match scope {
         ConfigScope::Global => config_home_dir()?.join("settings.json"),
-        ConfigScope::Settings => cwd.join(".claude").join("settings.local.json"),
+        ConfigScope::Settings => cwd.join(".simcoe").join("settings.local.json"),
     })
 }
 
 fn config_home_dir() -> Result<PathBuf, String> {
-    if let Ok(path) = std::env::var("CLAUDE_CONFIG_HOME") {
+    if let Ok(path) = std::env::var("SIMCOE_CONFIG_HOME") {
         return Ok(PathBuf::from(path));
     }
     let home = std::env::var("HOME").map_err(|_| String::from("HOME is not set"))?;
-    Ok(PathBuf::from(home).join(".claude"))
+    Ok(PathBuf::from(home).join(".simcoe"))
 }
 
 fn read_json_object(path: &Path) -> Result<serde_json::Map<String, Value>, String> {
@@ -3223,6 +3223,21 @@ mod tests {
 
     #[test]
     fn skill_loads_local_skill_prompt() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let codex_home = temp_path("skills-home");
+        let skill_dir = codex_home.join("skills").join("help");
+        std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "# Help\n\nGuide on using oh-my-codex plugin\n",
+        )
+        .expect("write skill prompt");
+
+        let original_codex_home = std::env::var("CODEX_HOME").ok();
+        std::env::set_var("CODEX_HOME", &codex_home);
+
         let result = execute_tool(
             "Skill",
             &json!({
@@ -3257,6 +3272,12 @@ mod tests {
             .as_str()
             .expect("path")
             .ends_with("/help/SKILL.md"));
+
+        match original_codex_home {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+        let _ = std::fs::remove_dir_all(codex_home);
     }
 
     #[test]
@@ -3383,7 +3404,7 @@ mod tests {
                 prompt: "Do the work".to_string(),
                 subagent_type: Some("Explore".to_string()),
                 name: Some("complete-task".to_string()),
-                model: Some("claude-sonnet-4-6".to_string()),
+                model: Some("simcoe-sonnet-4-6".to_string()),
             },
             |job| {
                 persist_agent_terminal_state(
@@ -3982,19 +4003,19 @@ mod tests {
         ));
         let home = root.join("home");
         let cwd = root.join("cwd");
-        std::fs::create_dir_all(home.join(".claude")).expect("home dir");
-        std::fs::create_dir_all(cwd.join(".claude")).expect("cwd dir");
+        std::fs::create_dir_all(home.join(".simcoe")).expect("home dir");
+        std::fs::create_dir_all(cwd.join(".simcoe")).expect("cwd dir");
         std::fs::write(
-            home.join(".claude").join("settings.json"),
+            home.join(".simcoe").join("settings.json"),
             r#"{"verbose":false}"#,
         )
         .expect("write global settings");
 
         let original_home = std::env::var("HOME").ok();
-        let original_claude_home = std::env::var("CLAUDE_CONFIG_HOME").ok();
+        let original_simcoe_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
         let original_dir = std::env::current_dir().expect("cwd");
         std::env::set_var("HOME", &home);
-        std::env::remove_var("CLAUDE_CONFIG_HOME");
+        std::env::remove_var("SIMCOE_CONFIG_HOME");
         std::env::set_current_dir(&cwd).expect("set cwd");
 
         let get = execute_tool("Config", &json!({"setting": "verbose"})).expect("get config");
@@ -4027,9 +4048,9 @@ mod tests {
             Some(value) => std::env::set_var("HOME", value),
             None => std::env::remove_var("HOME"),
         }
-        match original_claude_home {
-            Some(value) => std::env::set_var("CLAUDE_CONFIG_HOME", value),
-            None => std::env::remove_var("CLAUDE_CONFIG_HOME"),
+        match original_simcoe_home {
+            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
+            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
         }
         let _ = std::fs::remove_dir_all(root);
     }

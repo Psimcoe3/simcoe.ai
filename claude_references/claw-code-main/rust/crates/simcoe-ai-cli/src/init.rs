@@ -1,15 +1,15 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const STARTER_CLAUDE_JSON: &str = concat!(
+const STARTER_SIMCOE_JSON: &str = concat!(
     "{\n",
     "  \"permissions\": {\n",
     "    \"defaultMode\": \"dontAsk\"\n",
     "  }\n",
     "}\n",
 );
-const GITIGNORE_COMMENT: &str = "# Claw Code local artifacts";
-const GITIGNORE_ENTRIES: [&str; 2] = [".claude/settings.local.json", ".claude/sessions/"];
+const GITIGNORE_COMMENT: &str = "# Simcoe AI local artifacts";
+const GITIGNORE_ENTRIES: [&str; 2] = [".simcoe/settings.local.json", ".simcoe/sessions/"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InitStatus {
@@ -80,16 +80,16 @@ struct RepoDetection {
 pub(crate) fn initialize_repo(cwd: &Path) -> Result<InitReport, Box<dyn std::error::Error>> {
     let mut artifacts = Vec::new();
 
-    let claude_dir = cwd.join(".claude");
+    let simcoe_dir = cwd.join(".simcoe");
     artifacts.push(InitArtifact {
-        name: ".claude/",
-        status: ensure_dir(&claude_dir)?,
+        name: ".simcoe/",
+        status: ensure_dir(&simcoe_dir)?,
     });
 
-    let claude_json = cwd.join(".claude.json");
+    let simcoe_json = cwd.join(".simcoe.json");
     artifacts.push(InitArtifact {
-        name: ".claude.json",
-        status: write_file_if_missing(&claude_json, STARTER_CLAUDE_JSON)?,
+        name: ".simcoe.json",
+        status: write_file_if_missing(&simcoe_json, STARTER_SIMCOE_JSON)?,
     });
 
     let gitignore = cwd.join(".gitignore");
@@ -98,11 +98,11 @@ pub(crate) fn initialize_repo(cwd: &Path) -> Result<InitReport, Box<dyn std::err
         status: ensure_gitignore_entries(&gitignore)?,
     });
 
-    let claude_md = cwd.join("CLAUDE.md");
-    let content = render_init_claude_md(cwd);
+    let simcoe_md = cwd.join("SIMCOE.md");
+    let content = render_init_simcoe_md(cwd);
     artifacts.push(InitArtifact {
-        name: "CLAUDE.md",
-        status: write_file_if_missing(&claude_md, &content)?,
+        name: "SIMCOE.md",
+        status: write_file_if_missing(&simcoe_md, &content)?,
     });
 
     Ok(InitReport {
@@ -159,12 +159,13 @@ fn ensure_gitignore_entries(path: &Path) -> Result<InitStatus, std::io::Error> {
     Ok(InitStatus::Updated)
 }
 
-pub(crate) fn render_init_claude_md(cwd: &Path) -> String {
+pub(crate) fn render_init_simcoe_md(cwd: &Path) -> String {
     let detection = detect_repo(cwd);
     let mut lines = vec![
-        "# CLAUDE.md".to_string(),
+        "# SIMCOE.md".to_string(),
         String::new(),
-        "This file provides guidance to Claw Code (clawcode.dev) when working with code in this repository.".to_string(),
+        "This file provides guidance to Simcoe AI when working with code in this repository."
+            .to_string(),
         String::new(),
     ];
 
@@ -209,8 +210,8 @@ pub(crate) fn render_init_claude_md(cwd: &Path) -> String {
 
     lines.push("## Working agreement".to_string());
     lines.push("- Prefer small, reviewable changes and keep generated bootstrap files aligned with actual repo workflows.".to_string());
-    lines.push("- Keep shared defaults in `.claude.json`; reserve `.claude/settings.local.json` for machine-local overrides.".to_string());
-    lines.push("- Do not overwrite existing `CLAUDE.md` content automatically; update it intentionally when repo workflows change.".to_string());
+    lines.push("- Keep shared defaults in `.simcoe.json`; reserve `.simcoe/settings.local.json` for machine-local overrides.".to_string());
+    lines.push("- Do not overwrite existing `SIMCOE.md` content automatically; update it intentionally when repo workflows change.".to_string());
     lines.push(String::new());
 
     lines.join("\n")
@@ -333,7 +334,7 @@ fn framework_notes(detection: &RepoDetection) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{initialize_repo, render_init_claude_md};
+    use super::{initialize_repo, render_init_simcoe_md};
     use std::fs;
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -343,7 +344,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("time should be after epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("rusty-claude-init-{nanos}"))
+        std::env::temp_dir().join(format!("simcoe-init-{nanos}"))
     }
 
     #[test]
@@ -354,15 +355,15 @@ mod tests {
 
         let report = initialize_repo(&root).expect("init should succeed");
         let rendered = report.render();
-        assert!(rendered.contains(".claude/         created"));
-        assert!(rendered.contains(".claude.json     created"));
+        assert!(rendered.contains(".simcoe/         created"));
+        assert!(rendered.contains(".simcoe.json     created"));
         assert!(rendered.contains(".gitignore       created"));
-        assert!(rendered.contains("CLAUDE.md        created"));
-        assert!(root.join(".claude").is_dir());
-        assert!(root.join(".claude.json").is_file());
-        assert!(root.join("CLAUDE.md").is_file());
+        assert!(rendered.contains("SIMCOE.md        created"));
+        assert!(root.join(".simcoe").is_dir());
+        assert!(root.join(".simcoe.json").is_file());
+        assert!(root.join("SIMCOE.md").is_file());
         assert_eq!(
-            fs::read_to_string(root.join(".claude.json")).expect("read claude json"),
+            fs::read_to_string(root.join(".simcoe.json")).expect("read simcoe json"),
             concat!(
                 "{\n",
                 "  \"permissions\": {\n",
@@ -372,11 +373,11 @@ mod tests {
             )
         );
         let gitignore = fs::read_to_string(root.join(".gitignore")).expect("read gitignore");
-        assert!(gitignore.contains(".claude/settings.local.json"));
-        assert!(gitignore.contains(".claude/sessions/"));
-        let claude_md = fs::read_to_string(root.join("CLAUDE.md")).expect("read claude md");
-        assert!(claude_md.contains("Languages: Rust."));
-        assert!(claude_md.contains("cargo clippy --workspace --all-targets -- -D warnings"));
+        assert!(gitignore.contains(".simcoe/settings.local.json"));
+        assert!(gitignore.contains(".simcoe/sessions/"));
+        let simcoe_md = fs::read_to_string(root.join("SIMCOE.md")).expect("read simcoe md");
+        assert!(simcoe_md.contains("Languages: Rust."));
+        assert!(simcoe_md.contains("cargo clippy --workspace --all-targets -- -D warnings"));
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
@@ -385,27 +386,27 @@ mod tests {
     fn initialize_repo_is_idempotent_and_preserves_existing_files() {
         let root = temp_dir();
         fs::create_dir_all(&root).expect("create root");
-        fs::write(root.join("CLAUDE.md"), "custom guidance\n").expect("write existing claude md");
-        fs::write(root.join(".gitignore"), ".claude/settings.local.json\n")
+        fs::write(root.join("SIMCOE.md"), "custom guidance\n").expect("write existing simcoe md");
+        fs::write(root.join(".gitignore"), ".simcoe/settings.local.json\n")
             .expect("write gitignore");
 
         let first = initialize_repo(&root).expect("first init should succeed");
         assert!(first
             .render()
-            .contains("CLAUDE.md        skipped (already exists)"));
+            .contains("SIMCOE.md        skipped (already exists)"));
         let second = initialize_repo(&root).expect("second init should succeed");
         let second_rendered = second.render();
-        assert!(second_rendered.contains(".claude/         skipped (already exists)"));
-        assert!(second_rendered.contains(".claude.json     skipped (already exists)"));
+        assert!(second_rendered.contains(".simcoe/         skipped (already exists)"));
+        assert!(second_rendered.contains(".simcoe.json     skipped (already exists)"));
         assert!(second_rendered.contains(".gitignore       skipped (already exists)"));
-        assert!(second_rendered.contains("CLAUDE.md        skipped (already exists)"));
+        assert!(second_rendered.contains("SIMCOE.md        skipped (already exists)"));
         assert_eq!(
-            fs::read_to_string(root.join("CLAUDE.md")).expect("read existing claude md"),
+            fs::read_to_string(root.join("SIMCOE.md")).expect("read existing simcoe md"),
             "custom guidance\n"
         );
         let gitignore = fs::read_to_string(root.join(".gitignore")).expect("read gitignore");
-        assert_eq!(gitignore.matches(".claude/settings.local.json").count(), 1);
-        assert_eq!(gitignore.matches(".claude/sessions/").count(), 1);
+        assert_eq!(gitignore.matches(".simcoe/settings.local.json").count(), 1);
+        assert_eq!(gitignore.matches(".simcoe/sessions/").count(), 1);
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
@@ -422,7 +423,7 @@ mod tests {
         )
         .expect("write package json");
 
-        let rendered = render_init_claude_md(Path::new(&root));
+        let rendered = render_init_simcoe_md(Path::new(&root));
         assert!(rendered.contains("Languages: Python, TypeScript."));
         assert!(rendered.contains("Frameworks/tooling markers: Next.js, React."));
         assert!(rendered.contains("pyproject.toml"));

@@ -201,9 +201,18 @@ pub(crate) fn parse_args(args: &[String]) -> Result<CliAction, String> {
 
 pub(crate) fn resolve_model_alias(model: &str) -> &str {
     match model {
-        "opus" => "claude-opus-4-6",
-        "sonnet" => "claude-sonnet-4-6",
-        "haiku" => "claude-haiku-4-5-20251213",
+        "opus" | "simcoe-opus" => "claude-opus-4-6",
+        "sonnet" | "simcoe-sonnet" => "claude-sonnet-4-6",
+        "haiku" | "simcoe-haiku" => "claude-haiku-4-5-20251213",
+        _ => model,
+    }
+}
+
+pub(crate) fn brand_model_name(model: &str) -> &str {
+    match model {
+        "claude-opus-4-6" | "simcoe-opus-4-6" => "simcoe-opus",
+        "claude-sonnet-4-6" | "simcoe-sonnet-4-6" => "simcoe-sonnet",
+        "claude-haiku-4-5-20251213" | "simcoe-haiku-4-5-20251213" => "simcoe-haiku",
         _ => model,
     }
 }
@@ -227,7 +236,7 @@ pub(crate) fn permission_mode_from_label(mode: &str) -> PermissionMode {
 }
 
 pub(crate) fn default_permission_mode() -> PermissionMode {
-    env::var("RUSTY_CLAUDE_PERMISSION_MODE")
+    env::var("SIMCOE_PERMISSION_MODE")
         .ok()
         .as_deref()
         .and_then(normalize_permission_mode)

@@ -12,12 +12,16 @@ use crate::sse::SseParser;
 use crate::types::{MessageRequest, MessageResponse, StreamEvent};
 
 const DEFAULT_BASE_URL: &str = "https://api.anthropic.com";
-const ANTHROPIC_VERSION: &str = "2023-06-01";
+const API_VERSION_HEADER_VALUE: &str = "2023-06-01";
 const REQUEST_ID_HEADER: &str = "request-id";
 const ALT_REQUEST_ID_HEADER: &str = "x-request-id";
 const DEFAULT_INITIAL_BACKOFF: Duration = Duration::from_millis(200);
 const DEFAULT_MAX_BACKOFF: Duration = Duration::from_secs(2);
 const DEFAULT_MAX_RETRIES: u32 = 2;
+
+const SIMCOE_API_KEY_ENV_VAR: &str = "SIMCOE_AI_API_KEY";
+const SIMCOE_AUTH_TOKEN_ENV_VAR: &str = "SIMCOE_AI_AUTH_TOKEN";
+const SIMCOE_BASE_URL_ENV_VAR: &str = "SIMCOE_AI_BASE_URL";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuthSource {
@@ -32,8 +36,8 @@ pub enum AuthSource {
 
 impl AuthSource {
     pub fn from_env() -> Result<Self, ApiError> {
-        let api_key = read_env_non_empty("ANTHROPIC_API_KEY")?;
-        let auth_token = read_env_non_empty("ANTHROPIC_AUTH_TOKEN")?;
+        let api_key = read_api_key_env()?;
+        let auth_token = read_auth_token_env()?;
         match (api_key, auth_token) {
             (Some(api_key), Some(bearer_token)) => Ok(Self::ApiKeyAndBearer {
                 api_key,
@@ -101,7 +105,7 @@ impl From<OAuthTokenSet> for AuthSource {
 }
 
 #[derive(Debug, Clone)]
-pub struct AnthropicClient {
+pub struct SimcoeApiClient {
     http: reqwest::Client,
     auth: AuthSource,
     base_url: String,
@@ -110,7 +114,7 @@ pub struct AnthropicClient {
     max_backoff: Duration,
 }
 
-impl AnthropicClient {
+impl SimcoeApiClient {
     #[must_use]
     pub fn new(api_key: impl Into<String>) -> Self {
         Self {
@@ -314,7 +318,7 @@ impl AnthropicClient {
         let request_builder = self
             .http
             .post(&request_url)
-            .header("anthropic-version", ANTHROPIC_VERSION)
+            .header("anthropic-version", API_VERSION_HEADER_VALUE)
             .header("content-type", "application/json");
         let mut request_builder = self.auth.apply(request_builder);
 
@@ -338,8 +342,8 @@ impl AnthropicClient {
 
 impl AuthSource {
     pub fn from_env_or_saved() -> Result<Self, ApiError> {
-        if let Some(api_key) = read_env_non_empty("ANTHROPIC_API_KEY")? {
-            return match read_env_non_empty("ANTHROPIC_AUTH_TOKEN")? {
+        if let Some(api_key) = read_api_key_env()? {
+            return match read_auth_token_env()? {
                 Some(bearer_token) => Ok(Self::ApiKeyAndBearer {
                     api_key,
                     bearer_token,
@@ -347,7 +351,7 @@ impl AuthSource {
                 None => Ok(Self::ApiKey(api_key)),
             };
         }
-        if let Some(bearer_token) = read_env_non_empty("ANTHROPIC_AUTH_TOKEN")? {
+        if let Some(bearer_token) = read_auth_token_env()? {
             return Ok(Self::BearerToken(bearer_token));
         }
         match load_saved_oauth_token() {
@@ -386,8 +390,8 @@ pub fn resolve_startup_auth_source<F>(load_oauth_config: F) -> Result<AuthSource
 where
     F: FnOnce() -> Result<Option<OAuthConfig>, ApiError>,
 {
-    if let Some(api_key) = read_env_non_empty("ANTHROPIC_API_KEY")? {
-        return match read_env_non_empty("ANTHROPIC_AUTH_TOKEN")? {
+    if let Some(api_key) = read_api_key_env()? {
+        return match read_auth_token_env()? {
             Some(bearer_token) => Ok(AuthSource::ApiKeyAndBearer {
                 api_key,
                 bearer_token,
@@ -395,7 +399,7 @@ where
             None => Ok(AuthSource::ApiKey(api_key)),
         };
     }
-    if let Some(bearer_token) = read_env_non_empty("ANTHROPIC_AUTH_TOKEN")? {
+    if let Some(bearer_token) = read_auth_token_env()? {
         return Ok(AuthSource::BearerToken(bearer_token));
     }
 
@@ -429,7 +433,7 @@ fn resolve_saved_oauth_token_set(
     let Some(refresh_token) = token_set.refresh_token.clone() else {
         return Err(ApiError::ExpiredOAuthToken);
     };
-    let client = AnthropicClient::from_auth(AuthSource::None).with_base_url(read_base_url());
+    let client = SimcoeApiClient::from_auth(AuthSource::None).with_base_url(read_base_url());
     let refreshed = client_runtime_block_on(async {
         client
             .refresh_oauth_token(
@@ -491,6 +495,14 @@ fn read_env_non_empty(key: &str) -> Result<Option<String>, ApiError> {
     }
 }
 
+fn read_api_key_env() -> Result<Option<String>, ApiError> {
+    read_env_non_empty(SIMCOE_API_KEY_ENV_VAR)
+}
+
+fn read_auth_token_env() -> Result<Option<String>, ApiError> {
+    read_env_non_empty(SIMCOE_AUTH_TOKEN_ENV_VAR)
+}
+
 #[cfg(test)]
 fn read_api_key() -> Result<String, ApiError> {
     let auth = AuthSource::from_env_or_saved()?;
@@ -502,14 +514,15 @@ fn read_api_key() -> Result<String, ApiError> {
 
 #[cfg(test)]
 fn read_auth_token() -> Option<String> {
-    read_env_non_empty("ANTHROPIC_AUTH_TOKEN")
-        .ok()
-        .and_then(std::convert::identity)
+    read_auth_token_env().ok().and_then(std::convert::identity)
 }
 
 #[must_use]
 pub fn read_base_url() -> String {
-    std::env::var("ANTHROPIC_BASE_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
+    read_env_non_empty(SIMCOE_BASE_URL_ENV_VAR)
+        .ok()
+        .and_then(std::convert::identity)
+        .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
 }
 
 fn request_id_from_headers(headers: &reqwest::header::HeaderMap) -> Option<String> {
@@ -569,7 +582,7 @@ async fn expect_success(response: reqwest::Response) -> Result<reqwest::Response
     }
 
     let body = response.text().await.unwrap_or_else(|_| String::new());
-    let parsed_error = serde_json::from_str::<AnthropicErrorEnvelope>(&body).ok();
+    let parsed_error = serde_json::from_str::<SimcoeApiErrorEnvelope>(&body).ok();
     let retryable = is_retryable_status(status);
 
     Err(ApiError::Api {
@@ -590,12 +603,12 @@ const fn is_retryable_status(status: reqwest::StatusCode) -> bool {
 }
 
 #[derive(Debug, Deserialize)]
-struct AnthropicErrorEnvelope {
-    error: AnthropicErrorBody,
+struct SimcoeApiErrorEnvelope {
+    error: SimcoeApiErrorBody,
 }
 
 #[derive(Debug, Deserialize)]
-struct AnthropicErrorBody {
+struct SimcoeApiErrorBody {
     #[serde(rename = "type")]
     error_type: String,
     message: String,
@@ -614,7 +627,7 @@ mod tests {
 
     use crate::client::{
         now_unix_timestamp, oauth_token_is_expired, resolve_saved_oauth_token,
-        resolve_startup_auth_source, AnthropicClient, AuthSource, OAuthTokenSet,
+        resolve_startup_auth_source, AuthSource, OAuthTokenSet, SimcoeApiClient,
     };
     use crate::types::{ContentBlockDelta, MessageRequest};
 
@@ -669,9 +682,9 @@ mod tests {
     #[test]
     fn read_api_key_requires_presence() {
         let _guard = env_lock();
-        std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
-        std::env::remove_var("ANTHROPIC_API_KEY");
-        std::env::remove_var("CLAUDE_CONFIG_HOME");
+        std::env::remove_var("SIMCOE_AI_AUTH_TOKEN");
+        std::env::remove_var("SIMCOE_AI_API_KEY");
+        std::env::remove_var("SIMCOE_CONFIG_HOME");
         let error = super::read_api_key().expect_err("missing key should error");
         assert!(matches!(error, crate::error::ApiError::MissingApiKey));
     }
@@ -679,32 +692,32 @@ mod tests {
     #[test]
     fn read_api_key_requires_non_empty_value() {
         let _guard = env_lock();
-        std::env::set_var("ANTHROPIC_AUTH_TOKEN", "");
-        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::set_var("SIMCOE_AI_AUTH_TOKEN", "");
+        std::env::remove_var("SIMCOE_AI_API_KEY");
         let error = super::read_api_key().expect_err("empty key should error");
         assert!(matches!(error, crate::error::ApiError::MissingApiKey));
-        std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
+        std::env::remove_var("SIMCOE_AI_AUTH_TOKEN");
     }
 
     #[test]
     fn read_api_key_prefers_api_key_env() {
         let _guard = env_lock();
-        std::env::set_var("ANTHROPIC_AUTH_TOKEN", "auth-token");
-        std::env::set_var("ANTHROPIC_API_KEY", "legacy-key");
+        std::env::set_var("SIMCOE_AI_AUTH_TOKEN", "auth-token");
+        std::env::set_var("SIMCOE_AI_API_KEY", "legacy-key");
         assert_eq!(
             super::read_api_key().expect("api key should load"),
             "legacy-key"
         );
-        std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
-        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::remove_var("SIMCOE_AI_AUTH_TOKEN");
+        std::env::remove_var("SIMCOE_AI_API_KEY");
     }
 
     #[test]
     fn read_auth_token_reads_auth_token_env() {
         let _guard = env_lock();
-        std::env::set_var("ANTHROPIC_AUTH_TOKEN", "auth-token");
+        std::env::set_var("SIMCOE_AI_AUTH_TOKEN", "auth-token");
         assert_eq!(super::read_auth_token().as_deref(), Some("auth-token"));
-        std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
+        std::env::remove_var("SIMCOE_AI_AUTH_TOKEN");
     }
 
     #[test]
@@ -722,22 +735,22 @@ mod tests {
     #[test]
     fn auth_source_from_env_combines_api_key_and_bearer_token() {
         let _guard = env_lock();
-        std::env::set_var("ANTHROPIC_AUTH_TOKEN", "auth-token");
-        std::env::set_var("ANTHROPIC_API_KEY", "legacy-key");
+        std::env::set_var("SIMCOE_AI_AUTH_TOKEN", "auth-token");
+        std::env::set_var("SIMCOE_AI_API_KEY", "legacy-key");
         let auth = AuthSource::from_env().expect("env auth");
         assert_eq!(auth.api_key(), Some("legacy-key"));
         assert_eq!(auth.bearer_token(), Some("auth-token"));
-        std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
-        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::remove_var("SIMCOE_AI_AUTH_TOKEN");
+        std::env::remove_var("SIMCOE_AI_API_KEY");
     }
 
     #[test]
     fn auth_source_from_saved_oauth_when_env_absent() {
         let _guard = env_lock();
         let config_home = temp_config_home();
-        std::env::set_var("CLAUDE_CONFIG_HOME", &config_home);
-        std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
-        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+        std::env::remove_var("SIMCOE_AI_AUTH_TOKEN");
+        std::env::remove_var("SIMCOE_AI_API_KEY");
         save_oauth_credentials(&runtime::OAuthTokenSet {
             access_token: "saved-access-token".to_string(),
             refresh_token: Some("refresh".to_string()),
@@ -750,7 +763,7 @@ mod tests {
         assert_eq!(auth.bearer_token(), Some("saved-access-token"));
 
         clear_oauth_credentials().expect("clear credentials");
-        std::env::remove_var("CLAUDE_CONFIG_HOME");
+        std::env::remove_var("SIMCOE_CONFIG_HOME");
         std::fs::remove_dir_all(config_home).expect("cleanup temp dir");
     }
 
@@ -774,9 +787,9 @@ mod tests {
     fn resolve_saved_oauth_token_refreshes_expired_credentials() {
         let _guard = env_lock();
         let config_home = temp_config_home();
-        std::env::set_var("CLAUDE_CONFIG_HOME", &config_home);
-        std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
-        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+        std::env::remove_var("SIMCOE_AI_AUTH_TOKEN");
+        std::env::remove_var("SIMCOE_AI_API_KEY");
         save_oauth_credentials(&runtime::OAuthTokenSet {
             access_token: "expired-access-token".to_string(),
             refresh_token: Some("refresh-token".to_string()),
@@ -798,7 +811,7 @@ mod tests {
         assert_eq!(stored.access_token, "refreshed-token");
 
         clear_oauth_credentials().expect("clear credentials");
-        std::env::remove_var("CLAUDE_CONFIG_HOME");
+        std::env::remove_var("SIMCOE_CONFIG_HOME");
         std::fs::remove_dir_all(config_home).expect("cleanup temp dir");
     }
 
@@ -806,9 +819,9 @@ mod tests {
     fn resolve_startup_auth_source_uses_saved_oauth_without_loading_config() {
         let _guard = env_lock();
         let config_home = temp_config_home();
-        std::env::set_var("CLAUDE_CONFIG_HOME", &config_home);
-        std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
-        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+        std::env::remove_var("SIMCOE_AI_AUTH_TOKEN");
+        std::env::remove_var("SIMCOE_AI_API_KEY");
         save_oauth_credentials(&runtime::OAuthTokenSet {
             access_token: "saved-access-token".to_string(),
             refresh_token: Some("refresh".to_string()),
@@ -822,7 +835,7 @@ mod tests {
         assert_eq!(auth.bearer_token(), Some("saved-access-token"));
 
         clear_oauth_credentials().expect("clear credentials");
-        std::env::remove_var("CLAUDE_CONFIG_HOME");
+        std::env::remove_var("SIMCOE_CONFIG_HOME");
         std::fs::remove_dir_all(config_home).expect("cleanup temp dir");
     }
 
@@ -830,9 +843,9 @@ mod tests {
     fn resolve_startup_auth_source_errors_when_refreshable_token_lacks_config() {
         let _guard = env_lock();
         let config_home = temp_config_home();
-        std::env::set_var("CLAUDE_CONFIG_HOME", &config_home);
-        std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
-        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+        std::env::remove_var("SIMCOE_AI_AUTH_TOKEN");
+        std::env::remove_var("SIMCOE_AI_API_KEY");
         save_oauth_credentials(&runtime::OAuthTokenSet {
             access_token: "expired-access-token".to_string(),
             refresh_token: Some("refresh-token".to_string()),
@@ -854,7 +867,7 @@ mod tests {
         assert_eq!(stored.refresh_token.as_deref(), Some("refresh-token"));
 
         clear_oauth_credentials().expect("clear credentials");
-        std::env::remove_var("CLAUDE_CONFIG_HOME");
+        std::env::remove_var("SIMCOE_CONFIG_HOME");
         std::fs::remove_dir_all(config_home).expect("cleanup temp dir");
     }
 
@@ -862,9 +875,9 @@ mod tests {
     fn resolve_saved_oauth_token_preserves_refresh_token_when_refresh_response_omits_it() {
         let _guard = env_lock();
         let config_home = temp_config_home();
-        std::env::set_var("CLAUDE_CONFIG_HOME", &config_home);
-        std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
-        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+        std::env::remove_var("SIMCOE_AI_AUTH_TOKEN");
+        std::env::remove_var("SIMCOE_AI_API_KEY");
         save_oauth_credentials(&runtime::OAuthTokenSet {
             access_token: "expired-access-token".to_string(),
             refresh_token: Some("refresh-token".to_string()),
@@ -887,14 +900,14 @@ mod tests {
         assert_eq!(stored.refresh_token.as_deref(), Some("refresh-token"));
 
         clear_oauth_credentials().expect("clear credentials");
-        std::env::remove_var("CLAUDE_CONFIG_HOME");
+        std::env::remove_var("SIMCOE_CONFIG_HOME");
         std::fs::remove_dir_all(config_home).expect("cleanup temp dir");
     }
 
     #[test]
     fn message_request_stream_helper_sets_stream_true() {
         let request = MessageRequest {
-            model: "claude-opus-4-6".to_string(),
+            model: "simcoe-opus-4-6".to_string(),
             max_tokens: 64,
             messages: vec![],
             system: None,
@@ -908,7 +921,7 @@ mod tests {
 
     #[test]
     fn backoff_doubles_until_maximum() {
-        let client = AnthropicClient::new("test-key").with_retry_policy(
+        let client = SimcoeApiClient::new("test-key").with_retry_policy(
             3,
             Duration::from_millis(10),
             Duration::from_millis(25),

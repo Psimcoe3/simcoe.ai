@@ -820,6 +820,7 @@ mod tests {
     };
     use crate::mcp::mcp_tool_name;
     use crate::mcp_client::McpClientBootstrap;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::{
         spawn_mcp_stdio_process, JsonRpcId, JsonRpcRequest, JsonRpcResponse,
@@ -829,11 +830,16 @@ mod tests {
     };
 
     fn temp_dir() -> PathBuf {
+        static NEXT_ID: AtomicU64 = AtomicU64::new(0);
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time should be after epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("runtime-mcp-stdio-{nanos}"))
+        let sequence = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "runtime-mcp-stdio-{}-{nanos}-{sequence}",
+            std::process::id()
+        ))
     }
 
     fn write_echo_script() -> PathBuf {

@@ -1,6 +1,7 @@
-# 🦞 Claw Code — Rust Implementation
+  ├── simcoe-ai-cli/      # Main CLI binary (`claw`)
+# Simcoe AI — Rust Implementation
 
-A high-performance Rust rewrite of the Claw Code CLI agent harness. Built for speed, safety, and native tool execution.
+A high-performance Rust implementation of the Simcoe AI CLI harness. Built for speed, safety, and native tool execution.
 
 ## Quick Start
 
@@ -16,7 +17,7 @@ cargo build --release
 ./target/release/claw prompt "explain this codebase"
 
 # With specific model
-./target/release/claw --model sonnet prompt "fix the bug in main.rs"
+./target/release/claw --model simcoe-sonnet prompt "fix the bug in main.rs"
 ```
 
 ## Configuration
@@ -24,9 +25,9 @@ cargo build --release
 Set your API credentials:
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-# Or use a proxy
-export ANTHROPIC_BASE_URL="https://your-proxy.com"
+export SIMCOE_AI_API_KEY="your-key"
+# Or use a proxy / alternate upstream
+export SIMCOE_AI_BASE_URL="https://your-proxy.com"
 ```
 
 Or authenticate via OAuth:
@@ -39,7 +40,7 @@ claw login
 
 | Feature | Status |
 |---------|--------|
-| Anthropic API + streaming | ✅ |
+| Simcoe AI API + streaming | ✅ |
 | OAuth login/logout | ✅ |
 | Interactive REPL (rustyline) | ✅ |
 | Tool system (bash, read, write, edit, grep, glob) | ✅ |
@@ -47,8 +48,8 @@ claw login
 | Sub-agent orchestration | ✅ |
 | Todo tracking | ✅ |
 | Notebook editing | ✅ |
-| CLAUDE.md / project memory | ✅ |
-| Config file hierarchy (.claude.json) | ✅ |
+| SIMCOE.md / project memory | ✅ |
+| Config file hierarchy (.simcoe.json) | ✅ |
 | Permission system | ✅ |
 | MCP server lifecycle | ✅ |
 | Session persistence + resume | ✅ |
@@ -68,9 +69,9 @@ Short names resolve to the latest model versions:
 
 | Alias | Resolves To |
 |-------|------------|
-| `opus` | `claude-opus-4-6` |
-| `sonnet` | `claude-sonnet-4-6` |
-| `haiku` | `claude-haiku-4-5-20251213` |
+| `simcoe-opus` | upstream Opus profile |
+| `simcoe-sonnet` | upstream Sonnet profile |
+| `simcoe-haiku` | upstream Haiku profile |
 
 ## CLI Flags
 
@@ -106,7 +107,7 @@ Commands:
 | `/model [name]` | Show or switch model |
 | `/permissions` | Show or switch permission mode |
 | `/config [section]` | Show config (env, hooks, model) |
-| `/memory` | Show CLAUDE.md contents |
+| `/memory` | Show SIMCOE.md contents |
 | `/diff` | Show git diff |
 | `/export [path]` | Export conversation |
 | `/session [id]` | Resume a previous session |
@@ -119,11 +120,11 @@ rust/
 ├── Cargo.toml              # Workspace root
 ├── Cargo.lock
 └── crates/
-    ├── api/                # Anthropic API client + SSE streaming
+    ├── api/                # Simcoe API client + SSE streaming
     ├── commands/           # Shared slash-command registry
     ├── compat-harness/     # TS manifest extraction harness
     ├── runtime/            # Session, config, permissions, MCP, prompts
-    ├── rusty-claude-cli/   # Main CLI binary (`claw`)
+    ├── simcoe-ai-cli/      # Main CLI binary (`claw`)
     └── tools/              # Built-in tool implementations
 ```
 
@@ -133,7 +134,7 @@ rust/
 - **commands** — Slash command definitions and help text generation
 - **compat-harness** — Extracts tool/prompt manifests from upstream TS source
 - **runtime** — `ConversationRuntime` agentic loop, `ConfigLoader` hierarchy, `Session` persistence, permission policy, MCP client, system prompt assembly, usage tracking
-- **rusty-claude-cli** — REPL, one-shot prompt, streaming display, tool call rendering, CLI argument parsing
+- **simcoe-ai-cli** — REPL, one-shot prompt, streaming display, tool call rendering, CLI argument parsing
 - **tools** — Tool specs + execution: Bash, ReadFile, WriteFile, EditFile, GlobSearch, GrepSearch, WebSearch, WebFetch, Agent, TodoWrite, NotebookEdit, Skill, ToolSearch, REPL runtimes
 
 ## Stats
@@ -141,7 +142,7 @@ rust/
 - **~20K lines** of Rust
 - **6 crates** in workspace
 - **Binary name:** `claw`
-- **Default model:** `claude-opus-4-6`
+- **Default model:** `simcoe-opus`
 - **Default permissions:** `danger-full-access`
 
 ## License

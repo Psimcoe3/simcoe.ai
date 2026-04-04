@@ -2,6 +2,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::args::brand_model_name;
 use commands::render_slash_command_help;
 use runtime::{ConfigLoader, ConfigSource, ContentBlock, ProjectContext, Session, TokenUsage};
 
@@ -34,7 +35,10 @@ pub(crate) fn format_model_report(model: &str, message_count: usize, turns: u32)
 
 Usage
   Inspect current model with /model
-  Switch models with /model <name>"
+    Switch models with /model <name>",
+        model = brand_model_name(model),
+        message_count = message_count,
+        turns = turns,
     )
 }
 
@@ -47,7 +51,10 @@ pub(crate) fn format_model_switch_report(
         "Model updated
   Previous         {previous}
   Current          {next}
-  Preserved msgs   {message_count}"
+  Preserved msgs   {message_count}",
+        previous = brand_model_name(previous),
+        next = brand_model_name(next),
+        message_count = message_count,
     )
 }
 
@@ -203,7 +210,10 @@ pub(crate) fn format_status_report(
   Messages         {}
   Turns            {}
   Estimated tokens {}",
-            usage.message_count, usage.turns, usage.estimated_tokens,
+            usage.message_count,
+            usage.turns,
+            usage.estimated_tokens,
+            model = brand_model_name(model),
         ),
         format!(
             "Usage
@@ -324,7 +334,7 @@ pub(crate) fn render_memory_report() -> Result<String, Box<dyn std::error::Error
     if project_context.instruction_files.is_empty() {
         lines.push("Discovered files".to_string());
         lines.push(
-            "  No CLAUDE instruction files discovered in the current directory ancestry."
+            "  No SIMCOE instruction files discovered in the current directory ancestry."
                 .to_string(),
         );
     } else {

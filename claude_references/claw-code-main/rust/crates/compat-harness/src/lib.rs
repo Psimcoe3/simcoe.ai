@@ -65,7 +65,7 @@ fn resolve_upstream_repo_root(primary_repo_root: &Path) -> PathBuf {
 fn upstream_repo_candidates(primary_repo_root: &Path) -> Vec<PathBuf> {
     let mut candidates = vec![primary_repo_root.to_path_buf()];
 
-    if let Some(explicit) = std::env::var_os("CLAUDE_CODE_UPSTREAM") {
+    if let Some(explicit) = std::env::var_os("SIMCOE_AI_UPSTREAM") {
         candidates.push(PathBuf::from(explicit));
     }
 
@@ -192,7 +192,7 @@ pub fn extract_bootstrap_plan(source: &str) -> BootstrapPlan {
     if source.contains("--dump-system-prompt") {
         phases.push(BootstrapPhase::SystemPromptFastPath);
     }
-    if source.contains("--claude-in-chrome-mcp") {
+    if source.contains("in-chrome-mcp") {
         phases.push(BootstrapPhase::ChromeMcpFastPath);
     }
     if source.contains("--daemon-worker") {
