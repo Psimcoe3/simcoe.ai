@@ -94,6 +94,12 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         resume_supported: true,
     },
     SlashCommandSpec {
+        name: "hooks",
+        summary: "Inspect configured pre/post tool hooks",
+        argument_hint: Some("[pre|post]"),
+        resume_supported: true,
+    },
+    SlashCommandSpec {
         name: "mcp",
         summary: "Inspect configured MCP servers or one server",
         argument_hint: Some("[server]"),
@@ -241,6 +247,9 @@ pub enum SlashCommand {
     Config {
         section: Option<String>,
     },
+    Hooks {
+        event: Option<String>,
+    },
     Mcp {
         server: Option<String>,
     },
@@ -313,6 +322,9 @@ impl SlashCommand {
             },
             "config" => Self::Config {
                 section: parts.next().map(ToOwned::to_owned),
+            },
+            "hooks" => Self::Hooks {
+                event: remainder_after_command(trimmed, command),
             },
             "mcp" => Self::Mcp {
                 server: remainder_after_command(trimmed, command),
@@ -427,6 +439,7 @@ pub fn handle_slash_command(
         | SlashCommand::Cost
         | SlashCommand::Resume { .. }
         | SlashCommand::Config { .. }
+        | SlashCommand::Hooks { .. }
         | SlashCommand::Mcp { .. }
         | SlashCommand::Memory
         | SlashCommand::Skills { .. }
@@ -540,6 +553,12 @@ mod tests {
             })
         );
         assert_eq!(
+            SlashCommand::parse("/hooks pre"),
+            Some(SlashCommand::Hooks {
+                event: Some("pre".to_string())
+            })
+        );
+        assert_eq!(
             SlashCommand::parse("/mcp remote-server"),
             Some(SlashCommand::Mcp {
                 server: Some("remote-server".to_string())
@@ -594,6 +613,7 @@ mod tests {
         assert!(help.contains("/cost"));
         assert!(help.contains("/resume <session-path>"));
         assert!(help.contains("/config [env|hooks|model]"));
+        assert!(help.contains("/hooks [pre|post]"));
         assert!(help.contains("/mcp [server]"));
         assert!(help.contains("/memory"));
         assert!(help.contains("/skills [skill]"));
@@ -604,8 +624,8 @@ mod tests {
         assert!(help.contains("/plan [task]"));
         assert!(help.contains("/export [file]"));
         assert!(help.contains("/session [list|switch <session-id>]"));
-        assert_eq!(slash_command_specs().len(), 26);
-        assert_eq!(resume_supported_slash_commands().len(), 13);
+        assert_eq!(slash_command_specs().len(), 27);
+        assert_eq!(resume_supported_slash_commands().len(), 14);
     }
 
     #[test]
@@ -695,6 +715,7 @@ mod tests {
         assert!(
             handle_slash_command("/config env", &session, CompactionConfig::default()).is_none()
         );
+        assert!(handle_slash_command("/hooks", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/mcp", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/skills", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/diff", &session, CompactionConfig::default()).is_none());

@@ -326,6 +326,62 @@ pub(crate) fn render_config_report(
     Ok(lines.join("\n"))
 }
 
+pub(crate) fn render_hooks_report(
+    event: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let cwd = env::current_dir()?;
+    let runtime_config = ConfigLoader::default_for(&cwd).load()?;
+    let hooks = runtime_config.hooks();
+    let requested = event.map(str::trim).filter(|value| !value.is_empty());
+
+    if let Some(requested) = requested {
+        let selection = parse_hook_selection(requested).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("unsupported hooks selector '{requested}'. Use pre or post."),
+            )
+        })?;
+        let (label, commands) = match selection {
+            HookSelection::Pre => ("PreToolUse", hooks.pre_tool_use()),
+            HookSelection::Post => ("PostToolUse", hooks.post_tool_use()),
+        };
+        return Ok(format!(
+            "Hooks\n  Event             {label}\n  Configured        {}\n  Usage             /hooks\n  Runtime           exit 2 denies, other non-zero exits warn\n\nCommands\n{}",
+            commands.len(),
+            render_hook_command_entries(commands),
+        ));
+    }
+
+    let pre = hooks.pre_tool_use();
+    let post = hooks.post_tool_use();
+
+    if pre.is_empty() && post.is_empty() {
+        return Ok(String::from(
+            "Hooks\n  Pre-tool hooks    0\n  Post-tool hooks   0\n  Usage             /hooks [pre|post]\n  Runtime           exit 2 denies, other non-zero exits warn\n  Detail            no hooks configured",
+        ));
+    }
+
+    let mut lines = vec![format!(
+        "Hooks\n  Pre-tool hooks    {}\n  Post-tool hooks   {}\n  Usage             /hooks [pre|post]\n  Runtime           exit 2 denies, other non-zero exits warn",
+        pre.len(),
+        post.len(),
+    )];
+
+    if !pre.is_empty() {
+        lines.push(String::new());
+        lines.push(String::from("PreToolUse"));
+        lines.push(render_hook_command_entries(pre));
+    }
+
+    if !post.is_empty() {
+        lines.push(String::new());
+        lines.push(String::from("PostToolUse"));
+        lines.push(render_hook_command_entries(post));
+    }
+
+    Ok(lines.join("\n"))
+}
+
 pub(crate) fn render_memory_report() -> Result<String, Box<dyn std::error::Error>> {
     let cwd = env::current_dir()?;
     let project_context = ProjectContext::discover(&cwd, crate::DEFAULT_DATE)?;
@@ -614,6 +670,33 @@ fn config_source_label(source: ConfigSource) -> &'static str {
         ConfigSource::Project => "project",
         ConfigSource::Local => "local",
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HookSelection {
+    Pre,
+    Post,
+}
+
+fn parse_hook_selection(value: &str) -> Option<HookSelection> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "pre" | "pretooluse" | "pre-tool-use" => Some(HookSelection::Pre),
+        "post" | "posttooluse" | "post-tool-use" => Some(HookSelection::Post),
+        _ => None,
+    }
+}
+
+fn render_hook_command_entries(commands: &[String]) -> String {
+    if commands.is_empty() {
+        return String::from("  No commands configured for this event.");
+    }
+
+    commands
+        .iter()
+        .enumerate()
+        .map(|(index, command)| format!("  {}. {}", index + 1, command))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn transport_label(transport: &McpClientTransport) -> &'static str {

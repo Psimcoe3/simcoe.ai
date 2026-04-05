@@ -18,7 +18,7 @@ It is **not feature-parity** with the TypeScript CLI.
 
 Largest gaps:
 - **plugins** are effectively absent in Rust
-- **hooks** are parsed but not executed in Rust
+- **hook support** is narrower than TS
 - **CLI breadth** is much narrower in Rust
 - **skills** are local-file only in Rust, without the TS registry/bundled pipeline
 - **assistant orchestration** lacks TS hook-aware orchestration and remote/structured transports
@@ -59,15 +59,16 @@ Evidence:
 ### Rust exists
 Evidence:
 - Hook config is parsed and merged in `rust/crates/runtime/src/config.rs`.
-- Hook config can be inspected via Rust config reporting in `rust/crates/commands/src/lib.rs` and `rust/crates/rusty-claude-cli/src/main.rs`.
+- Hook execution lives in `rust/crates/runtime/src/hooks.rs` and is wired into `rust/crates/runtime/src/conversation.rs` for `PreToolUse` and `PostToolUse` handling.
+- Hook config can be inspected via Rust config reporting in `rust/crates/commands/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs`.
+- Rust now exposes `/hooks [pre|post]` in the CLI to inspect configured hook commands.
 - Prompt guidance mentions hooks in `rust/crates/runtime/src/prompt.rs`.
 
 ### Missing or broken in Rust
-- No actual hook execution pipeline in `rust/crates/runtime/src/conversation.rs`.
-- No PreToolUse/PostToolUse mutation/deny/rewrite/result-hook behavior.
-- No Rust `/hooks` parity command.
+- No TS-style hook mutation/rewrite pipeline or broader hook event families beyond pre/post tool use.
+- No dedicated hook management workflow beyond config-backed inspection.
 
-**Status:** config-only; runtime behavior missing.
+**Status:** pre/post shell hooks execute and can deny or warn, and the CLI can now inspect them, but parity remains narrower than TS.
 
 ---
 
@@ -130,12 +131,13 @@ Evidence:
 ### Rust exists
 Evidence:
 - Shared slash command registry in `rust/crates/commands/src/lib.rs`.
-- Rust slash commands currently cover `help`, `status`, `compact`, `model`, `permissions`, `clear`, `cost`, `resume`, `config`, `mcp`, `memory`, `skills`, `init`, `diff`, `version`, `bughunter`, `review`, `plan`, `commit`, `pr`, `issue`, `ultraplan`, `teleport`, `debug-tool-call`, `export`, `session`.
+- Rust slash commands currently cover `help`, `status`, `compact`, `model`, `permissions`, `clear`, `cost`, `resume`, `config`, `hooks`, `mcp`, `memory`, `skills`, `init`, `diff`, `version`, `bughunter`, `review`, `plan`, `commit`, `pr`, `issue`, `ultraplan`, `teleport`, `debug-tool-call`, `export`, `session`.
+- Rust now exposes `/hooks [pre|post]` via `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect configured pre/post hook commands.
 - Rust now exposes `/mcp [server]` via `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect configured MCP servers and their derived bootstrap transport details.
 - Main CLI/repl/prompt handling lives in `rust/crates/simcoe-ai-cli/src/main.rs`.
 
 ### Missing or broken in Rust
-- Missing major TS command families: `/agents`, `/hooks`, `/plugin`, `/tasks`, and many others.
+- Missing major TS command families: `/agents`, `/plugin`, `/tasks`, and many others.
 - No Rust equivalent to TS structured IO / remote transport layers.
 - No TS-style handler decomposition for auth/plugins/MCP/agents.
 
@@ -158,7 +160,7 @@ Evidence:
 - Session persistence in `rust/crates/runtime/src/session.rs`.
 
 ### Missing or broken in Rust
-- No TS-style hook-aware orchestration layer.
+- Hook-aware orchestration exists for pre/post shell hooks, but remains narrower than TS.
 - No TS structured/remote assistant transport stack.
 - No richer TS assistant/session-history/background-task integration.
 

@@ -28,8 +28,8 @@ use commands::{
 use compat_harness::{extract_manifest, UpstreamPaths};
 use format::{
     format_compact_report, format_cost_report, format_status_report, render_config_report,
-    render_diff_report, render_mcp_report, render_memory_report, render_repl_help,
-    render_skills_report, render_version_report, status_context, StatusUsage,
+    render_diff_report, render_hooks_report, render_mcp_report, render_memory_report,
+    render_repl_help, render_skills_report, render_version_report, status_context, StatusUsage,
 };
 use init::initialize_repo;
 use render::{MarkdownStreamState, TerminalRenderer};
@@ -526,6 +526,10 @@ fn run_resume_command(
         SlashCommand::Config { section } => Ok(ResumeCommandOutcome {
             session: session.clone(),
             message: Some(render_config_report(section.as_deref())?),
+        }),
+        SlashCommand::Hooks { event } => Ok(ResumeCommandOutcome {
+            session: session.clone(),
+            message: Some(render_hooks_report(event.as_deref())?),
         }),
         SlashCommand::Mcp { server } => Ok(ResumeCommandOutcome {
             session: session.clone(),
@@ -1689,8 +1693,9 @@ mod tests {
     use super::format::{
         format_compact_report, format_cost_report, format_model_report, format_model_switch_report,
         format_permissions_report, format_permissions_switch_report, format_resume_report,
-        format_status_report, render_config_report, render_mcp_report, render_memory_report,
-        render_repl_help, render_skills_report, status_context, StatusContext, StatusUsage,
+        format_status_report, render_config_report, render_hooks_report, render_mcp_report,
+        render_memory_report, render_repl_help, render_skills_report, status_context,
+        StatusContext, StatusUsage,
     };
     use super::{
         filter_tool_specs, format_tool_call_start, format_tool_result, oauth_config_for_login,
@@ -1966,6 +1971,7 @@ mod tests {
         assert!(help.contains("/cost"));
         assert!(help.contains("/resume <session-path>"));
         assert!(help.contains("/config [env|hooks|model]"));
+        assert!(help.contains("/hooks [pre|post]"));
         assert!(help.contains("/mcp [server]"));
         assert!(help.contains("/memory"));
         assert!(help.contains("/skills [skill]"));
@@ -1988,10 +1994,97 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "help", "status", "compact", "clear", "cost", "config", "mcp", "memory", "skills",
-                "init", "diff", "version", "export",
+                "help", "status", "compact", "clear", "cost", "config", "hooks", "mcp", "memory",
+                "skills", "init", "diff", "version", "export",
             ]
         );
+    }
+
+    #[test]
+    fn hooks_report_lists_configured_commands() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("hooks-report");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+        fs::write(
+            config_home.join("settings.json"),
+            r#"{
+              "hooks": {
+                "PreToolUse": ["python scripts/pre_hook.py"],
+                "PostToolUse": ["python scripts/post_hook.py", "./notify.sh"]
+              }
+            }"#,
+        )
+        .expect("write settings");
+
+        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
+        let original_cwd = set_test_cwd(&nested_cwd);
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+
+        let report = render_hooks_report(None).expect("hooks report should render");
+        assert!(report.contains("Hooks"));
+        assert!(report.contains("Pre-tool hooks    1"));
+        assert!(report.contains("Post-tool hooks   2"));
+        assert!(report.contains("PreToolUse"));
+        assert!(report.contains("PostToolUse"));
+        assert!(report.contains("python scripts/pre_hook.py"));
+        assert!(report.contains("./notify.sh"));
+
+        match original_config_home {
+            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
+            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn hooks_report_renders_selected_event() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("hooks-selected");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+        fs::write(
+            config_home.join("settings.json"),
+            r#"{
+              "hooks": {
+                "PreToolUse": ["python scripts/pre_hook.py"]
+              }
+            }"#,
+        )
+        .expect("write settings");
+
+        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
+        let original_cwd = set_test_cwd(&nested_cwd);
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+
+        let report = render_hooks_report(Some("pre")).expect("selected hooks report should render");
+        assert!(report.contains("Hooks"));
+        assert!(report.contains("Event             PreToolUse"));
+        assert!(report.contains("Configured        1"));
+        assert!(report.contains("python scripts/pre_hook.py"));
+        assert!(report.contains("exit 2 denies, other non-zero exits warn"));
+
+        match original_config_home {
+            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
+            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
     }
 
     fn env_lock() -> &'static Mutex<()> {
@@ -2516,6 +2609,12 @@ mod tests {
             SlashCommand::parse("/config env"),
             Some(SlashCommand::Config {
                 section: Some("env".to_string())
+            })
+        );
+        assert_eq!(
+            SlashCommand::parse("/hooks pre"),
+            Some(SlashCommand::Hooks {
+                event: Some("pre".to_string())
             })
         );
         assert_eq!(

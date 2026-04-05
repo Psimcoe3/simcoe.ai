@@ -14,9 +14,9 @@ use crate::format::{
     format_auto_compaction_notice, format_compact_report, format_cost_report, format_model_report,
     format_model_switch_report, format_permissions_report, format_permissions_switch_report,
     format_resume_report, format_status_report, render_config_report, render_diff_report,
-    render_last_tool_debug_report, render_mcp_report, render_memory_report, render_repl_help,
-    render_skills_report, render_teleport_report, render_version_report, status_context,
-    StatusUsage,
+    render_hooks_report, render_last_tool_debug_report, render_mcp_report, render_memory_report,
+    render_repl_help, render_skills_report, render_teleport_report, render_version_report,
+    status_context, StatusUsage,
 };
 use crate::render::{Spinner, TerminalRenderer};
 use crate::session_manager::{
@@ -258,6 +258,10 @@ impl LiveCli {
                 Self::print_config(section.as_deref())?;
                 false
             }
+            commands::SlashCommand::Hooks { event } => {
+                Self::print_hooks(event.as_deref())?;
+                false
+            }
             commands::SlashCommand::Mcp { server } => {
                 Self::print_mcp(server.as_deref())?;
                 false
@@ -493,6 +497,11 @@ impl LiveCli {
 
     fn print_config(section: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", render_config_report(section)?);
+        Ok(())
+    }
+
+    fn print_hooks(event: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        println!("{}", render_hooks_report(event)?);
         Ok(())
     }
 
