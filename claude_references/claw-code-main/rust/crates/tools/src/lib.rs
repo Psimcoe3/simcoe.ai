@@ -17,6 +17,7 @@ use runtime::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use serde_yaml::{Mapping as YamlMapping, Value as YamlValue};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolManifestEntry {
@@ -69,6 +70,15 @@ pub struct LoadedSkill {
     pub args: Option<String>,
     pub description: Option<String>,
     pub prompt: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RepoSkillRecord {
+    name: String,
+    path: PathBuf,
+    description: Option<String>,
+    aliases: Vec<String>,
+    prompt: String,
 }
 
 #[must_use]
@@ -1281,6 +1291,22 @@ fn execute_todo_write(input: TodoWriteInput) -> Result<TodoWriteOutput, String> 
 pub fn list_skills() -> Vec<SkillSummary> {
     let mut skills = BTreeMap::<String, SkillSummary>::new();
 
+    for skill in list_repo_skill_records() {
+        let key = skill.name.to_ascii_lowercase();
+        if skills.contains_key(&key) {
+            continue;
+        }
+
+        skills.insert(
+            key,
+            SkillSummary {
+                name: skill.name,
+                path: skill.path.display().to_string(),
+                description: skill.description,
+            },
+        );
+    }
+
     for root in skill_roots() {
         let Ok(entries) = std::fs::read_dir(&root) else {
             continue;
@@ -1317,6 +1343,16 @@ pub fn list_skills() -> Vec<SkillSummary> {
 }
 
 pub fn load_skill(skill: &str, args: Option<String>) -> Result<LoadedSkill, String> {
+    if let Some(skill) = find_repo_skill(skill) {
+        return Ok(LoadedSkill {
+            skill: skill.name,
+            path: skill.path.display().to_string(),
+            args,
+            description: skill.description,
+            prompt: skill.prompt,
+        });
+    }
+
     let skill_path = resolve_skill_path(skill)?;
     let prompt = std::fs::read_to_string(&skill_path).map_err(|error| error.to_string())?;
     let description = parse_skill_description(&prompt);
@@ -1364,6 +1400,200 @@ fn todo_store_path() -> Result<std::path::PathBuf, String> {
     Ok(cwd.join(".clawd-todos.json"))
 }
 
+fn list_repo_skill_records() -> Vec<RepoSkillRecord> {
+    let mut skills = BTreeMap::<String, RepoSkillRecord>::new();
+
+    for root in repo_skill_roots() {
+        let mut files = Vec::new();
+        collect_markdown_files(&root, &mut files);
+        files.sort();
+
+        for path in files {
+            let Ok(skill) = parse_repo_skill_file(&path) else {
+                continue;
+            };
+
+            let key = skill.name.to_ascii_lowercase();
+            skills.entry(key).or_insert(skill);
+        }
+    }
+
+    skills.into_values().collect()
+}
+
+fn find_repo_skill(skill: &str) -> Option<RepoSkillRecord> {
+    let requested = requested_skill_name(skill).ok()?;
+    let normalized = normalize_skill_lookup_token(&requested);
+
+    list_repo_skill_records().into_iter().find(|entry| {
+        normalize_skill_lookup_token(&entry.name) == normalized
+            || entry
+                .aliases
+                .iter()
+                .any(|alias| normalize_skill_lookup_token(alias) == normalized)
+    })
+}
+
+fn repo_skill_roots() -> Vec<PathBuf> {
+    let Ok(cwd) = std::env::current_dir() else {
+        return Vec::new();
+    };
+
+    let mut roots = Vec::new();
+    for ancestor in cwd.ancestors() {
+        let candidate = ancestor.join("skills");
+        if candidate.is_dir() && !roots.iter().any(|root| root == &candidate) {
+            roots.push(candidate);
+        }
+    }
+
+    roots
+}
+
+fn collect_markdown_files(root: &Path, files: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
+
+    let mut children = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .collect::<Vec<_>>();
+    children.sort();
+
+    for child in children {
+        let name = child
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("");
+        if name.starts_with('.') {
+            continue;
+        }
+
+        if child.is_dir() {
+            collect_markdown_files(&child, files);
+            continue;
+        }
+
+        if child
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case("md"))
+        {
+            files.push(child);
+        }
+    }
+}
+
+fn parse_repo_skill_file(path: &Path) -> Result<RepoSkillRecord, String> {
+    let contents = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let Some((frontmatter, prompt)) = split_yaml_frontmatter(&contents) else {
+        return Err(format!(
+            "repo skill file must use YAML frontmatter: {}",
+            path.display()
+        ));
+    };
+
+    let yaml = serde_yaml::from_str::<YamlValue>(&frontmatter).map_err(|error| {
+        format!(
+            "could not parse repo skill frontmatter '{}': {error}",
+            path.display()
+        )
+    })?;
+    let mapping = yaml.as_mapping().ok_or_else(|| {
+        format!(
+            "repo skill frontmatter must be a mapping: {}",
+            path.display()
+        )
+    })?;
+
+    let name = yaml_required_string(mapping, "id", path)?;
+    let aliases = yaml_string_list(mapping, "aliases");
+    let description = yaml_optional_string(mapping, "summary");
+
+    Ok(RepoSkillRecord {
+        name: name.to_ascii_lowercase(),
+        path: path.to_path_buf(),
+        description,
+        aliases,
+        prompt,
+    })
+}
+
+fn split_yaml_frontmatter(contents: &str) -> Option<(String, String)> {
+    let lines = contents.lines().collect::<Vec<_>>();
+    if lines.first().is_none_or(|line| line.trim() != "---") {
+        return None;
+    }
+
+    let closing_index = lines
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find_map(|(index, line)| (line.trim() == "---").then_some(index))?;
+
+    let prompt = lines[closing_index + 1..].join("\n").trim().to_string();
+    if prompt.is_empty() {
+        return None;
+    }
+
+    Some((lines[1..closing_index].join("\n"), prompt))
+}
+
+fn yaml_optional_string(mapping: &YamlMapping, key: &str) -> Option<String> {
+    mapping
+        .get(&YamlValue::String(key.to_string()))
+        .and_then(YamlValue::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn yaml_required_string(mapping: &YamlMapping, key: &str, path: &Path) -> Result<String, String> {
+    yaml_optional_string(mapping, key).ok_or_else(|| {
+        format!(
+            "repo skill frontmatter '{}' must contain a non-empty {}",
+            path.display(),
+            key
+        )
+    })
+}
+
+fn yaml_string_list(mapping: &YamlMapping, key: &str) -> Vec<String> {
+    mapping
+        .get(&YamlValue::String(key.to_string()))
+        .and_then(YamlValue::as_sequence)
+        .into_iter()
+        .flatten()
+        .filter_map(YamlValue::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn normalize_skill_lookup_token(value: &str) -> String {
+    value
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['_', '-'], " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn requested_skill_name(skill: &str) -> Result<String, String> {
+    let requested = skill
+        .trim()
+        .trim_start_matches('/')
+        .trim_start_matches('$')
+        .trim();
+    if requested.is_empty() {
+        return Err(String::from("skill must not be empty"));
+    }
+    Ok(requested.to_string())
+}
+
 fn skill_roots() -> Vec<std::path::PathBuf> {
     let mut roots = Vec::new();
     if let Ok(codex_home) = std::env::var("CODEX_HOME") {
@@ -1379,13 +1609,10 @@ fn skill_roots() -> Vec<std::path::PathBuf> {
 }
 
 fn resolve_skill_path(skill: &str) -> Result<std::path::PathBuf, String> {
-    let requested = skill.trim().trim_start_matches('/').trim_start_matches('$');
-    if requested.is_empty() {
-        return Err(String::from("skill must not be empty"));
-    }
+    let requested = requested_skill_name(skill)?;
 
     for root in skill_roots() {
-        let direct = root.join(requested).join("SKILL.md");
+        let direct = root.join(&requested).join("SKILL.md");
         if direct.exists() {
             return Ok(direct);
         }
@@ -1399,7 +1626,7 @@ fn resolve_skill_path(skill: &str) -> Result<std::path::PathBuf, String> {
                 if entry
                     .file_name()
                     .to_string_lossy()
-                    .eq_ignore_ascii_case(requested)
+                    .eq_ignore_ascii_case(&requested)
                 {
                     return Ok(path);
                 }
@@ -2969,7 +3196,7 @@ mod tests {
     use std::fs;
     use std::io::{Read, Write};
     use std::net::{SocketAddr, TcpListener};
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::sync::{Arc, Mutex, OnceLock};
     use std::thread;
     use std::time::Duration;
@@ -2993,6 +3220,12 @@ mod tests {
             .expect("time")
             .as_nanos();
         std::env::temp_dir().join(format!("clawd-tools-{unique}-{name}"))
+    }
+
+    fn set_test_cwd(path: &Path) -> PathBuf {
+        let original = std::env::current_dir().expect("current dir");
+        std::env::set_current_dir(path).expect("set current dir");
+        original
     }
 
     #[test]
@@ -3298,8 +3531,10 @@ mod tests {
         let _guard = env_lock()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cwd = temp_path("skills-cwd");
         let codex_home = temp_path("skills-home");
         let skill_dir = codex_home.join("skills").join("help");
+        std::fs::create_dir_all(&cwd).expect("create cwd");
         std::fs::create_dir_all(&skill_dir).expect("create skill dir");
         std::fs::write(
             skill_dir.join("SKILL.md"),
@@ -3308,6 +3543,7 @@ mod tests {
         .expect("write skill prompt");
 
         let original_codex_home = std::env::var("CODEX_HOME").ok();
+        let original_cwd = set_test_cwd(&cwd);
         std::env::set_var("CODEX_HOME", &codex_home);
 
         let result = execute_tool(
@@ -3349,6 +3585,8 @@ mod tests {
             Some(value) => std::env::set_var("CODEX_HOME", value),
             None => std::env::remove_var("CODEX_HOME"),
         }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = std::fs::remove_dir_all(cwd);
         let _ = std::fs::remove_dir_all(codex_home);
     }
 
@@ -3357,9 +3595,11 @@ mod tests {
         let _guard = env_lock()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cwd = temp_path("skills-catalog-cwd");
         let codex_home = temp_path("skills-catalog");
         let help_dir = codex_home.join("skills").join("help");
         let review_dir = codex_home.join("skills").join("review");
+        std::fs::create_dir_all(&cwd).expect("create cwd");
         std::fs::create_dir_all(&help_dir).expect("create help skill dir");
         std::fs::create_dir_all(&review_dir).expect("create review skill dir");
         std::fs::write(
@@ -3374,6 +3614,7 @@ mod tests {
         .expect("write review skill prompt");
 
         let original_codex_home = std::env::var("CODEX_HOME").ok();
+        let original_cwd = set_test_cwd(&cwd);
         std::env::set_var("CODEX_HOME", &codex_home);
 
         let skills = list_skills();
@@ -3390,6 +3631,8 @@ mod tests {
             Some(value) => std::env::set_var("CODEX_HOME", value),
             None => std::env::remove_var("CODEX_HOME"),
         }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = std::fs::remove_dir_all(cwd);
         let _ = std::fs::remove_dir_all(codex_home);
     }
 
@@ -3398,8 +3641,10 @@ mod tests {
         let _guard = env_lock()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cwd = temp_path("skills-load-cwd");
         let codex_home = temp_path("skills-load");
         let skill_dir = codex_home.join("skills").join("context-map");
+        std::fs::create_dir_all(&cwd).expect("create cwd");
         std::fs::create_dir_all(&skill_dir).expect("create skill dir");
         std::fs::write(
             skill_dir.join("SKILL.md"),
@@ -3408,6 +3653,7 @@ mod tests {
         .expect("write skill prompt");
 
         let original_codex_home = std::env::var("CODEX_HOME").ok();
+        let original_cwd = set_test_cwd(&cwd);
         std::env::set_var("CODEX_HOME", &codex_home);
 
         let loaded =
@@ -3422,7 +3668,61 @@ mod tests {
             Some(value) => std::env::set_var("CODEX_HOME", value),
             None => std::env::remove_var("CODEX_HOME"),
         }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = std::fs::remove_dir_all(cwd);
         let _ = std::fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
+    fn repo_local_skills_are_discovered_from_ancestor_catalog() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("repo-skills-root");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let skill_dir = repo_root.join("skills");
+        std::fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+        std::fs::write(
+            skill_dir.join("electrical-estimating.md"),
+            "---\nid: electrical-estimating\ntitle: Electrical Estimating\nsummary: Structure estimate answers around scope and uncertainty.\naliases:\n  - estimate\n  - quote\n---\nUse this skill for structured estimate answers.\n",
+        )
+        .expect("write repo skill");
+
+        let original_codex_home = std::env::var("CODEX_HOME").ok();
+        let original_cwd = set_test_cwd(&nested_cwd);
+        std::env::remove_var("CODEX_HOME");
+
+        let skills = list_skills();
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].name, "electrical-estimating");
+        assert_eq!(
+            skills[0].description.as_deref(),
+            Some("Structure estimate answers around scope and uncertainty.")
+        );
+        assert!(skills[0].path.ends_with("/skills/electrical-estimating.md"));
+
+        let loaded = load_skill("estimate", Some("overview".to_string()))
+            .expect("repo-local skill should load by alias");
+        assert_eq!(loaded.skill, "electrical-estimating");
+        assert_eq!(loaded.args.as_deref(), Some("overview"));
+        assert_eq!(
+            loaded.description.as_deref(),
+            Some("Structure estimate answers around scope and uncertainty.")
+        );
+        assert!(loaded
+            .prompt
+            .contains("Use this skill for structured estimate answers."));
+
+        match original_codex_home {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = std::fs::remove_dir_all(repo_root);
     }
 
     #[test]

@@ -104,18 +104,18 @@ Evidence:
 
 ### Rust exists
 Evidence:
-- `Skill` tool in `rust/crates/tools/src/lib.rs` resolves and reads local `SKILL.md` files.
+- `Skill` tool in `rust/crates/tools/src/lib.rs` resolves and reads local `SKILL.md` files and repo-local frontmatter skills under ancestor `skills/*.md` catalogs.
+- Rust now has a `/skills` command in `rust/crates/simcoe-ai-cli/src/main.rs` with shared rendering in `rust/crates/simcoe-ai-cli/src/format.rs`.
 - CLAUDE.md discovery is implemented in `rust/crates/runtime/src/prompt.rs`.
-- Rust supports `/memory` and `/init` via `rust/crates/commands/src/lib.rs` and `rust/crates/rusty-claude-cli/src/main.rs`.
+- Rust supports `/memory` and `/init` via `rust/crates/commands/src/lib.rs` and `rust/crates/simcoe-ai-cli/src/main.rs`.
 
 ### Missing or broken in Rust
 - No bundled skill registry equivalent.
-- No `/skills` command.
 - No MCP skill-builder pipeline.
 - No TS-style live skill discovery/reload/change handling.
 - No comparable session-memory / team-memory integration around skills.
 
-**Status:** basic local skill loading only.
+**Status:** local skills are usable in both tool and CLI flows, but bundled/MCP skill parity is still missing.
 
 ---
 
@@ -130,14 +130,13 @@ Evidence:
 ### Rust exists
 Evidence:
 - Shared slash command registry in `rust/crates/commands/src/lib.rs`.
-- Rust slash commands currently cover `help`, `status`, `compact`, `model`, `permissions`, `clear`, `cost`, `resume`, `config`, `memory`, `init`, `diff`, `version`, `export`, `session`.
-- Main CLI/repl/prompt handling lives in `rust/crates/rusty-claude-cli/src/main.rs`.
+- Rust slash commands currently cover `help`, `status`, `compact`, `model`, `permissions`, `clear`, `cost`, `resume`, `config`, `memory`, `skills`, `init`, `diff`, `version`, `export`, `session`.
+- Main CLI/repl/prompt handling lives in `rust/crates/simcoe-ai-cli/src/main.rs`.
 
 ### Missing or broken in Rust
-- Missing major TS command families: `/agents`, `/hooks`, `/mcp`, `/plugin`, `/skills`, `/plan`, `/review`, `/tasks`, and many others.
+- Missing major TS command families: `/agents`, `/hooks`, `/mcp`, `/plugin`, `/plan`, `/review`, `/tasks`, and many others.
 - No Rust equivalent to TS structured IO / remote transport layers.
 - No TS-style handler decomposition for auth/plugins/MCP/agents.
-- JSON prompt mode is improved on this branch, but still not clean transport parity: empirical verification shows tool-capable JSON output can emit human-readable tool-result lines before the final JSON object.
 
 **Status:** functional local CLI core, much narrower than TS.
 
@@ -161,7 +160,6 @@ Evidence:
 - No TS-style hook-aware orchestration layer.
 - No TS structured/remote assistant transport stack.
 - No richer TS assistant/session-history/background-task integration.
-- JSON output path is no longer single-turn only on this branch, but output cleanliness still lags TS transport expectations.
 
 **Status:** strong core loop, missing orchestration layers.
 
@@ -199,16 +197,18 @@ Evidence:
 
 ### Fixed
 - **Prompt mode tools enabled**
-  - `rust/crates/rusty-claude-cli/src/main.rs` now constructs prompt mode with `LiveCli::new(model, true, ...)`.
+  - `rust/crates/simcoe-ai-cli/src/main.rs` now constructs prompt mode with `LiveCli::new(model, true, ...)`.
 - **Default permission mode = DangerFullAccess**
-  - Runtime default now resolves to `DangerFullAccess` in `rust/crates/rusty-claude-cli/src/main.rs`.
-  - Clap default also uses `DangerFullAccess` in `rust/crates/rusty-claude-cli/src/args.rs`.
-  - Init template writes `dontAsk` in `rust/crates/rusty-claude-cli/src/init.rs`.
+  - Runtime default now resolves to `DangerFullAccess` in `rust/crates/simcoe-ai-cli/src/main.rs`.
+  - Clap default also uses `DangerFullAccess` in `rust/crates/simcoe-ai-cli/src/args.rs`.
+  - Init template writes `dontAsk` in `rust/crates/simcoe-ai-cli/src/init.rs`.
 - **Streaming `{}` tool-input prefix bug**
-  - `rust/crates/rusty-claude-cli/src/main.rs` now strips the initial empty object only for streaming tool input, while preserving legitimate `{}` in non-stream responses.
+  - `rust/crates/simcoe-ai-cli/src/main.rs` now strips the initial empty object only for streaming tool input, while preserving legitimate `{}` in non-stream responses.
 - **Unlimited max_iterations**
   - Verified at `rust/crates/runtime/src/conversation.rs` with `usize::MAX`.
+- **JSON prompt output cleanliness hardening**
+  - `rust/crates/simcoe-ai-cli/src/main.rs` now routes streaming and tool rendering through suppressible writers, with regression tests covering hidden-output mode for both stream events and tool execution.
 
 ### Remaining notable parity issue
-- **JSON prompt output cleanliness**
-  - Tool-capable JSON mode now loops, but empirical verification still shows pre-JSON human-readable tool-result output when tools fire.
+- **Structured/remote transport parity**
+  - Rust still lacks the TS structured IO and remote transport stack, so machine-readable integrations remain thinner even with the local JSON path hardened.

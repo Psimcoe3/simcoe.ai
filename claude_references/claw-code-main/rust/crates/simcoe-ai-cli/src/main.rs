@@ -828,27 +828,12 @@ impl SimcoeRuntimeClient {
             status_bar,
         })
     }
-}
 
-fn resolve_cli_auth_source() -> Result<AuthSource, Box<dyn std::error::Error>> {
-    Ok(resolve_startup_auth_source(|| {
-        let cwd = env::current_dir().map_err(api::ApiError::from)?;
-        let config = ConfigLoader::default_for(&cwd).load().map_err(|error| {
-            api::ApiError::Auth(format!("failed to load runtime OAuth config: {error}"))
-        })?;
-        Ok(config.oauth().cloned())
-    })?)
-}
-
-fn build_runtime_api_client() -> Result<SimcoeApiClient, RuntimeError> {
-    let auth = resolve_cli_auth_source().map_err(|error| RuntimeError::new(error.to_string()))?;
-    let base_url = api::read_base_url().map_err(|error| RuntimeError::new(error.to_string()))?;
-    Ok(SimcoeApiClient::from_auth(auth).with_base_url(base_url))
-}
-
-impl ApiClient for SimcoeRuntimeClient {
-    #[allow(clippy::too_many_lines)]
-    fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>, RuntimeError> {
+    fn stream_with_writer(
+        &mut self,
+        request: ApiRequest,
+        out: &mut dyn Write,
+    ) -> Result<Vec<AssistantEvent>, RuntimeError> {
         let client = build_runtime_api_client()?;
         let message_request = MessageRequest {
             model: self.model.clone(),
@@ -874,13 +859,8 @@ impl ApiClient for SimcoeRuntimeClient {
                 .stream_message(&message_request)
                 .await
                 .map_err(|error| RuntimeError::new(error.to_string()))?;
-            let mut stdout = io::stdout();
             let mut sink = io::sink();
-            let out: &mut dyn Write = if self.emit_output {
-                &mut stdout
-            } else {
-                &mut sink
-            };
+            let render_out: &mut dyn Write = if self.emit_output { out } else { &mut sink };
             let renderer = TerminalRenderer::new();
             let mut markdown_stream = MarkdownStreamState::default();
             let mut events = Vec::new();
@@ -895,13 +875,19 @@ impl ApiClient for SimcoeRuntimeClient {
                 match event {
                     ApiStreamEvent::MessageStart(start) => {
                         for block in start.message.content {
-                            push_output_block(block, out, &mut events, &mut pending_tool, true)?;
+                            push_output_block(
+                                block,
+                                render_out,
+                                &mut events,
+                                &mut pending_tool,
+                                true,
+                            )?;
                         }
                     }
                     ApiStreamEvent::ContentBlockStart(start) => {
                         push_output_block(
                             start.content_block,
-                            out,
+                            render_out,
                             &mut events,
                             &mut pending_tool,
                             true,
@@ -911,8 +897,8 @@ impl ApiClient for SimcoeRuntimeClient {
                         ContentBlockDelta::TextDelta { text } => {
                             if !text.is_empty() {
                                 if let Some(rendered) = markdown_stream.push(&renderer, &text) {
-                                    write!(out, "{rendered}")
-                                        .and_then(|()| out.flush())
+                                    write!(render_out, "{rendered}")
+                                        .and_then(|()| render_out.flush())
                                         .map_err(|error| RuntimeError::new(error.to_string()))?;
                                 }
                                 events.push(AssistantEvent::TextDelta(text));
@@ -929,14 +915,13 @@ impl ApiClient for SimcoeRuntimeClient {
                     },
                     ApiStreamEvent::ContentBlockStop(_) => {
                         if let Some(rendered) = markdown_stream.flush(&renderer) {
-                            write!(out, "{rendered}")
-                                .and_then(|()| out.flush())
+                            write!(render_out, "{rendered}")
+                                .and_then(|()| render_out.flush())
                                 .map_err(|error| RuntimeError::new(error.to_string()))?;
                         }
                         if let Some((id, name, input)) = pending_tool.take() {
-                            // Display tool call now that input is fully accumulated
-                            writeln!(out, "\n{}", format_tool_call_start(&name, &input))
-                                .and_then(|()| out.flush())
+                            writeln!(render_out, "\n{}", format_tool_call_start(&name, &input))
+                                .and_then(|()| render_out.flush())
                                 .map_err(|error| RuntimeError::new(error.to_string()))?;
                             events.push(AssistantEvent::ToolUse { id, name, input });
                         }
@@ -957,8 +942,8 @@ impl ApiClient for SimcoeRuntimeClient {
                     ApiStreamEvent::MessageStop(_) => {
                         saw_stop = true;
                         if let Some(rendered) = markdown_stream.flush(&renderer) {
-                            write!(out, "{rendered}")
-                                .and_then(|()| out.flush())
+                            write!(render_out, "{rendered}")
+                                .and_then(|()| render_out.flush())
                                 .map_err(|error| RuntimeError::new(error.to_string()))?;
                         }
                         if let Some(status_bar) = self.status_bar.as_ref() {
@@ -992,8 +977,32 @@ impl ApiClient for SimcoeRuntimeClient {
                 })
                 .await
                 .map_err(|error| RuntimeError::new(error.to_string()))?;
-            response_to_events(response, out)
+            response_to_events(response, render_out)
         })
+    }
+}
+
+fn resolve_cli_auth_source() -> Result<AuthSource, Box<dyn std::error::Error>> {
+    Ok(resolve_startup_auth_source(|| {
+        let cwd = env::current_dir().map_err(api::ApiError::from)?;
+        let config = ConfigLoader::default_for(&cwd).load().map_err(|error| {
+            api::ApiError::Auth(format!("failed to load runtime OAuth config: {error}"))
+        })?;
+        Ok(config.oauth().cloned())
+    })?)
+}
+
+fn build_runtime_api_client() -> Result<SimcoeApiClient, RuntimeError> {
+    let auth = resolve_cli_auth_source().map_err(|error| RuntimeError::new(error.to_string()))?;
+    let base_url = api::read_base_url().map_err(|error| RuntimeError::new(error.to_string()))?;
+    Ok(SimcoeApiClient::from_auth(auth).with_base_url(base_url))
+}
+
+impl ApiClient for SimcoeRuntimeClient {
+    #[allow(clippy::too_many_lines)]
+    fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>, RuntimeError> {
+        let mut stdout = io::stdout();
+        self.stream_with_writer(request, &mut stdout)
     }
 }
 
@@ -1475,10 +1484,13 @@ impl CliToolExecutor {
             allowed_tools,
         }
     }
-}
 
-impl ToolExecutor for CliToolExecutor {
-    fn execute(&mut self, tool_name: &str, input: &str) -> Result<String, ToolError> {
+    fn execute_with_writer(
+        &mut self,
+        tool_name: &str,
+        input: &str,
+        out: &mut impl Write,
+    ) -> Result<String, ToolError> {
         if self
             .allowed_tools
             .as_ref()
@@ -1495,7 +1507,7 @@ impl ToolExecutor for CliToolExecutor {
                 if self.emit_output {
                     let markdown = format_tool_result(tool_name, &output, false);
                     self.renderer
-                        .stream_markdown(&markdown, &mut io::stdout())
+                        .stream_markdown(&markdown, out)
                         .map_err(|error| ToolError::new(error.to_string()))?;
                 }
                 Ok(output)
@@ -1504,12 +1516,18 @@ impl ToolExecutor for CliToolExecutor {
                 if self.emit_output {
                     let markdown = format_tool_result(tool_name, &error, true);
                     self.renderer
-                        .stream_markdown(&markdown, &mut io::stdout())
+                        .stream_markdown(&markdown, out)
                         .map_err(|stream_error| ToolError::new(stream_error.to_string()))?;
                 }
                 Err(ToolError::new(error))
             }
         }
+    }
+}
+
+impl ToolExecutor for CliToolExecutor {
+    fn execute(&mut self, tool_name: &str, input: &str) -> Result<String, ToolError> {
+        self.execute_with_writer(tool_name, input, &mut io::stdout())
     }
 }
 
@@ -1671,15 +1689,20 @@ mod tests {
     use super::{
         filter_tool_specs, format_tool_call_start, format_tool_result, oauth_config_for_login,
         parse_args, parse_git_status_metadata, print_help_to, push_output_block,
-        response_to_events, resume_supported_slash_commands, CliAction, SimcoeRuntimeClient,
-        SlashCommand, DEFAULT_MODEL,
+        response_to_events, resume_supported_slash_commands, CliAction, CliToolExecutor,
+        SimcoeRuntimeClient, SlashCommand, DEFAULT_MODEL,
     };
     use api::{MessageResponse, OutputContentBlock, Usage};
-    use runtime::{AssistantEvent, ContentBlock, ConversationMessage, MessageRole, PermissionMode};
+    use runtime::{
+        ApiRequest, AssistantEvent, ContentBlock, ConversationMessage, MessageRole, PermissionMode,
+    };
     use serde_json::json;
     use std::fs;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
     use std::path::PathBuf;
     use std::sync::{Mutex, OnceLock};
+    use std::thread;
 
     #[test]
     fn defaults_to_repl_when_no_args() {
@@ -1975,6 +1998,33 @@ mod tests {
         std::env::temp_dir().join(format!("claw-cli-{name}-{nanos}"))
     }
 
+    fn set_test_cwd(path: &std::path::Path) -> PathBuf {
+        let original = std::env::current_dir().expect("current dir");
+        std::env::set_current_dir(path).expect("set current dir");
+        original
+    }
+
+    fn spawn_http_server(response: String) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+        let address = listener.local_addr().expect("listener addr");
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept connection");
+            let mut buffer = [0_u8; 8192];
+            let _ = stream.read(&mut buffer).expect("read request");
+            stream
+                .write_all(response.as_bytes())
+                .expect("write response");
+        });
+        format!("http://{address}")
+    }
+
+    fn http_response(status: &str, content_type: &str, body: &str) -> String {
+        format!(
+            "HTTP/1.1 {status}\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
     #[test]
     fn resume_report_uses_sectioned_layout() {
         let report = format_resume_report("session.json", 14, 6);
@@ -2049,6 +2099,173 @@ mod tests {
     }
 
     #[test]
+    fn skills_report_lists_local_skills() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("skills-report");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let skill_dir = repo_root.join("skills");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&skill_dir).expect("create skill dir");
+        fs::write(
+            skill_dir.join("electrical-estimating.md"),
+            "---\nid: electrical-estimating\ntitle: Electrical Estimating\nsummary: Structure estimate answers around scope and uncertainty.\naliases:\n  - estimate\n---\nUse this skill for structured estimate answers.\n",
+        )
+        .expect("write estimating skill prompt");
+        fs::write(
+            skill_dir.join("revit-family-reference.md"),
+            "---\nid: revit-family-reference\ntitle: Revit Family Reference\nsummary: Present Revit answers with exact family and type labels.\naliases:\n  - revit\n---\nKeep entity names verbatim.\n",
+        )
+        .expect("write revit skill prompt");
+
+        let original_codex_home = std::env::var("CODEX_HOME").ok();
+        let original_cwd = set_test_cwd(&nested_cwd);
+        std::env::remove_var("CODEX_HOME");
+
+        let report = render_skills_report(None).expect("skills report should render");
+        assert!(report.contains("Skills"));
+        assert!(report.contains("Available        2"));
+        assert!(report.contains("electrical-estimating"));
+        assert!(report.contains("Structure estimate answers around scope and uncertainty."));
+        assert!(report.contains("revit-family-reference"));
+        assert!(report.contains("Present Revit answers with exact family and type labels."));
+
+        match original_codex_home {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn skills_report_renders_selected_skill_prompt() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("skills-selected");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let skill_dir = repo_root.join("skills");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&skill_dir).expect("create skill dir");
+        fs::write(
+            skill_dir.join("context-map.md"),
+            "---\nid: context-map\ntitle: Context Map\nsummary: Map relevant files before editing.\naliases:\n  - map\n---\nPrompt text\n",
+        )
+        .expect("write skill prompt");
+
+        let original_codex_home = std::env::var("CODEX_HOME").ok();
+        let original_cwd = set_test_cwd(&nested_cwd);
+        std::env::remove_var("CODEX_HOME");
+
+        let report =
+            render_skills_report(Some("context-map")).expect("selected skill report should render");
+        assert!(report.contains("Skill"));
+        assert!(report.contains("Name             context-map"));
+        assert!(report.contains("Description      Map relevant files before editing."));
+        assert!(report.contains("Prompt text"));
+
+        match original_codex_home {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn runtime_client_suppresses_stream_rendering_when_output_disabled() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let sse = concat!(
+            "event: message_start\n",
+            "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_stream\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"simcoe-opus-4-6\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":3,\"output_tokens\":0}}}\n\n",
+            "event: content_block_start\n",
+            "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"Checking repo-local skills\"}}\n\n",
+            "event: content_block_stop\n",
+            "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+            "event: content_block_start\n",
+            "data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"read_file\",\"input\":{}}}\n\n",
+            "event: content_block_delta\n",
+            "data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"path\\\":\\\"Cargo.toml\\\"}\"}}\n\n",
+            "event: content_block_stop\n",
+            "data: {\"type\":\"content_block_stop\",\"index\":1}\n\n",
+            "event: message_delta\n",
+            "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":3,\"output_tokens\":1}}\n\n",
+            "event: message_stop\n",
+            "data: {\"type\":\"message_stop\"}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let base_url = spawn_http_server(http_response("200 OK", "text/event-stream", sse));
+
+        let original_base_url = std::env::var("SIMCOE_AI_BASE_URL").ok();
+        let original_api_key = std::env::var("SIMCOE_AI_API_KEY").ok();
+        let original_auth_token = std::env::var("SIMCOE_AI_AUTH_TOKEN").ok();
+        std::env::set_var("SIMCOE_AI_BASE_URL", &base_url);
+        std::env::set_var("SIMCOE_AI_API_KEY", "test-key");
+        std::env::remove_var("SIMCOE_AI_AUTH_TOKEN");
+
+        let mut client =
+            SimcoeRuntimeClient::new(DEFAULT_MODEL.to_string(), true, false, None, None)
+                .expect("runtime client");
+        let mut out = Vec::new();
+        let events = client
+            .stream_with_writer(
+                ApiRequest {
+                    system_prompt: Vec::new(),
+                    messages: vec![ConversationMessage::user_text("Inspect Cargo.toml")],
+                },
+                &mut out,
+            )
+            .expect("stream request should succeed");
+
+        assert!(out.is_empty());
+        assert!(events.iter().any(|event| matches!(
+            event,
+            AssistantEvent::TextDelta(text) if text == "Checking repo-local skills"
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            AssistantEvent::ToolUse { name, input, .. }
+                if name == "read_file" && input == "{\"path\":\"Cargo.toml\"}"
+        )));
+
+        match original_base_url {
+            Some(value) => std::env::set_var("SIMCOE_AI_BASE_URL", value),
+            None => std::env::remove_var("SIMCOE_AI_BASE_URL"),
+        }
+        match original_api_key {
+            Some(value) => std::env::set_var("SIMCOE_AI_API_KEY", value),
+            None => std::env::remove_var("SIMCOE_AI_API_KEY"),
+        }
+        match original_auth_token {
+            Some(value) => std::env::set_var("SIMCOE_AI_AUTH_TOKEN", value),
+            None => std::env::remove_var("SIMCOE_AI_AUTH_TOKEN"),
+        }
+    }
+
+    #[test]
+    fn tool_executor_suppresses_rendering_when_output_disabled() {
+        let mut executor = CliToolExecutor::new(None, false);
+        let mut out = Vec::new();
+        let output = executor
+            .execute_with_writer("StructuredOutput", r#"{"ok":true}"#, &mut out)
+            .expect("tool execution should succeed");
+
+        assert!(out.is_empty());
+        let payload = serde_json::from_str::<serde_json::Value>(&output).expect("valid json");
+        assert_eq!(payload["structured_output"], json!({"ok": true}));
+    }
+
+    #[test]
     fn model_switch_report_preserves_context_summary() {
         let report = format_model_switch_report("simcoe-sonnet", "simcoe-opus", 9);
         assert!(report.contains("Model updated"));
@@ -2116,76 +2333,6 @@ mod tests {
         assert!(report.contains("Working directory"));
         assert!(report.contains("Instruction files"));
         assert!(report.contains("Discovered files"));
-    }
-
-    #[test]
-    fn skills_report_lists_local_skills() {
-        let _guard = env_lock()
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let codex_home = temp_path("skills-report");
-        let help_dir = codex_home.join("skills").join("help");
-        let review_dir = codex_home.join("skills").join("review");
-        fs::create_dir_all(&help_dir).expect("create help skill dir");
-        fs::create_dir_all(&review_dir).expect("create review skill dir");
-        fs::write(
-            help_dir.join("SKILL.md"),
-            "description: Show REPL help\n\n# Help\n",
-        )
-        .expect("write help skill prompt");
-        fs::write(
-            review_dir.join("SKILL.md"),
-            "description: Review the current change\n\n# Review\n",
-        )
-        .expect("write review skill prompt");
-
-        let original_codex_home = std::env::var("CODEX_HOME").ok();
-        std::env::set_var("CODEX_HOME", &codex_home);
-
-        let report = render_skills_report(None).expect("skills report should render");
-        assert!(report.contains("Skills"));
-        assert!(report.contains("Available        2"));
-        assert!(report.contains("help"));
-        assert!(report.contains("Show REPL help"));
-        assert!(report.contains("review"));
-        assert!(report.contains("Review the current change"));
-
-        match original_codex_home {
-            Some(value) => std::env::set_var("CODEX_HOME", value),
-            None => std::env::remove_var("CODEX_HOME"),
-        }
-        let _ = fs::remove_dir_all(codex_home);
-    }
-
-    #[test]
-    fn skills_report_renders_selected_skill_prompt() {
-        let _guard = env_lock()
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let codex_home = temp_path("skills-selected");
-        let skill_dir = codex_home.join("skills").join("context-map");
-        fs::create_dir_all(&skill_dir).expect("create skill dir");
-        fs::write(
-            skill_dir.join("SKILL.md"),
-            "description: Map relevant files\n\n# Context Map\nPrompt text\n",
-        )
-        .expect("write skill prompt");
-
-        let original_codex_home = std::env::var("CODEX_HOME").ok();
-        std::env::set_var("CODEX_HOME", &codex_home);
-
-        let report =
-            render_skills_report(Some("context-map")).expect("selected skill report should render");
-        assert!(report.contains("Skill"));
-        assert!(report.contains("Name             context-map"));
-        assert!(report.contains("Description      Map relevant files"));
-        assert!(report.contains("Prompt text"));
-
-        match original_codex_home {
-            Some(value) => std::env::set_var("CODEX_HOME", value),
-            None => std::env::remove_var("CODEX_HOME"),
-        }
-        let _ = fs::remove_dir_all(codex_home);
     }
 
     #[test]

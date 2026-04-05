@@ -398,7 +398,7 @@ Prompt
             "Skills
   Available        0
   Usage            /skills <name>
-  Search path      CODEX_HOME/skills/<name>/SKILL.md",
+    Search paths     ./skills/*.md, CODEX_HOME/skills/<name>/SKILL.md",
         ));
     }
 
