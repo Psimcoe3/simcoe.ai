@@ -112,9 +112,27 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         resume_supported: true,
     },
     SlashCommandSpec {
+        name: "agents",
+        summary: "Inspect built-in sub-agent profiles or one profile",
+        argument_hint: Some("[name]"),
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "plugin",
+        summary: "Inspect archived plugin surfaces or one surface",
+        argument_hint: Some("[name]"),
+        resume_supported: true,
+    },
+    SlashCommandSpec {
         name: "skills",
         summary: "List available local skills or inspect one",
         argument_hint: Some("[skill]"),
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "tasks",
+        summary: "Inspect persisted sub-agent tasks or one task",
+        argument_hint: Some("[id]"),
         resume_supported: true,
     },
     SlashCommandSpec {
@@ -254,8 +272,17 @@ pub enum SlashCommand {
         server: Option<String>,
     },
     Memory,
+    Agents {
+        agent: Option<String>,
+    },
+    Plugin {
+        surface: Option<String>,
+    },
     Skills {
         skill: Option<String>,
+    },
+    Tasks {
+        task: Option<String>,
     },
     Init,
     Diff,
@@ -330,8 +357,17 @@ impl SlashCommand {
                 server: remainder_after_command(trimmed, command),
             },
             "memory" => Self::Memory,
+            "agents" => Self::Agents {
+                agent: remainder_after_command(trimmed, command),
+            },
+            "plugin" => Self::Plugin {
+                surface: remainder_after_command(trimmed, command),
+            },
             "skills" => Self::Skills {
                 skill: remainder_after_command(trimmed, command),
+            },
+            "tasks" => Self::Tasks {
+                task: remainder_after_command(trimmed, command),
             },
             "init" => Self::Init,
             "diff" => Self::Diff,
@@ -442,7 +478,10 @@ pub fn handle_slash_command(
         | SlashCommand::Hooks { .. }
         | SlashCommand::Mcp { .. }
         | SlashCommand::Memory
+        | SlashCommand::Agents { .. }
+        | SlashCommand::Plugin { .. }
         | SlashCommand::Skills { .. }
+        | SlashCommand::Tasks { .. }
         | SlashCommand::Init
         | SlashCommand::Diff
         | SlashCommand::Version
@@ -566,6 +605,18 @@ mod tests {
         );
         assert_eq!(SlashCommand::parse("/memory"), Some(SlashCommand::Memory));
         assert_eq!(
+            SlashCommand::parse("/agents explore"),
+            Some(SlashCommand::Agents {
+                agent: Some("explore".to_string())
+            })
+        );
+        assert_eq!(
+            SlashCommand::parse("/plugin reload-plugins"),
+            Some(SlashCommand::Plugin {
+                surface: Some("reload-plugins".to_string())
+            })
+        );
+        assert_eq!(
             SlashCommand::parse("/skills"),
             Some(SlashCommand::Skills { skill: None })
         );
@@ -573,6 +624,12 @@ mod tests {
             SlashCommand::parse("/skills help"),
             Some(SlashCommand::Skills {
                 skill: Some("help".to_string())
+            })
+        );
+        assert_eq!(
+            SlashCommand::parse("/tasks agent-123"),
+            Some(SlashCommand::Tasks {
+                task: Some("agent-123".to_string())
             })
         );
         assert_eq!(SlashCommand::parse("/init"), Some(SlashCommand::Init));
@@ -616,7 +673,10 @@ mod tests {
         assert!(help.contains("/hooks [pre|post]"));
         assert!(help.contains("/mcp [server]"));
         assert!(help.contains("/memory"));
+        assert!(help.contains("/agents [name]"));
+        assert!(help.contains("/plugin [name]"));
         assert!(help.contains("/skills [skill]"));
+        assert!(help.contains("/tasks [id]"));
         assert!(help.contains("/init"));
         assert!(help.contains("/diff"));
         assert!(help.contains("/version"));
@@ -624,8 +684,8 @@ mod tests {
         assert!(help.contains("/plan [task]"));
         assert!(help.contains("/export [file]"));
         assert!(help.contains("/session [list|switch <session-id>]"));
-        assert_eq!(slash_command_specs().len(), 27);
-        assert_eq!(resume_supported_slash_commands().len(), 14);
+        assert_eq!(slash_command_specs().len(), 30);
+        assert_eq!(resume_supported_slash_commands().len(), 17);
     }
 
     #[test]
@@ -717,7 +777,10 @@ mod tests {
         );
         assert!(handle_slash_command("/hooks", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/mcp", &session, CompactionConfig::default()).is_none());
+        assert!(handle_slash_command("/agents", &session, CompactionConfig::default()).is_none());
+        assert!(handle_slash_command("/plugin", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/skills", &session, CompactionConfig::default()).is_none());
+        assert!(handle_slash_command("/tasks", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/diff", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/version", &session, CompactionConfig::default()).is_none());
         assert!(

@@ -37,6 +37,7 @@ Evidence:
 Evidence:
 - Tool registry is centralized in `rust/crates/tools/src/lib.rs` via `mvp_tool_specs()`.
 - Current built-ins include shell/file/search/web/todo/skill/agent/config/notebook/repl/powershell primitives.
+- Rust agent tooling now also exposes built-in sub-agent profile inspection via `list_agent_profiles()` and `load_agent_profile()`, alongside persisted task inspection.
 - Runtime execution is wired through `rust/crates/tools/src/lib.rs` and `rust/crates/runtime/src/conversation.rs`.
 
 ### Missing or broken in Rust
@@ -83,15 +84,15 @@ Evidence:
 ### Rust exists
 Evidence:
 - No dedicated plugin subsystem appears under `rust/crates/`.
-- Repo-wide Rust references to plugins are effectively absent beyond text/help mentions.
+- Rust now exposes `/plugin [name]` via `rust/crates/compat-harness/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect archived plugin command/module surfaces from the TypeScript snapshot data.
 
 ### Missing or broken in Rust
 - No plugin loader.
 - No marketplace install/update/enable/disable flow.
-- No `/plugin` or `/reload-plugins` parity.
+- No actual `/plugin` management flow or `/reload-plugins` execution parity.
 - No plugin-provided hook/tool/command/MCP extension path.
 
-**Status:** missing.
+**Status:** archived-surface inspection exists, but runtime/plugin-management parity is still missing.
 
 ---
 
@@ -131,13 +132,16 @@ Evidence:
 ### Rust exists
 Evidence:
 - Shared slash command registry in `rust/crates/commands/src/lib.rs`.
-- Rust slash commands currently cover `help`, `status`, `compact`, `model`, `permissions`, `clear`, `cost`, `resume`, `config`, `hooks`, `mcp`, `memory`, `skills`, `init`, `diff`, `version`, `bughunter`, `review`, `plan`, `commit`, `pr`, `issue`, `ultraplan`, `teleport`, `debug-tool-call`, `export`, `session`.
+- Rust slash commands currently cover `help`, `status`, `compact`, `model`, `permissions`, `clear`, `cost`, `resume`, `config`, `hooks`, `mcp`, `memory`, `agents`, `plugin`, `skills`, `tasks`, `init`, `diff`, `version`, `bughunter`, `review`, `plan`, `commit`, `pr`, `issue`, `ultraplan`, `teleport`, `debug-tool-call`, `export`, `session`.
 - Rust now exposes `/hooks [pre|post]` via `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect configured pre/post hook commands.
 - Rust now exposes `/mcp [server]` via `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect configured MCP servers and their derived bootstrap transport details.
+- Rust now exposes `/agents [name]` via `rust/crates/tools/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect built-in sub-agent profiles, aliases, allowed-tool subsets, and recent persisted tasks.
+- Rust now exposes `/plugin [name]` via `rust/crates/compat-harness/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect archived plugin command/module surfaces from the upstream snapshot data.
+- Rust now exposes `/tasks [id]` via `rust/crates/tools/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect persisted sub-agent task manifests and outputs.
 - Main CLI/repl/prompt handling lives in `rust/crates/simcoe-ai-cli/src/main.rs`.
 
 ### Missing or broken in Rust
-- Missing major TS command families: `/agents`, `/plugin`, `/tasks`, and many others.
+- Missing major TS command families beyond inspection-only parity and many others.
 - No Rust equivalent to TS structured IO / remote transport layers.
 - No TS-style handler decomposition for auth/plugins/MCP/agents.
 

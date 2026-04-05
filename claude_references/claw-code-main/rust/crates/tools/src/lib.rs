@@ -72,6 +72,52 @@ pub struct LoadedSkill {
     pub prompt: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentTaskSummary {
+    #[serde(rename = "agentId")]
+    pub agent_id: String,
+    pub name: String,
+    pub description: String,
+    #[serde(rename = "subagentType")]
+    pub subagent_type: Option<String>,
+    pub model: Option<String>,
+    pub status: String,
+    #[serde(rename = "outputFile")]
+    pub output_file: String,
+    #[serde(rename = "manifestFile")]
+    pub manifest_file: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "startedAt", skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    #[serde(rename = "completedAt", skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LoadedAgentTask {
+    pub task: AgentTaskSummary,
+    pub output: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AgentProfileSummary {
+    pub name: String,
+    pub description: String,
+    pub aliases: Vec<String>,
+    pub tool_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LoadedAgentProfile {
+    pub name: String,
+    pub description: String,
+    pub aliases: Vec<String>,
+    pub tools: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RepoSkillRecord {
     name: String,
@@ -80,6 +126,52 @@ struct RepoSkillRecord {
     aliases: Vec<String>,
     prompt: String,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct AgentProfileSpec {
+    name: &'static str,
+    description: &'static str,
+    aliases: &'static [&'static str],
+}
+
+const AGENT_PROFILE_SPECS: &[AgentProfileSpec] = &[
+    AgentProfileSpec {
+        name: "general-purpose",
+        description: "Default broad-access coding sub-agent.",
+        aliases: &["general", "generalpurpose", "generalpurposeagent"],
+    },
+    AgentProfileSpec {
+        name: "Explore",
+        description: "Read-heavy repo exploration and research sub-agent.",
+        aliases: &["explore", "explorer", "exploreagent"],
+    },
+    AgentProfileSpec {
+        name: "Plan",
+        description: "Planning-oriented sub-agent with todo and structured output tools.",
+        aliases: &["plan", "planagent"],
+    },
+    AgentProfileSpec {
+        name: "Verification",
+        description: "Validation-oriented sub-agent with shell access.",
+        aliases: &["verification", "verificationagent", "verify", "verifier"],
+    },
+    AgentProfileSpec {
+        name: "simcoe-ai-guide",
+        description: "Read-heavy guide sub-agent for Simcoe AI usage and conventions.",
+        aliases: &[
+            "simcoeaiguide",
+            "simcoeaiguideagent",
+            "claudecodeguide",
+            "claudecodeguideagent",
+            "guide",
+        ],
+    },
+    AgentProfileSpec {
+        name: "statusline-setup",
+        description: "Narrow workspace-editing sub-agent for statusline setup tasks.",
+        aliases: &["statusline", "statuslinesetup", "statuslinesetupagent"],
+    },
+];
 
 #[must_use]
 #[allow(clippy::too_many_lines)]
@@ -1366,6 +1458,127 @@ pub fn load_skill(skill: &str, args: Option<String>) -> Result<LoadedSkill, Stri
     })
 }
 
+pub fn list_agent_tasks() -> Result<Vec<AgentTaskSummary>, String> {
+    let store_dir = agent_store_dir()?;
+    if !store_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut tasks = std::fs::read_dir(&store_dir)
+        .map_err(|error| error.to_string())?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
+        .filter_map(|path| {
+            let contents = std::fs::read_to_string(&path).ok()?;
+            serde_json::from_str::<AgentTaskSummary>(&contents).ok()
+        })
+        .collect::<Vec<_>>();
+
+    tasks.sort_by(|left, right| {
+        right
+            .created_at
+            .cmp(&left.created_at)
+            .then_with(|| left.agent_id.cmp(&right.agent_id))
+    });
+    Ok(tasks)
+}
+
+pub fn load_agent_task(task: &str) -> Result<LoadedAgentTask, String> {
+    let requested = task.trim();
+    if requested.is_empty() {
+        return Err(String::from("task id must not be empty"));
+    }
+
+    let tasks = list_agent_tasks()?;
+    let exact = tasks
+        .iter()
+        .filter(|entry| {
+            entry.agent_id.eq_ignore_ascii_case(requested)
+                || entry.name.eq_ignore_ascii_case(requested)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let task = if let [task] = exact.as_slice() {
+        task.clone()
+    } else if exact.len() > 1 {
+        return Err(format!(
+            "multiple tasks matched '{requested}'; use a full agent id"
+        ));
+    } else {
+        let partial = tasks
+            .iter()
+            .filter(|entry| entry.agent_id.starts_with(requested))
+            .cloned()
+            .collect::<Vec<_>>();
+        match partial.as_slice() {
+            [task] => task.clone(),
+            [] => return Err(format!("unknown task: {requested}")),
+            _ => {
+                return Err(format!(
+                    "multiple tasks matched '{requested}'; use a longer agent id"
+                ))
+            }
+        }
+    };
+
+    let output = std::fs::read_to_string(&task.output_file).ok();
+    Ok(LoadedAgentTask { task, output })
+}
+
+pub fn list_agent_profiles() -> Vec<AgentProfileSummary> {
+    AGENT_PROFILE_SPECS
+        .iter()
+        .map(|spec| AgentProfileSummary {
+            name: spec.name.to_string(),
+            description: spec.description.to_string(),
+            aliases: spec
+                .aliases
+                .iter()
+                .map(|alias| (*alias).to_string())
+                .collect(),
+            tool_count: allowed_tools_for_subagent(spec.name).len(),
+        })
+        .collect()
+}
+
+pub fn load_agent_profile(agent: &str) -> Result<LoadedAgentProfile, String> {
+    let spec = resolve_agent_profile_spec(agent)
+        .ok_or_else(|| format!("unknown agent profile: {}", agent.trim()))?;
+    let mut tools = allowed_tools_for_subagent(spec.name)
+        .into_iter()
+        .collect::<Vec<_>>();
+    tools.sort();
+
+    Ok(LoadedAgentProfile {
+        name: spec.name.to_string(),
+        description: spec.description.to_string(),
+        aliases: spec
+            .aliases
+            .iter()
+            .map(|alias| (*alias).to_string())
+            .collect(),
+        tools,
+    })
+}
+
+fn resolve_agent_profile_spec(agent: &str) -> Option<&'static AgentProfileSpec> {
+    let requested = agent.trim();
+    if requested.is_empty() {
+        return None;
+    }
+
+    let canonical = canonical_tool_token(requested);
+    AGENT_PROFILE_SPECS.iter().find(|spec| {
+        canonical_tool_token(spec.name) == canonical
+            || spec
+                .aliases
+                .iter()
+                .any(|alias| canonical_tool_token(alias) == canonical)
+    })
+}
+
 fn execute_skill(input: SkillInput) -> Result<SkillOutput, String> {
     let skill = load_skill(&input.skill, input.args)?;
 
@@ -2386,8 +2599,14 @@ fn normalize_subagent_type(subagent_type: Option<&str>) -> String {
         "verification" | "verificationagent" | "verify" | "verifier" => {
             String::from("Verification")
         }
-        "simcoeaiguide" | "simcoeaiguideagent" | "guide" => String::from("simcoe-ai-guide"),
-        "statusline" | "statuslinesetup" => String::from("statusline-setup"),
+        "simcoeaiguide"
+        | "simcoeaiguideagent"
+        | "claudecodeguide"
+        | "claudecodeguideagent"
+        | "guide" => String::from("simcoe-ai-guide"),
+        "statusline" | "statuslinesetup" | "statuslinesetupagent" => {
+            String::from("statusline-setup")
+        }
         _ => trimmed.to_string(),
     }
 }
@@ -3203,7 +3422,8 @@ mod tests {
 
     use super::{
         agent_permission_policy, allowed_tools_for_subagent, execute_agent_with_spawn,
-        execute_tool, final_assistant_text, list_skills, load_skill, mvp_tool_specs,
+        execute_tool, final_assistant_text, list_agent_profiles, list_agent_tasks, list_skills,
+        load_agent_profile, load_agent_task, load_skill, mvp_tool_specs,
         persist_agent_terminal_state, AgentInput, AgentJob, SubagentToolExecutor,
     };
     use runtime::{ApiRequest, AssistantEvent, ConversationRuntime, RuntimeError, Session};
@@ -3928,6 +4148,79 @@ mod tests {
     }
 
     #[test]
+    fn agent_tasks_can_be_listed_and_loaded() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let dir = temp_path("agent-listing");
+        std::env::set_var("CLAWD_AGENT_STORE", &dir);
+
+        let first = execute_agent_with_spawn(
+            AgentInput {
+                description: "Audit the repo".to_string(),
+                prompt: "Inspect the working tree".to_string(),
+                subagent_type: Some("Explore".to_string()),
+                name: Some("audit-repo".to_string()),
+                model: None,
+            },
+            |job| {
+                persist_agent_terminal_state(
+                    &job.manifest,
+                    "completed",
+                    Some("Repo looks clean"),
+                    None,
+                )
+            },
+        )
+        .expect("first agent should succeed");
+
+        let second = execute_agent_with_spawn(
+            AgentInput {
+                description: "Verify release".to_string(),
+                prompt: "Run verification".to_string(),
+                subagent_type: Some("Verification".to_string()),
+                name: Some("verify-release".to_string()),
+                model: None,
+            },
+            |job| {
+                persist_agent_terminal_state(
+                    &job.manifest,
+                    "failed",
+                    None,
+                    Some(String::from("tests failed")),
+                )
+            },
+        )
+        .expect("second agent should succeed");
+
+        let tasks = list_agent_tasks().expect("tasks should load");
+        assert_eq!(tasks.len(), 2);
+        assert!(tasks.iter().any(|task| task.agent_id == first.agent_id));
+        assert!(tasks.iter().any(|task| task.agent_id == second.agent_id));
+
+        let loaded = load_agent_task(&first.agent_id).expect("exact id should load");
+        assert_eq!(loaded.task.name, "audit-repo");
+        assert_eq!(loaded.task.status, "completed");
+        assert!(loaded
+            .output
+            .as_deref()
+            .expect("output should exist")
+            .contains("Repo looks clean"));
+
+        let loaded_by_prefix =
+            load_agent_task(&second.agent_id[..20]).expect("unique prefix should load");
+        assert_eq!(loaded_by_prefix.task.name, "verify-release");
+        assert_eq!(loaded_by_prefix.task.status, "failed");
+        assert_eq!(loaded_by_prefix.task.error.as_deref(), Some("tests failed"));
+
+        let missing = load_agent_task("missing-task").expect_err("unknown task should fail");
+        assert!(missing.contains("unknown task"));
+
+        std::env::remove_var("CLAWD_AGENT_STORE");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn agent_tool_subset_mapping_is_expected() {
         let general = allowed_tools_for_subagent("general-purpose");
         assert!(general.contains("bash"));
@@ -3948,6 +4241,33 @@ mod tests {
         assert!(verification.contains("bash"));
         assert!(verification.contains("PowerShell"));
         assert!(!verification.contains("write_file"));
+    }
+
+    #[test]
+    fn agent_profiles_list_and_resolve_aliases() {
+        let profiles = list_agent_profiles();
+        assert_eq!(profiles.len(), 6);
+        assert!(profiles
+            .iter()
+            .any(|profile| profile.name == "general-purpose"));
+        assert!(profiles.iter().any(|profile| profile.name == "Explore"));
+        assert!(profiles.iter().any(|profile| profile.name == "Plan"));
+        assert!(profiles
+            .iter()
+            .any(|profile| profile.name == "Verification"));
+
+        let explore = load_agent_profile("explorer").expect("explore alias should resolve");
+        assert_eq!(explore.name, "Explore");
+        assert!(explore.tools.contains(&String::from("read_file")));
+        assert!(!explore.tools.contains(&String::from("bash")));
+
+        let guide = load_agent_profile("claudeCodeGuideAgent").expect("guide alias should resolve");
+        assert_eq!(guide.name, "simcoe-ai-guide");
+        assert!(guide.tools.contains(&String::from("SendUserMessage")));
+
+        let missing =
+            load_agent_profile("missing-profile").expect_err("unknown profile should fail");
+        assert!(missing.contains("unknown agent profile"));
     }
 
     #[derive(Debug)]
@@ -4173,6 +4493,9 @@ mod tests {
 
     #[test]
     fn bash_tool_reports_success_exit_failure_timeout_and_background() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let success = execute_tool("bash", &json!({ "command": "printf 'hello'" }))
             .expect("bash should succeed");
         let success_output: serde_json::Value = serde_json::from_str(&success).expect("json");

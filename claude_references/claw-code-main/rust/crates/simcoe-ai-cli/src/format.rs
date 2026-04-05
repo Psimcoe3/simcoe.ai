@@ -5,11 +5,17 @@ use std::process::Command;
 
 use crate::args::brand_model_name;
 use commands::render_slash_command_help;
+use compat_harness::{
+    load_plugin_catalog_from_cwd, load_plugin_surface_from_cwd, PluginSurfaceKind,
+};
 use runtime::{
     ConfigLoader, ConfigSource, ContentBlock, McpClientAuth, McpClientBootstrap,
     McpClientTransport, ProjectContext, Session, TokenUsage,
 };
-use tools::{list_skills, load_skill};
+use tools::{
+    list_agent_profiles, list_agent_tasks, list_skills, load_agent_profile, load_agent_task,
+    load_skill,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct StatusContext {
@@ -470,6 +476,192 @@ pub(crate) fn render_mcp_report(
     ))
 }
 
+pub(crate) fn render_agents_report(
+    agent: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let requested = agent.map(str::trim).filter(|value| !value.is_empty());
+    let tasks = list_agent_tasks().map_err(io::Error::other)?;
+
+    if let Some(requested) = requested {
+        let profile = load_agent_profile(requested)
+            .map_err(|error| io::Error::new(io::ErrorKind::NotFound, error))?;
+        let matching_tasks = tasks
+            .iter()
+            .filter(|task| task.subagent_type.as_deref() == Some(profile.name.as_str()))
+            .collect::<Vec<_>>();
+        let running = matching_tasks
+            .iter()
+            .filter(|task| task.status == "running")
+            .count();
+        let completed = matching_tasks
+            .iter()
+            .filter(|task| task.status == "completed")
+            .count();
+        let failed = matching_tasks
+            .iter()
+            .filter(|task| task.status == "failed")
+            .count();
+        let aliases = if profile.aliases.is_empty() {
+            String::from("<none>")
+        } else {
+            profile.aliases.join(", ")
+        };
+        let tools = profile
+            .tools
+            .iter()
+            .enumerate()
+            .map(|(index, tool)| format!("  {:>2}. {tool}", index + 1))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let recent_tasks = if matching_tasks.is_empty() {
+            String::from("  None")
+        } else {
+            matching_tasks
+                .iter()
+                .take(5)
+                .map(|task| {
+                    format!(
+                        "  {id:<24}{status:<11}{name:<24}{created}",
+                        id = task.agent_id,
+                        status = task.status,
+                        name = task.name,
+                        created = task.created_at,
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        return Ok(format!(
+            "Agent\n  Name             {name}\n  Description      {description}\n  Aliases          {aliases}\n  Allowed tools    {tool_count}\n  Running          {running}\n  Completed        {completed}\n  Failed           {failed}\n\nTools\n{tools}\n\nRecent tasks\n{recent_tasks}",
+            name = profile.name,
+            description = profile.description,
+            aliases = aliases,
+            tool_count = profile.tools.len(),
+            running = running,
+            completed = completed,
+            failed = failed,
+            tools = tools,
+            recent_tasks = recent_tasks,
+        ));
+    }
+
+    let profiles = list_agent_profiles();
+    if profiles.is_empty() {
+        return Ok(String::from(
+            "Agents\n  Available        0\n  Usage            /agents <name>\n  Detail           no built-in sub-agent profiles found",
+        ));
+    }
+
+    let profile_count = profiles.len();
+    let name_width = profiles
+        .iter()
+        .map(|profile| profile.name.len())
+        .max()
+        .unwrap_or(6)
+        + 2;
+    let entries = profiles
+        .into_iter()
+        .map(|profile| {
+            let recent = tasks
+                .iter()
+                .filter(|task| task.subagent_type.as_deref() == Some(profile.name.as_str()))
+                .count();
+            format!(
+                "  {name:<name_width$}{tool_count:>2} tools  {recent:>2} recent  {description}",
+                name = profile.name,
+                tool_count = profile.tool_count,
+                recent = recent,
+                description = profile.description,
+                name_width = name_width,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Ok(format!(
+        "Agents\n  Available        {profile_count}\n  Persisted tasks  {task_count}\n  Usage            /agents <name>\n\nProfiles\n{entries}",
+        task_count = tasks.len(),
+        entries = entries,
+    ))
+}
+
+pub(crate) fn render_plugin_report(
+    surface: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let requested = surface.map(str::trim).filter(|value| !value.is_empty());
+
+    if let Some(requested) = requested {
+        let surface = load_plugin_surface_from_cwd(requested)
+            .map_err(|error| io::Error::new(io::ErrorKind::NotFound, error))?;
+        let source_hints = surface
+            .source_hints
+            .iter()
+            .map(|hint| format!("  - {hint}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Ok(format!(
+            "Plugin\n  Name             {name}\n  Kind             {kind}\n  Rust status      planned only\n  Archived files   {archived_files}\n  Summary          {summary}\n\nSource hints\n{source_hints}",
+            name = surface.name,
+            kind = surface.kind.as_str(),
+            archived_files = surface.archived_file_count,
+            summary = surface.summary,
+            source_hints = source_hints,
+        ));
+    }
+
+    let catalog = load_plugin_catalog_from_cwd()?;
+    let command_count = catalog
+        .surfaces
+        .iter()
+        .filter(|surface| matches!(surface.kind, PluginSurfaceKind::Command))
+        .count();
+    let module_surface_count = catalog
+        .surfaces
+        .iter()
+        .filter(|surface| matches!(surface.kind, PluginSurfaceKind::Module))
+        .count();
+    let command_width = catalog
+        .surfaces
+        .iter()
+        .filter(|surface| matches!(surface.kind, PluginSurfaceKind::Command))
+        .map(|surface| surface.name.len())
+        .max()
+        .unwrap_or(7)
+        + 2;
+    let commands = catalog
+        .surfaces
+        .iter()
+        .filter(|surface| matches!(surface.kind, PluginSurfaceKind::Command))
+        .map(|surface| {
+            format!(
+                "  {name:<command_width$}{count:>2} files  {summary}",
+                name = surface.name,
+                count = surface.archived_file_count,
+                summary = surface.summary,
+                command_width = command_width,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let modules = catalog
+        .surfaces
+        .iter()
+        .filter(|surface| matches!(surface.kind, PluginSurfaceKind::Module))
+        .map(|surface| format!("  {}", surface.source_hints.join(", ")))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Ok(format!(
+        "Plugin\n  Archive           {archive}\n  Package           {package}\n  Rust status       planned only\n  Runtime support   no plugin loader, install flow, or marketplace support\n  Archived commands {command_count}\n  Archived modules  {module_count}\n  Visible modules   {module_surface_count}\n  Usage             /plugin <name>\n\nCommands\n{commands}\n\nModules\n{modules}",
+        archive = catalog.archive_name,
+        package = catalog.package_name,
+        module_count = catalog.module_count,
+        commands = commands,
+        modules = modules,
+    ))
+}
+
 pub(crate) fn render_skills_report(
     skill: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
@@ -540,6 +732,71 @@ Prompt
 Entries
 {entries}",
         count = skill_count,
+        entries = entries,
+    ))
+}
+
+pub(crate) fn render_tasks_report(
+    task: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let requested = task.map(str::trim).filter(|value| !value.is_empty());
+
+    if let Some(requested) = requested {
+        let loaded = load_agent_task(requested)
+            .map_err(|error| io::Error::new(io::ErrorKind::NotFound, error))?;
+        let task = loaded.task;
+        let output = loaded
+            .output
+            .unwrap_or_else(|| String::from("<missing output file>"));
+        return Ok(format!(
+            "Task\n  Id               {id}\n  Name             {name}\n  Status           {status}\n  Type             {kind}\n  Model            {model}\n  Created          {created}\n  Completed        {completed}\n  Output file      {output_file}\n  Manifest file    {manifest_file}\n  Error            {error}\n\nOutput\n{output}",
+            id = task.agent_id,
+            name = task.name,
+            status = task.status,
+            kind = task.subagent_type.unwrap_or_else(|| "unknown".to_string()),
+            model = task.model.unwrap_or_else(|| "default".to_string()),
+            created = task.created_at,
+            completed = task.completed_at.unwrap_or_else(|| "<running>".to_string()),
+            output_file = task.output_file,
+            manifest_file = task.manifest_file,
+            error = task.error.unwrap_or_else(|| "<none>".to_string()),
+            output = output.trim_end(),
+        ));
+    }
+
+    let tasks = list_agent_tasks().map_err(io::Error::other)?;
+    if tasks.is_empty() {
+        return Ok(String::from(
+            "Tasks\n  Persisted tasks   0\n  Usage            /tasks <id>\n  Detail           no persisted sub-agent tasks found",
+        ));
+    }
+
+    let task_count = tasks.len();
+    let running = tasks.iter().filter(|task| task.status == "running").count();
+    let completed = tasks
+        .iter()
+        .filter(|task| task.status == "completed")
+        .count();
+    let failed = tasks.iter().filter(|task| task.status == "failed").count();
+    let name_width = tasks.iter().map(|task| task.name.len()).max().unwrap_or(4) + 2;
+    let entries = tasks
+        .into_iter()
+        .map(|task| {
+            format!(
+                "  {id:<24}{status:<11}{kind:<14}{name:<name_width$}{created}",
+                id = task.agent_id,
+                status = task.status,
+                kind = task.subagent_type.unwrap_or_else(|| "unknown".to_string()),
+                name = task.name,
+                name_width = name_width,
+                created = task.created_at,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Ok(format!(
+        "Tasks\n  Persisted tasks   {task_count}\n  Running          {running}\n  Completed        {completed}\n  Failed           {failed}\n  Usage            /tasks <id>\n\nEntries\n{entries}",
         entries = entries,
     ))
 }

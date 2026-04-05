@@ -27,9 +27,10 @@ use commands::{
 };
 use compat_harness::{extract_manifest, UpstreamPaths};
 use format::{
-    format_compact_report, format_cost_report, format_status_report, render_config_report,
-    render_diff_report, render_hooks_report, render_mcp_report, render_memory_report,
-    render_repl_help, render_skills_report, render_version_report, status_context, StatusUsage,
+    format_compact_report, format_cost_report, format_status_report, render_agents_report,
+    render_config_report, render_diff_report, render_hooks_report, render_mcp_report,
+    render_memory_report, render_plugin_report, render_repl_help, render_skills_report,
+    render_tasks_report, render_version_report, status_context, StatusUsage,
 };
 use init::initialize_repo;
 use render::{MarkdownStreamState, TerminalRenderer};
@@ -539,9 +540,21 @@ fn run_resume_command(
             session: session.clone(),
             message: Some(render_memory_report()?),
         }),
+        SlashCommand::Agents { agent } => Ok(ResumeCommandOutcome {
+            session: session.clone(),
+            message: Some(render_agents_report(agent.as_deref())?),
+        }),
+        SlashCommand::Plugin { surface } => Ok(ResumeCommandOutcome {
+            session: session.clone(),
+            message: Some(render_plugin_report(surface.as_deref())?),
+        }),
         SlashCommand::Skills { skill } => Ok(ResumeCommandOutcome {
             session: session.clone(),
             message: Some(render_skills_report(skill.as_deref())?),
+        }),
+        SlashCommand::Tasks { task } => Ok(ResumeCommandOutcome {
+            session: session.clone(),
+            message: Some(render_tasks_report(task.as_deref())?),
         }),
         SlashCommand::Init => Ok(ResumeCommandOutcome {
             session: session.clone(),
@@ -1693,9 +1706,9 @@ mod tests {
     use super::format::{
         format_compact_report, format_cost_report, format_model_report, format_model_switch_report,
         format_permissions_report, format_permissions_switch_report, format_resume_report,
-        format_status_report, render_config_report, render_hooks_report, render_mcp_report,
-        render_memory_report, render_repl_help, render_skills_report, status_context,
-        StatusContext, StatusUsage,
+        format_status_report, render_agents_report, render_config_report, render_hooks_report,
+        render_mcp_report, render_memory_report, render_plugin_report, render_repl_help,
+        render_skills_report, render_tasks_report, status_context, StatusContext, StatusUsage,
     };
     use super::{
         filter_tool_specs, format_tool_call_start, format_tool_result, oauth_config_for_login,
@@ -1974,7 +1987,10 @@ mod tests {
         assert!(help.contains("/hooks [pre|post]"));
         assert!(help.contains("/mcp [server]"));
         assert!(help.contains("/memory"));
+        assert!(help.contains("/agents [name]"));
+        assert!(help.contains("/plugin [name]"));
         assert!(help.contains("/skills [skill]"));
+        assert!(help.contains("/tasks [id]"));
         assert!(help.contains("/review [context]"));
         assert!(help.contains("/plan [task]"));
         assert!(help.contains("/init"));
@@ -1995,9 +2011,34 @@ mod tests {
             names,
             vec![
                 "help", "status", "compact", "clear", "cost", "config", "hooks", "mcp", "memory",
-                "skills", "init", "diff", "version", "export",
+                "agents", "plugin", "skills", "tasks", "init", "diff", "version", "export",
             ]
         );
+    }
+
+    fn write_plugin_snapshots(repo_root: &std::path::Path) {
+        let reference_data = repo_root.join("src/reference_data");
+        let subsystems = reference_data.join("subsystems");
+        fs::create_dir_all(&subsystems).expect("create snapshot dirs");
+        fs::write(
+            reference_data.join("commands_snapshot.json"),
+            r#"[
+  {"name":"plugin","source_hint":"commands/plugin/index.tsx","responsibility":"plugin index"},
+  {"name":"plugin","source_hint":"commands/plugin/plugin.tsx","responsibility":"plugin flow"},
+  {"name":"reload-plugins","source_hint":"commands/reload-plugins/index.ts","responsibility":"reload index"}
+]"#,
+        )
+        .expect("write commands snapshot");
+        fs::write(
+            subsystems.join("plugins.json"),
+            r#"{
+  "archive_name": "plugins",
+  "package_name": "plugins",
+  "module_count": 2,
+  "sample_files": ["plugins/builtinPlugins.ts", "plugins/bundled/index.ts"]
+}"#,
+        )
+        .expect("write plugin snapshot");
     }
 
     #[test]
@@ -2277,6 +2318,373 @@ mod tests {
         match original_codex_home {
             Some(value) => std::env::set_var("CODEX_HOME", value),
             None => std::env::remove_var("CODEX_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn agents_report_lists_built_in_profiles_and_recent_tasks() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("agents-report");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let agent_store = repo_root.join(".clawd-agents");
+        let manifest_path_a = agent_store.join("agent-123.json");
+        let manifest_path_b = agent_store.join("agent-456.json");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&agent_store).expect("create agent store");
+        fs::write(
+            &manifest_path_a,
+            format!(
+                r#"{{
+  "agentId": "agent-123",
+  "name": "audit-repo",
+  "description": "Audit the repo",
+  "subagentType": "Explore",
+  "model": "simcoe-opus-4-6",
+  "status": "completed",
+  "outputFile": "{}",
+  "manifestFile": "{}",
+  "createdAt": "2026-04-05T00:00:00Z",
+  "startedAt": "2026-04-05T00:00:00Z",
+  "completedAt": "2026-04-05T00:01:00Z"
+}}"#,
+                agent_store.join("agent-123.md").display(),
+                manifest_path_a.display(),
+            ),
+        )
+        .expect("write explore manifest");
+        fs::write(
+            &manifest_path_b,
+            format!(
+                r#"{{
+  "agentId": "agent-456",
+  "name": "verify-release",
+  "description": "Verify the release",
+  "subagentType": "Verification",
+  "model": "simcoe-sonnet-4-6",
+  "status": "running",
+  "outputFile": "{}",
+  "manifestFile": "{}",
+  "createdAt": "2026-04-05T00:02:00Z",
+  "startedAt": "2026-04-05T00:02:00Z"
+}}"#,
+                agent_store.join("agent-456.md").display(),
+                manifest_path_b.display(),
+            ),
+        )
+        .expect("write verification manifest");
+
+        let original_agent_store = std::env::var("CLAWD_AGENT_STORE").ok();
+        let original_cwd = set_test_cwd(&nested_cwd);
+        std::env::set_var("CLAWD_AGENT_STORE", &agent_store);
+
+        let report = render_agents_report(None).expect("agents report should render");
+        assert!(report.contains("Agents"));
+        assert!(report.contains("Available        6"));
+        assert!(report.contains("Persisted tasks  2"));
+        assert!(report.contains("Explore"));
+        assert!(report.contains("Read-heavy repo exploration and research sub-agent."));
+        assert!(report.contains("Verification"));
+        assert!(report.contains("Validation-oriented sub-agent with shell access."));
+        assert!(report.contains("1 recent"));
+
+        match original_agent_store {
+            Some(value) => std::env::set_var("CLAWD_AGENT_STORE", value),
+            None => std::env::remove_var("CLAWD_AGENT_STORE"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn agents_report_renders_selected_profile_details() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("agents-selected");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let agent_store = repo_root.join(".clawd-agents");
+        let manifest_path_a = agent_store.join("agent-123.json");
+        let manifest_path_b = agent_store.join("agent-999.json");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&agent_store).expect("create agent store");
+        fs::write(
+            &manifest_path_a,
+            format!(
+                r#"{{
+  "agentId": "agent-123",
+  "name": "audit-repo",
+  "description": "Audit the repo",
+  "subagentType": "Explore",
+  "model": "simcoe-opus-4-6",
+  "status": "completed",
+  "outputFile": "{}",
+  "manifestFile": "{}",
+  "createdAt": "2026-04-05T00:00:00Z",
+  "startedAt": "2026-04-05T00:00:00Z",
+  "completedAt": "2026-04-05T00:01:00Z"
+}}"#,
+                agent_store.join("agent-123.md").display(),
+                manifest_path_a.display(),
+            ),
+        )
+        .expect("write completed explore manifest");
+        fs::write(
+            &manifest_path_b,
+            format!(
+                r#"{{
+  "agentId": "agent-999",
+  "name": "scan-docs",
+  "description": "Scan docs",
+  "subagentType": "Explore",
+  "model": "simcoe-sonnet-4-6",
+  "status": "running",
+  "outputFile": "{}",
+  "manifestFile": "{}",
+  "createdAt": "2026-04-05T00:05:00Z",
+  "startedAt": "2026-04-05T00:05:00Z"
+}}"#,
+                agent_store.join("agent-999.md").display(),
+                manifest_path_b.display(),
+            ),
+        )
+        .expect("write running explore manifest");
+
+        let original_agent_store = std::env::var("CLAWD_AGENT_STORE").ok();
+        let original_cwd = set_test_cwd(&nested_cwd);
+        std::env::set_var("CLAWD_AGENT_STORE", &agent_store);
+
+        let report =
+            render_agents_report(Some("explorer")).expect("selected agents report should render");
+        assert!(report.contains("Agent"));
+        assert!(report.contains("Name             Explore"));
+        assert!(report.contains("Aliases          explore, explorer, exploreagent"));
+        assert!(report.contains("Allowed tools    8"));
+        assert!(report.contains("Running          1"));
+        assert!(report.contains("Completed        1"));
+        assert!(report.contains("Failed           0"));
+        assert!(report.contains("read_file"));
+        assert!(report.contains("agent-123"));
+        assert!(report.contains("agent-999"));
+
+        match original_agent_store {
+            Some(value) => std::env::set_var("CLAWD_AGENT_STORE", value),
+            None => std::env::remove_var("CLAWD_AGENT_STORE"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn plugin_report_lists_archived_plugin_surfaces() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("plugin-report");
+        let nested_cwd = repo_root.join("rust");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        write_plugin_snapshots(&repo_root);
+
+        let original_cwd = set_test_cwd(&nested_cwd);
+
+        let report = render_plugin_report(None).expect("plugin report should render");
+        assert!(report.contains("Plugin"));
+        assert!(report.contains("Archive           plugins"));
+        assert!(report.contains("Rust status       planned only"));
+        assert!(report.contains("Archived commands 2"));
+        assert!(report.contains("plugins/builtinPlugins.ts"));
+        assert!(report.contains("reload-plugins"));
+
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn plugin_report_renders_selected_surface() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("plugin-selected");
+        let nested_cwd = repo_root.join("rust");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        write_plugin_snapshots(&repo_root);
+
+        let original_cwd = set_test_cwd(&nested_cwd);
+
+        let report = render_plugin_report(Some("reload-plugins"))
+            .expect("selected plugin report should render");
+        assert!(report.contains("Plugin"));
+        assert!(report.contains("Name             reload-plugins"));
+        assert!(report.contains("Kind             command"));
+        assert!(report.contains("Rust status      planned only"));
+        assert!(report.contains("Archived files   1"));
+        assert!(report.contains("commands/reload-plugins/index.ts"));
+
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn tasks_report_lists_persisted_agent_tasks() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("tasks-report");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let agent_store = repo_root.join(".clawd-agents");
+        let output_path_a = agent_store.join("agent-123.md");
+        let manifest_path_a = agent_store.join("agent-123.json");
+        let output_path_b = agent_store.join("agent-456.md");
+        let manifest_path_b = agent_store.join("agent-456.json");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&agent_store).expect("create agent store");
+        fs::write(
+            &output_path_a,
+            "# Agent Task\n\n## Result\n\n- status: completed\n",
+        )
+        .expect("write completed output");
+        fs::write(
+            &output_path_b,
+            "# Agent Task\n\n## Result\n\n- status: running\n",
+        )
+        .expect("write running output");
+        fs::write(
+            &manifest_path_a,
+            format!(
+                r#"{{
+  "agentId": "agent-123",
+  "name": "audit-repo",
+  "description": "Audit the repo",
+  "subagentType": "Explore",
+  "model": "simcoe-opus-4-6",
+  "status": "completed",
+  "outputFile": "{}",
+  "manifestFile": "{}",
+  "createdAt": "2026-04-05T00:00:00Z",
+  "startedAt": "2026-04-05T00:00:00Z",
+  "completedAt": "2026-04-05T00:01:00Z"
+}}"#,
+                output_path_a.display(),
+                manifest_path_a.display(),
+            ),
+        )
+        .expect("write completed manifest");
+        fs::write(
+            &manifest_path_b,
+            format!(
+                r#"{{
+  "agentId": "agent-456",
+  "name": "verify-release",
+  "description": "Verify the release",
+  "subagentType": "Verification",
+  "model": "simcoe-sonnet-4-6",
+  "status": "running",
+  "outputFile": "{}",
+  "manifestFile": "{}",
+  "createdAt": "2026-04-05T00:02:00Z",
+  "startedAt": "2026-04-05T00:02:00Z"
+}}"#,
+                output_path_b.display(),
+                manifest_path_b.display(),
+            ),
+        )
+        .expect("write running manifest");
+
+        let original_agent_store = std::env::var("CLAWD_AGENT_STORE").ok();
+        let original_cwd = set_test_cwd(&nested_cwd);
+        std::env::set_var("CLAWD_AGENT_STORE", &agent_store);
+
+        let report = render_tasks_report(None).expect("tasks report should render");
+        assert!(report.contains("Tasks"));
+        assert!(report.contains("Persisted tasks   2"));
+        assert!(report.contains("Running          1"));
+        assert!(report.contains("Completed        1"));
+        assert!(report.contains("audit-repo"));
+        assert!(report.contains("verify-release"));
+        assert!(report.contains("agent-123"));
+        assert!(report.contains("agent-456"));
+
+        match original_agent_store {
+            Some(value) => std::env::set_var("CLAWD_AGENT_STORE", value),
+            None => std::env::remove_var("CLAWD_AGENT_STORE"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn tasks_report_renders_selected_agent_task() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("tasks-selected");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let agent_store = repo_root.join(".clawd-agents");
+        let output_path = agent_store.join("agent-789.md");
+        let manifest_path = agent_store.join("agent-789.json");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&agent_store).expect("create agent store");
+        fs::write(
+            &output_path,
+            "# Agent Task\n\n## Result\n\n- status: failed\n\n### Error\n\nnetwork timeout\n",
+        )
+        .expect("write task output");
+        fs::write(
+            &manifest_path,
+            format!(
+                r#"{{
+  "agentId": "agent-789",
+  "name": "ship-audit",
+  "description": "Ship audit",
+  "subagentType": "Explore",
+  "model": "simcoe-opus-4-6",
+  "status": "failed",
+  "outputFile": "{}",
+  "manifestFile": "{}",
+  "createdAt": "2026-04-05T01:00:00Z",
+  "startedAt": "2026-04-05T01:00:00Z",
+  "completedAt": "2026-04-05T01:02:00Z",
+  "error": "network timeout"
+}}"#,
+                output_path.display(),
+                manifest_path.display(),
+            ),
+        )
+        .expect("write task manifest");
+
+        let original_agent_store = std::env::var("CLAWD_AGENT_STORE").ok();
+        let original_cwd = set_test_cwd(&nested_cwd);
+        std::env::set_var("CLAWD_AGENT_STORE", &agent_store);
+
+        let report =
+            render_tasks_report(Some("agent-789")).expect("selected task report should render");
+        assert!(report.contains("Task"));
+        assert!(report.contains("Id               agent-789"));
+        assert!(report.contains("Name             ship-audit"));
+        assert!(report.contains("Status           failed"));
+        assert!(report.contains("Type             Explore"));
+        assert!(report.contains("Error            network timeout"));
+        assert!(report.contains("# Agent Task"));
+        assert!(report.contains("network timeout"));
+
+        match original_agent_store {
+            Some(value) => std::env::set_var("CLAWD_AGENT_STORE", value),
+            None => std::env::remove_var("CLAWD_AGENT_STORE"),
         }
         std::env::set_current_dir(original_cwd).expect("restore cwd");
         let _ = fs::remove_dir_all(repo_root);
@@ -2625,9 +3033,27 @@ mod tests {
         );
         assert_eq!(SlashCommand::parse("/memory"), Some(SlashCommand::Memory));
         assert_eq!(
+            SlashCommand::parse("/agents explorer"),
+            Some(SlashCommand::Agents {
+                agent: Some("explorer".to_string())
+            })
+        );
+        assert_eq!(
+            SlashCommand::parse("/plugin reload-plugins"),
+            Some(SlashCommand::Plugin {
+                surface: Some("reload-plugins".to_string())
+            })
+        );
+        assert_eq!(
             SlashCommand::parse("/skills context-map"),
             Some(SlashCommand::Skills {
                 skill: Some("context-map".to_string())
+            })
+        );
+        assert_eq!(
+            SlashCommand::parse("/tasks agent-123"),
+            Some(SlashCommand::Tasks {
+                task: Some("agent-123".to_string())
             })
         );
         assert_eq!(SlashCommand::parse("/init"), Some(SlashCommand::Init));
@@ -2635,6 +3061,9 @@ mod tests {
 
     #[test]
     fn init_template_mentions_detected_rust_workspace() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let rendered = crate::init::render_init_simcoe_md(std::path::Path::new("."));
         assert!(rendered.contains("# SIMCOE.md"));
         assert!(rendered.contains("cargo clippy --workspace --all-targets -- -D warnings"));

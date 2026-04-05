@@ -120,6 +120,8 @@ version = "0.1.0"
 dependencies = [
  "commands",
  "runtime",
+ "serde",
+ "serde_json",
  "tools",
 ]
 
