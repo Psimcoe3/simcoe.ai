@@ -5,7 +5,10 @@ use std::process::Command;
 
 use crate::args::brand_model_name;
 use commands::render_slash_command_help;
-use runtime::{ConfigLoader, ConfigSource, ContentBlock, ProjectContext, Session, TokenUsage};
+use runtime::{
+    ConfigLoader, ConfigSource, ContentBlock, McpClientAuth, McpClientBootstrap,
+    McpClientTransport, ProjectContext, Session, TokenUsage,
+};
 use tools::{list_skills, load_skill};
 
 #[derive(Debug, Clone)]
@@ -359,6 +362,58 @@ pub(crate) fn render_memory_report() -> Result<String, Box<dyn std::error::Error
     Ok(lines.join("\n"))
 }
 
+pub(crate) fn render_mcp_report(
+    server: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let cwd = env::current_dir()?;
+    let runtime_config = ConfigLoader::default_for(&cwd).load()?;
+    let servers = runtime_config.mcp().servers();
+    let requested = server.map(str::trim).filter(|value| !value.is_empty());
+
+    if let Some(requested) = requested {
+        let (name, config) = servers
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(requested))
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("unknown MCP server: {requested}"),
+                )
+            })?;
+        let bootstrap = McpClientBootstrap::from_scoped_config(name, config);
+        return Ok(render_mcp_server_detail(name, config.scope, &bootstrap));
+    }
+
+    if servers.is_empty() {
+        return Ok(String::from(
+            "MCP\n  Configured servers 0\n  Usage             /mcp <server>\n  Detail            no MCP servers configured",
+        ));
+    }
+
+    let name_width = servers.keys().map(String::len).max().unwrap_or(6) + 2;
+    let entries = servers
+        .iter()
+        .map(|(name, config)| {
+            let bootstrap = McpClientBootstrap::from_scoped_config(name, config);
+            format!(
+                "  {name:<name_width$}{scope:<8}{transport:<14}{target}",
+                name = name,
+                name_width = name_width,
+                scope = config_source_label(config.scope),
+                transport = transport_label(&bootstrap.transport),
+                target = transport_target_summary(&bootstrap.transport),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Ok(format!(
+        "MCP\n  Configured servers {}\n  Usage             /mcp <server>\n\nServers\n{}",
+        servers.len(),
+        entries,
+    ))
+}
+
 pub(crate) fn render_skills_report(
     skill: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
@@ -551,6 +606,107 @@ pub(crate) fn render_last_tool_debug_report(
     }
 
     Ok(lines.join("\n"))
+}
+
+fn config_source_label(source: ConfigSource) -> &'static str {
+    match source {
+        ConfigSource::User => "user",
+        ConfigSource::Project => "project",
+        ConfigSource::Local => "local",
+    }
+}
+
+fn transport_label(transport: &McpClientTransport) -> &'static str {
+    match transport {
+        McpClientTransport::Stdio(_) => "stdio",
+        McpClientTransport::Sse(_) => "sse",
+        McpClientTransport::Http(_) => "http",
+        McpClientTransport::WebSocket(_) => "ws",
+        McpClientTransport::Sdk(_) => "sdk",
+        McpClientTransport::SimcoeAiProxy(_) => "simcoe-ai-proxy",
+    }
+}
+
+fn auth_label(auth: &McpClientAuth) -> &'static str {
+    match auth {
+        McpClientAuth::None => "none",
+        McpClientAuth::OAuth(_) => "oauth",
+    }
+}
+
+fn transport_target_summary(transport: &McpClientTransport) -> String {
+    match transport {
+        McpClientTransport::Stdio(config) => {
+            let args = if config.args.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", config.args.join(" "))
+            };
+            format!("{}{}", config.command, args)
+        }
+        McpClientTransport::Sse(config)
+        | McpClientTransport::Http(config)
+        | McpClientTransport::WebSocket(config) => config.url.clone(),
+        McpClientTransport::Sdk(config) => format!("sdk:{}", config.name),
+        McpClientTransport::SimcoeAiProxy(config) => format!("{} ({})", config.url, config.id),
+    }
+}
+
+fn render_mcp_server_detail(
+    name: &str,
+    scope: ConfigSource,
+    bootstrap: &McpClientBootstrap,
+) -> String {
+    let mut lines = vec![format!(
+        "MCP server\n  Name              {name}\n  Scope             {scope}\n  Transport         {transport}\n  Normalized name   {normalized}\n  Tool prefix       {tool_prefix}\n  Signature         {signature}",
+        name = name,
+        scope = config_source_label(scope),
+        transport = transport_label(&bootstrap.transport),
+        normalized = bootstrap.normalized_name,
+        tool_prefix = bootstrap.tool_prefix,
+        signature = bootstrap.signature.as_deref().unwrap_or("<none>"),
+    )];
+
+    match &bootstrap.transport {
+        McpClientTransport::Stdio(config) => {
+            lines.push(String::from(""));
+            lines.push(format!(
+                "Execution\n  Command           {}\n  Args              {}\n  Env vars          {}",
+                config.command,
+                if config.args.is_empty() {
+                    "<none>".to_string()
+                } else {
+                    config.args.join(" ")
+                },
+                config.env.len(),
+            ));
+        }
+        McpClientTransport::Sse(config)
+        | McpClientTransport::Http(config)
+        | McpClientTransport::WebSocket(config) => {
+            lines.push(String::from(""));
+            lines.push(format!(
+                "Connection\n  Target            {}\n  Auth              {}\n  Headers           {}\n  Headers helper    {}",
+                config.url,
+                auth_label(&config.auth),
+                config.headers.len(),
+                config.headers_helper.as_deref().unwrap_or("<none>"),
+            ));
+        }
+        McpClientTransport::Sdk(config) => {
+            lines.push(String::from(""));
+            lines.push(format!("Connection\n  SDK name          {}", config.name));
+        }
+        McpClientTransport::SimcoeAiProxy(config) => {
+            lines.push(String::from(""));
+            lines.push(format!(
+                "Connection\n  Target            {}\n  Proxy id          {}",
+                config.url, config.id,
+            ));
+        }
+    }
+
+    lines.join("\n")
 }
 
 fn indent_block(value: &str, spaces: usize) -> String {

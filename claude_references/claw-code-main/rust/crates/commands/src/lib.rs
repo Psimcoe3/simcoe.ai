@@ -94,6 +94,12 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         resume_supported: true,
     },
     SlashCommandSpec {
+        name: "mcp",
+        summary: "Inspect configured MCP servers or one server",
+        argument_hint: Some("[server]"),
+        resume_supported: true,
+    },
+    SlashCommandSpec {
         name: "memory",
         summary: "Inspect loaded Simcoe AI instruction memory files",
         argument_hint: None,
@@ -127,6 +133,18 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         name: "bughunter",
         summary: "Inspect the codebase for likely bugs",
         argument_hint: Some("[scope]"),
+        resume_supported: false,
+    },
+    SlashCommandSpec {
+        name: "review",
+        summary: "Review a change, file, or code path for issues",
+        argument_hint: Some("[context]"),
+        resume_supported: false,
+    },
+    SlashCommandSpec {
+        name: "plan",
+        summary: "Generate a practical implementation plan",
+        argument_hint: Some("[task]"),
         resume_supported: false,
     },
     SlashCommandSpec {
@@ -187,6 +205,12 @@ pub enum SlashCommand {
     Bughunter {
         scope: Option<String>,
     },
+    Review {
+        context: Option<String>,
+    },
+    Plan {
+        task: Option<String>,
+    },
     Commit,
     Pr {
         context: Option<String>,
@@ -216,6 +240,9 @@ pub enum SlashCommand {
     },
     Config {
         section: Option<String>,
+    },
+    Mcp {
+        server: Option<String>,
     },
     Memory,
     Skills {
@@ -251,6 +278,12 @@ impl SlashCommand {
             "bughunter" => Self::Bughunter {
                 scope: remainder_after_command(trimmed, command),
             },
+            "review" => Self::Review {
+                context: remainder_after_command(trimmed, command),
+            },
+            "plan" => Self::Plan {
+                task: remainder_after_command(trimmed, command),
+            },
             "commit" => Self::Commit,
             "pr" => Self::Pr {
                 context: remainder_after_command(trimmed, command),
@@ -280,6 +313,9 @@ impl SlashCommand {
             },
             "config" => Self::Config {
                 section: parts.next().map(ToOwned::to_owned),
+            },
+            "mcp" => Self::Mcp {
+                server: remainder_after_command(trimmed, command),
             },
             "memory" => Self::Memory,
             "skills" => Self::Skills {
@@ -377,6 +413,8 @@ pub fn handle_slash_command(
         }),
         SlashCommand::Status
         | SlashCommand::Bughunter { .. }
+        | SlashCommand::Review { .. }
+        | SlashCommand::Plan { .. }
         | SlashCommand::Commit
         | SlashCommand::Pr { .. }
         | SlashCommand::Issue { .. }
@@ -389,6 +427,7 @@ pub fn handle_slash_command(
         | SlashCommand::Cost
         | SlashCommand::Resume { .. }
         | SlashCommand::Config { .. }
+        | SlashCommand::Mcp { .. }
         | SlashCommand::Memory
         | SlashCommand::Skills { .. }
         | SlashCommand::Init
@@ -416,6 +455,18 @@ mod tests {
             SlashCommand::parse("/bughunter runtime"),
             Some(SlashCommand::Bughunter {
                 scope: Some("runtime".to_string())
+            })
+        );
+        assert_eq!(
+            SlashCommand::parse("/review auth flow"),
+            Some(SlashCommand::Review {
+                context: Some("auth flow".to_string())
+            })
+        );
+        assert_eq!(
+            SlashCommand::parse("/plan ship hook runner"),
+            Some(SlashCommand::Plan {
+                task: Some("ship hook runner".to_string())
             })
         );
         assert_eq!(SlashCommand::parse("/commit"), Some(SlashCommand::Commit));
@@ -488,6 +539,12 @@ mod tests {
                 section: Some("env".to_string())
             })
         );
+        assert_eq!(
+            SlashCommand::parse("/mcp remote-server"),
+            Some(SlashCommand::Mcp {
+                server: Some("remote-server".to_string())
+            })
+        );
         assert_eq!(SlashCommand::parse("/memory"), Some(SlashCommand::Memory));
         assert_eq!(
             SlashCommand::parse("/skills"),
@@ -537,15 +594,18 @@ mod tests {
         assert!(help.contains("/cost"));
         assert!(help.contains("/resume <session-path>"));
         assert!(help.contains("/config [env|hooks|model]"));
+        assert!(help.contains("/mcp [server]"));
         assert!(help.contains("/memory"));
         assert!(help.contains("/skills [skill]"));
         assert!(help.contains("/init"));
         assert!(help.contains("/diff"));
         assert!(help.contains("/version"));
+        assert!(help.contains("/review [context]"));
+        assert!(help.contains("/plan [task]"));
         assert!(help.contains("/export [file]"));
         assert!(help.contains("/session [list|switch <session-id>]"));
-        assert_eq!(slash_command_specs().len(), 23);
-        assert_eq!(resume_supported_slash_commands().len(), 12);
+        assert_eq!(slash_command_specs().len(), 26);
+        assert_eq!(resume_supported_slash_commands().len(), 13);
     }
 
     #[test]
@@ -595,6 +655,8 @@ mod tests {
         assert!(
             handle_slash_command("/bughunter", &session, CompactionConfig::default()).is_none()
         );
+        assert!(handle_slash_command("/review", &session, CompactionConfig::default()).is_none());
+        assert!(handle_slash_command("/plan", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/commit", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/pr", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/issue", &session, CompactionConfig::default()).is_none());
@@ -633,6 +695,7 @@ mod tests {
         assert!(
             handle_slash_command("/config env", &session, CompactionConfig::default()).is_none()
         );
+        assert!(handle_slash_command("/mcp", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/skills", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/diff", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/version", &session, CompactionConfig::default()).is_none());

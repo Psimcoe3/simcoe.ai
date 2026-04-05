@@ -14,8 +14,9 @@ use crate::format::{
     format_auto_compaction_notice, format_compact_report, format_cost_report, format_model_report,
     format_model_switch_report, format_permissions_report, format_permissions_switch_report,
     format_resume_report, format_status_report, render_config_report, render_diff_report,
-    render_last_tool_debug_report, render_memory_report, render_repl_help, render_skills_report,
-    render_teleport_report, render_version_report, status_context, StatusUsage,
+    render_last_tool_debug_report, render_mcp_report, render_memory_report, render_repl_help,
+    render_skills_report, render_teleport_report, render_version_report, status_context,
+    StatusUsage,
 };
 use crate::render::{Spinner, TerminalRenderer};
 use crate::session_manager::{
@@ -209,6 +210,14 @@ impl LiveCli {
                 self.run_bughunter(scope.as_deref())?;
                 false
             }
+            commands::SlashCommand::Review { context } => {
+                self.run_review(context.as_deref())?;
+                false
+            }
+            commands::SlashCommand::Plan { task } => {
+                self.run_plan(task.as_deref())?;
+                false
+            }
             commands::SlashCommand::Commit => {
                 self.run_commit()?;
                 true
@@ -247,6 +256,10 @@ impl LiveCli {
             commands::SlashCommand::Resume { session_path } => self.resume_session(session_path)?,
             commands::SlashCommand::Config { section } => {
                 Self::print_config(section.as_deref())?;
+                false
+            }
+            commands::SlashCommand::Mcp { server } => {
+                Self::print_mcp(server.as_deref())?;
                 false
             }
             commands::SlashCommand::Memory => {
@@ -488,6 +501,11 @@ impl LiveCli {
         Ok(())
     }
 
+    fn print_mcp(server: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        println!("{}", render_mcp_report(server)?);
+        Ok(())
+    }
+
     fn print_skills(skill: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", render_skills_report(skill)?);
         Ok(())
@@ -610,6 +628,24 @@ impl LiveCli {
         let scope = scope.unwrap_or("the current repository");
         let prompt = format!(
             "You are /bughunter. Inspect {scope} and identify the most likely bugs or correctness issues. Prioritize concrete findings with file paths, severity, and suggested fixes. Use tools if needed."
+        );
+        println!("{}", self.run_internal_prompt_text(&prompt, true)?);
+        Ok(())
+    }
+
+    fn run_review(&self, context: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        let context = context.unwrap_or("the current change or active code path");
+        let prompt = format!(
+            "You are /review. Review {context}. Prioritize concrete findings with severity, file paths, behavioral regressions, and missing tests. Put findings first. If no significant issues are found, say that explicitly and mention residual risks or test gaps. Use tools if needed."
+        );
+        println!("{}", self.run_internal_prompt_text(&prompt, true)?);
+        Ok(())
+    }
+
+    fn run_plan(&self, task: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        let task = task.unwrap_or("the current repo work");
+        let prompt = format!(
+            "You are /plan. Produce a practical implementation plan for {task}. Keep it concise but actionable. Include goals, ordered steps, main risks, and verification. Use tools if needed."
         );
         println!("{}", self.run_internal_prompt_text(&prompt, true)?);
         Ok(())

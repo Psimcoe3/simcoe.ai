@@ -130,11 +130,12 @@ Evidence:
 ### Rust exists
 Evidence:
 - Shared slash command registry in `rust/crates/commands/src/lib.rs`.
-- Rust slash commands currently cover `help`, `status`, `compact`, `model`, `permissions`, `clear`, `cost`, `resume`, `config`, `memory`, `skills`, `init`, `diff`, `version`, `export`, `session`.
+- Rust slash commands currently cover `help`, `status`, `compact`, `model`, `permissions`, `clear`, `cost`, `resume`, `config`, `mcp`, `memory`, `skills`, `init`, `diff`, `version`, `bughunter`, `review`, `plan`, `commit`, `pr`, `issue`, `ultraplan`, `teleport`, `debug-tool-call`, `export`, `session`.
+- Rust now exposes `/mcp [server]` via `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect configured MCP servers and their derived bootstrap transport details.
 - Main CLI/repl/prompt handling lives in `rust/crates/simcoe-ai-cli/src/main.rs`.
 
 ### Missing or broken in Rust
-- Missing major TS command families: `/agents`, `/hooks`, `/mcp`, `/plugin`, `/plan`, `/review`, `/tasks`, and many others.
+- Missing major TS command families: `/agents`, `/hooks`, `/plugin`, `/tasks`, and many others.
 - No Rust equivalent to TS structured IO / remote transport layers.
 - No TS-style handler decomposition for auth/plugins/MCP/agents.
 

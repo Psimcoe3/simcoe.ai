@@ -28,8 +28,8 @@ use commands::{
 use compat_harness::{extract_manifest, UpstreamPaths};
 use format::{
     format_compact_report, format_cost_report, format_status_report, render_config_report,
-    render_diff_report, render_memory_report, render_repl_help, render_skills_report,
-    render_version_report, status_context, StatusUsage,
+    render_diff_report, render_mcp_report, render_memory_report, render_repl_help,
+    render_skills_report, render_version_report, status_context, StatusUsage,
 };
 use init::initialize_repo;
 use render::{MarkdownStreamState, TerminalRenderer};
@@ -527,6 +527,10 @@ fn run_resume_command(
             session: session.clone(),
             message: Some(render_config_report(section.as_deref())?),
         }),
+        SlashCommand::Mcp { server } => Ok(ResumeCommandOutcome {
+            session: session.clone(),
+            message: Some(render_mcp_report(server.as_deref())?),
+        }),
         SlashCommand::Memory => Ok(ResumeCommandOutcome {
             session: session.clone(),
             message: Some(render_memory_report()?),
@@ -560,6 +564,8 @@ fn run_resume_command(
             })
         }
         SlashCommand::Bughunter { .. }
+        | SlashCommand::Review { .. }
+        | SlashCommand::Plan { .. }
         | SlashCommand::Commit
         | SlashCommand::Pr { .. }
         | SlashCommand::Issue { .. }
@@ -1683,8 +1689,8 @@ mod tests {
     use super::format::{
         format_compact_report, format_cost_report, format_model_report, format_model_switch_report,
         format_permissions_report, format_permissions_switch_report, format_resume_report,
-        format_status_report, render_config_report, render_memory_report, render_repl_help,
-        render_skills_report, status_context, StatusContext, StatusUsage,
+        format_status_report, render_config_report, render_mcp_report, render_memory_report,
+        render_repl_help, render_skills_report, status_context, StatusContext, StatusUsage,
     };
     use super::{
         filter_tool_specs, format_tool_call_start, format_tool_result, oauth_config_for_login,
@@ -1960,8 +1966,11 @@ mod tests {
         assert!(help.contains("/cost"));
         assert!(help.contains("/resume <session-path>"));
         assert!(help.contains("/config [env|hooks|model]"));
+        assert!(help.contains("/mcp [server]"));
         assert!(help.contains("/memory"));
         assert!(help.contains("/skills [skill]"));
+        assert!(help.contains("/review [context]"));
+        assert!(help.contains("/plan [task]"));
         assert!(help.contains("/init"));
         assert!(help.contains("/diff"));
         assert!(help.contains("/version"));
@@ -1979,8 +1988,8 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "help", "status", "compact", "clear", "cost", "config", "memory", "skills", "init",
-                "diff", "version", "export",
+                "help", "status", "compact", "clear", "cost", "config", "mcp", "memory", "skills",
+                "init", "diff", "version", "export",
             ]
         );
     }
@@ -2175,6 +2184,106 @@ mod tests {
         match original_codex_home {
             Some(value) => std::env::set_var("CODEX_HOME", value),
             None => std::env::remove_var("CODEX_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn mcp_report_lists_configured_servers() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("mcp-report");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+        fs::write(
+            config_home.join("settings.json"),
+            r#"{
+                            "mcpServers": {
+                                "stdio-server": {
+                                    "command": "uvx",
+                                    "args": ["mcp-server"]
+                                },
+                                "remote-server": {
+                                    "type": "http",
+                                    "url": "https://example.test/mcp"
+                                }
+                            }
+                        }"#,
+        )
+        .expect("write settings");
+
+        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
+        let original_cwd = set_test_cwd(&nested_cwd);
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+
+        let report = render_mcp_report(None).expect("mcp report should render");
+        assert!(report.contains("MCP"));
+        assert!(report.contains("Configured servers 2"));
+        assert!(report.contains("stdio-server"));
+        assert!(report.contains("remote-server"));
+        assert!(report.contains("https://example.test/mcp"));
+
+        match original_config_home {
+            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
+            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn mcp_report_renders_selected_server_details() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("mcp-selected");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+        fs::write(
+            config_home.join("settings.json"),
+            r#"{
+                            "mcpServers": {
+                                "remote-server": {
+                                    "type": "http",
+                                    "url": "https://example.test/mcp",
+                                    "headers": {"Authorization": "Bearer token"},
+                                    "headersHelper": "helper.sh",
+                                    "oauth": {"clientId": "mcp-client"}
+                                }
+                            }
+                        }"#,
+        )
+        .expect("write settings");
+
+        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
+        let original_cwd = set_test_cwd(&nested_cwd);
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+
+        let report =
+            render_mcp_report(Some("remote-server")).expect("selected mcp report should render");
+        assert!(report.contains("MCP server"));
+        assert!(report.contains("Name              remote-server"));
+        assert!(report.contains("Transport         http"));
+        assert!(report.contains("Target            https://example.test/mcp"));
+        assert!(report.contains("Auth              oauth"));
+        assert!(report.contains("Headers           1"));
+        assert!(report.contains("Headers helper    helper.sh"));
+
+        match original_config_home {
+            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
+            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
         }
         std::env::set_current_dir(original_cwd).expect("restore cwd");
         let _ = fs::remove_dir_all(repo_root);
@@ -2407,6 +2516,12 @@ mod tests {
             SlashCommand::parse("/config env"),
             Some(SlashCommand::Config {
                 section: Some("env".to_string())
+            })
+        );
+        assert_eq!(
+            SlashCommand::parse("/mcp remote-server"),
+            Some(SlashCommand::Mcp {
+                server: Some("remote-server".to_string())
             })
         );
         assert_eq!(SlashCommand::parse("/memory"), Some(SlashCommand::Memory));
