@@ -201,9 +201,9 @@ pub(crate) fn parse_args(args: &[String]) -> Result<CliAction, String> {
 
 pub(crate) fn resolve_model_alias(model: &str) -> &str {
     match model {
-        "opus" | "simcoe-opus" => "claude-opus-4-6",
-        "sonnet" | "simcoe-sonnet" => "claude-sonnet-4-6",
-        "haiku" | "simcoe-haiku" => "claude-haiku-4-5-20251213",
+        "opus" | "simcoe-opus" => "simcoe-opus-4-6",
+        "sonnet" | "simcoe-sonnet" => "simcoe-sonnet-4-6",
+        "haiku" | "simcoe-haiku" => "simcoe-haiku-4-5-20251213",
         _ => model,
     }
 }

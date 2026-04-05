@@ -45,7 +45,7 @@ use serde_json::json;
 use tools::{execute_tool, mvp_tool_specs, ToolSpec};
 use tui::status_bar::StatusBarHandle;
 
-const DEFAULT_MODEL: &str = "claude-opus-4-6";
+const DEFAULT_MODEL: &str = "simcoe-opus-4-6";
 fn max_tokens_for_model(model: &str) -> u32 {
     if model.contains("opus") {
         32_000
@@ -1733,7 +1733,7 @@ mod tests {
             parse_args(&args).expect("args should parse"),
             CliAction::Prompt {
                 prompt: "explain this".to_string(),
-                model: "claude-opus-4-6".to_string(),
+                model: "simcoe-opus-4-6".to_string(),
                 output_format: CliOutputFormat::Json,
                 allowed_tools: None,
                 permission_mode: PermissionMode::DangerFullAccess,
@@ -1753,7 +1753,7 @@ mod tests {
             parse_args(&args).expect("args should parse"),
             CliAction::Prompt {
                 prompt: "explain this".to_string(),
-                model: "claude-opus-4-6".to_string(),
+                model: "simcoe-opus-4-6".to_string(),
                 output_format: CliOutputFormat::Text,
                 allowed_tools: None,
                 permission_mode: PermissionMode::DangerFullAccess,
@@ -1763,11 +1763,11 @@ mod tests {
 
     #[test]
     fn resolves_known_model_aliases() {
-        assert_eq!(resolve_model_alias("simcoe-opus"), "claude-opus-4-6");
-        assert_eq!(resolve_model_alias("simcoe-sonnet"), "claude-sonnet-4-6");
+        assert_eq!(resolve_model_alias("simcoe-opus"), "simcoe-opus-4-6");
+        assert_eq!(resolve_model_alias("simcoe-sonnet"), "simcoe-sonnet-4-6");
         assert_eq!(
             resolve_model_alias("simcoe-haiku"),
-            "claude-haiku-4-5-20251213"
+            "simcoe-haiku-4-5-20251213"
         );
         assert_eq!(resolve_model_alias("simcoe-custom"), "simcoe-custom");
     }
