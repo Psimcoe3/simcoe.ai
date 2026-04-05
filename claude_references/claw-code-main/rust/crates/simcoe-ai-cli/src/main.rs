@@ -28,8 +28,8 @@ use commands::{
 use compat_harness::{extract_manifest, UpstreamPaths};
 use format::{
     format_compact_report, format_cost_report, format_status_report, render_config_report,
-    render_diff_report, render_memory_report, render_repl_help, render_version_report,
-    status_context, StatusUsage,
+    render_diff_report, render_memory_report, render_repl_help, render_skills_report,
+    render_version_report, status_context, StatusUsage,
 };
 use init::initialize_repo;
 use render::{MarkdownStreamState, TerminalRenderer};
@@ -530,6 +530,10 @@ fn run_resume_command(
         SlashCommand::Memory => Ok(ResumeCommandOutcome {
             session: session.clone(),
             message: Some(render_memory_report()?),
+        }),
+        SlashCommand::Skills { skill } => Ok(ResumeCommandOutcome {
+            session: session.clone(),
+            message: Some(render_skills_report(skill.as_deref())?),
         }),
         SlashCommand::Init => Ok(ResumeCommandOutcome {
             session: session.clone(),
@@ -1662,7 +1666,7 @@ mod tests {
         format_compact_report, format_cost_report, format_model_report, format_model_switch_report,
         format_permissions_report, format_permissions_switch_report, format_resume_report,
         format_status_report, render_config_report, render_memory_report, render_repl_help,
-        status_context, StatusContext, StatusUsage,
+        render_skills_report, status_context, StatusContext, StatusUsage,
     };
     use super::{
         filter_tool_specs, format_tool_call_start, format_tool_result, oauth_config_for_login,
@@ -1673,7 +1677,9 @@ mod tests {
     use api::{MessageResponse, OutputContentBlock, Usage};
     use runtime::{AssistantEvent, ContentBlock, ConversationMessage, MessageRole, PermissionMode};
     use serde_json::json;
+    use std::fs;
     use std::path::PathBuf;
+    use std::sync::{Mutex, OnceLock};
 
     #[test]
     fn defaults_to_repl_when_no_args() {
@@ -1932,6 +1938,7 @@ mod tests {
         assert!(help.contains("/resume <session-path>"));
         assert!(help.contains("/config [env|hooks|model]"));
         assert!(help.contains("/memory"));
+        assert!(help.contains("/skills [skill]"));
         assert!(help.contains("/init"));
         assert!(help.contains("/diff"));
         assert!(help.contains("/version"));
@@ -1949,10 +1956,23 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "help", "status", "compact", "clear", "cost", "config", "memory", "init", "diff",
-                "version", "export",
+                "help", "status", "compact", "clear", "cost", "config", "memory", "skills", "init",
+                "diff", "version", "export",
             ]
         );
+    }
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn temp_path(name: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time should be monotonic")
+            .as_nanos();
+        std::env::temp_dir().join(format!("claw-cli-{name}-{nanos}"))
     }
 
     #[test]
@@ -2099,6 +2119,76 @@ mod tests {
     }
 
     #[test]
+    fn skills_report_lists_local_skills() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let codex_home = temp_path("skills-report");
+        let help_dir = codex_home.join("skills").join("help");
+        let review_dir = codex_home.join("skills").join("review");
+        fs::create_dir_all(&help_dir).expect("create help skill dir");
+        fs::create_dir_all(&review_dir).expect("create review skill dir");
+        fs::write(
+            help_dir.join("SKILL.md"),
+            "description: Show REPL help\n\n# Help\n",
+        )
+        .expect("write help skill prompt");
+        fs::write(
+            review_dir.join("SKILL.md"),
+            "description: Review the current change\n\n# Review\n",
+        )
+        .expect("write review skill prompt");
+
+        let original_codex_home = std::env::var("CODEX_HOME").ok();
+        std::env::set_var("CODEX_HOME", &codex_home);
+
+        let report = render_skills_report(None).expect("skills report should render");
+        assert!(report.contains("Skills"));
+        assert!(report.contains("Available        2"));
+        assert!(report.contains("help"));
+        assert!(report.contains("Show REPL help"));
+        assert!(report.contains("review"));
+        assert!(report.contains("Review the current change"));
+
+        match original_codex_home {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+        let _ = fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
+    fn skills_report_renders_selected_skill_prompt() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let codex_home = temp_path("skills-selected");
+        let skill_dir = codex_home.join("skills").join("context-map");
+        fs::create_dir_all(&skill_dir).expect("create skill dir");
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "description: Map relevant files\n\n# Context Map\nPrompt text\n",
+        )
+        .expect("write skill prompt");
+
+        let original_codex_home = std::env::var("CODEX_HOME").ok();
+        std::env::set_var("CODEX_HOME", &codex_home);
+
+        let report =
+            render_skills_report(Some("context-map")).expect("selected skill report should render");
+        assert!(report.contains("Skill"));
+        assert!(report.contains("Name             context-map"));
+        assert!(report.contains("Description      Map relevant files"));
+        assert!(report.contains("Prompt text"));
+
+        match original_codex_home {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+        let _ = fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
     fn config_report_uses_sectioned_layout() {
         let report = render_config_report(None).expect("config report should render");
         assert!(report.contains("Config"));
@@ -2173,6 +2263,12 @@ mod tests {
             })
         );
         assert_eq!(SlashCommand::parse("/memory"), Some(SlashCommand::Memory));
+        assert_eq!(
+            SlashCommand::parse("/skills context-map"),
+            Some(SlashCommand::Skills {
+                skill: Some("context-map".to_string())
+            })
+        );
         assert_eq!(SlashCommand::parse("/init"), Some(SlashCommand::Init));
     }
 

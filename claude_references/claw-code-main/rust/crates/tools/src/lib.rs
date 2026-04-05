@@ -55,6 +55,22 @@ pub struct ToolSpec {
     pub required_permission: PermissionMode,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SkillSummary {
+    pub name: String,
+    pub path: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LoadedSkill {
+    pub skill: String,
+    pub path: String,
+    pub args: Option<String>,
+    pub description: Option<String>,
+    pub prompt: String,
+}
+
 #[must_use]
 #[allow(clippy::too_many_lines)]
 pub fn mvp_tool_specs() -> Vec<ToolSpec> {
@@ -1262,17 +1278,67 @@ fn execute_todo_write(input: TodoWriteInput) -> Result<TodoWriteOutput, String> 
     })
 }
 
-fn execute_skill(input: SkillInput) -> Result<SkillOutput, String> {
-    let skill_path = resolve_skill_path(&input.skill)?;
+pub fn list_skills() -> Vec<SkillSummary> {
+    let mut skills = BTreeMap::<String, SkillSummary>::new();
+
+    for root in skill_roots() {
+        let Ok(entries) = std::fs::read_dir(&root) else {
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path().join("SKILL.md");
+            if !path.exists() {
+                continue;
+            }
+
+            let name = entry.file_name().to_string_lossy().to_string();
+            let key = name.to_ascii_lowercase();
+            if skills.contains_key(&key) {
+                continue;
+            }
+
+            let description = std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|prompt| parse_skill_description(&prompt));
+
+            skills.insert(
+                key,
+                SkillSummary {
+                    name,
+                    path: path.display().to_string(),
+                    description,
+                },
+            );
+        }
+    }
+
+    skills.into_values().collect()
+}
+
+pub fn load_skill(skill: &str, args: Option<String>) -> Result<LoadedSkill, String> {
+    let skill_path = resolve_skill_path(skill)?;
     let prompt = std::fs::read_to_string(&skill_path).map_err(|error| error.to_string())?;
     let description = parse_skill_description(&prompt);
 
-    Ok(SkillOutput {
-        skill: input.skill,
+    Ok(LoadedSkill {
+        skill: skill.to_string(),
         path: skill_path.display().to_string(),
-        args: input.args,
+        args,
         description,
         prompt,
+    })
+}
+
+fn execute_skill(input: SkillInput) -> Result<SkillOutput, String> {
+    let skill = load_skill(&input.skill, input.args)?;
+
+    Ok(SkillOutput {
+        skill: skill.skill,
+        path: skill.path,
+        args: skill.args,
+        description: skill.description,
+        prompt: skill.prompt,
     })
 }
 
@@ -1298,19 +1364,27 @@ fn todo_store_path() -> Result<std::path::PathBuf, String> {
     Ok(cwd.join(".clawd-todos.json"))
 }
 
+fn skill_roots() -> Vec<std::path::PathBuf> {
+    let mut roots = Vec::new();
+    if let Ok(codex_home) = std::env::var("CODEX_HOME") {
+        roots.push(std::path::PathBuf::from(codex_home).join("skills"));
+    }
+
+    let fallback = std::path::PathBuf::from("/home/bellman/.codex/skills");
+    if !roots.iter().any(|root| root == &fallback) {
+        roots.push(fallback);
+    }
+
+    roots
+}
+
 fn resolve_skill_path(skill: &str) -> Result<std::path::PathBuf, String> {
     let requested = skill.trim().trim_start_matches('/').trim_start_matches('$');
     if requested.is_empty() {
         return Err(String::from("skill must not be empty"));
     }
 
-    let mut candidates = Vec::new();
-    if let Ok(codex_home) = std::env::var("CODEX_HOME") {
-        candidates.push(std::path::PathBuf::from(codex_home).join("skills"));
-    }
-    candidates.push(std::path::PathBuf::from("/home/bellman/.codex/skills"));
-
-    for root in candidates {
+    for root in skill_roots() {
         let direct = root.join(requested).join("SKILL.md");
         if direct.exists() {
             return Ok(direct);
@@ -2902,8 +2976,8 @@ mod tests {
 
     use super::{
         agent_permission_policy, allowed_tools_for_subagent, execute_agent_with_spawn,
-        execute_tool, final_assistant_text, mvp_tool_specs, persist_agent_terminal_state,
-        AgentInput, AgentJob, SubagentToolExecutor,
+        execute_tool, final_assistant_text, list_skills, load_skill, mvp_tool_specs,
+        persist_agent_terminal_state, AgentInput, AgentJob, SubagentToolExecutor,
     };
     use runtime::{ApiRequest, AssistantEvent, ConversationRuntime, RuntimeError, Session};
     use serde_json::json;
@@ -3270,6 +3344,79 @@ mod tests {
             .as_str()
             .expect("path")
             .ends_with("/help/SKILL.md"));
+
+        match original_codex_home {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+        let _ = std::fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
+    fn skill_catalog_lists_discovered_local_skills() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let codex_home = temp_path("skills-catalog");
+        let help_dir = codex_home.join("skills").join("help");
+        let review_dir = codex_home.join("skills").join("review");
+        std::fs::create_dir_all(&help_dir).expect("create help skill dir");
+        std::fs::create_dir_all(&review_dir).expect("create review skill dir");
+        std::fs::write(
+            help_dir.join("SKILL.md"),
+            "description: Show REPL help\n\n# Help\n",
+        )
+        .expect("write help skill prompt");
+        std::fs::write(
+            review_dir.join("SKILL.md"),
+            "description: Review the current change\n\n# Review\n",
+        )
+        .expect("write review skill prompt");
+
+        let original_codex_home = std::env::var("CODEX_HOME").ok();
+        std::env::set_var("CODEX_HOME", &codex_home);
+
+        let skills = list_skills();
+        assert_eq!(skills.len(), 2);
+        assert_eq!(skills[0].name, "help");
+        assert_eq!(skills[0].description.as_deref(), Some("Show REPL help"));
+        assert_eq!(skills[1].name, "review");
+        assert_eq!(
+            skills[1].description.as_deref(),
+            Some("Review the current change")
+        );
+
+        match original_codex_home {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+        let _ = std::fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
+    fn load_skill_returns_prompt_metadata() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let codex_home = temp_path("skills-load");
+        let skill_dir = codex_home.join("skills").join("context-map");
+        std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "description: Map relevant files\n\n# Context Map\nPrompt text\n",
+        )
+        .expect("write skill prompt");
+
+        let original_codex_home = std::env::var("CODEX_HOME").ok();
+        std::env::set_var("CODEX_HOME", &codex_home);
+
+        let loaded =
+            load_skill("context-map", Some("thorough".to_string())).expect("skill should load");
+        assert_eq!(loaded.skill, "context-map");
+        assert_eq!(loaded.args.as_deref(), Some("thorough"));
+        assert_eq!(loaded.description.as_deref(), Some("Map relevant files"));
+        assert!(loaded.prompt.contains("Prompt text"));
+        assert!(loaded.path.ends_with("/context-map/SKILL.md"));
 
         match original_codex_home {
             Some(value) => std::env::set_var("CODEX_HOME", value),

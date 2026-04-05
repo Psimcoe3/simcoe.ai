@@ -100,6 +100,12 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         resume_supported: true,
     },
     SlashCommandSpec {
+        name: "skills",
+        summary: "List available local skills or inspect one",
+        argument_hint: Some("[skill]"),
+        resume_supported: true,
+    },
+    SlashCommandSpec {
         name: "init",
         summary: "Create a starter SIMCOE.md for this repo",
         argument_hint: None,
@@ -212,6 +218,9 @@ pub enum SlashCommand {
         section: Option<String>,
     },
     Memory,
+    Skills {
+        skill: Option<String>,
+    },
     Init,
     Diff,
     Version,
@@ -273,6 +282,9 @@ impl SlashCommand {
                 section: parts.next().map(ToOwned::to_owned),
             },
             "memory" => Self::Memory,
+            "skills" => Self::Skills {
+                skill: remainder_after_command(trimmed, command),
+            },
             "init" => Self::Init,
             "diff" => Self::Diff,
             "version" => Self::Version,
@@ -378,6 +390,7 @@ pub fn handle_slash_command(
         | SlashCommand::Resume { .. }
         | SlashCommand::Config { .. }
         | SlashCommand::Memory
+        | SlashCommand::Skills { .. }
         | SlashCommand::Init
         | SlashCommand::Diff
         | SlashCommand::Version
@@ -476,6 +489,16 @@ mod tests {
             })
         );
         assert_eq!(SlashCommand::parse("/memory"), Some(SlashCommand::Memory));
+        assert_eq!(
+            SlashCommand::parse("/skills"),
+            Some(SlashCommand::Skills { skill: None })
+        );
+        assert_eq!(
+            SlashCommand::parse("/skills help"),
+            Some(SlashCommand::Skills {
+                skill: Some("help".to_string())
+            })
+        );
         assert_eq!(SlashCommand::parse("/init"), Some(SlashCommand::Init));
         assert_eq!(SlashCommand::parse("/diff"), Some(SlashCommand::Diff));
         assert_eq!(SlashCommand::parse("/version"), Some(SlashCommand::Version));
@@ -515,13 +538,14 @@ mod tests {
         assert!(help.contains("/resume <session-path>"));
         assert!(help.contains("/config [env|hooks|model]"));
         assert!(help.contains("/memory"));
+        assert!(help.contains("/skills [skill]"));
         assert!(help.contains("/init"));
         assert!(help.contains("/diff"));
         assert!(help.contains("/version"));
         assert!(help.contains("/export [file]"));
         assert!(help.contains("/session [list|switch <session-id>]"));
-        assert_eq!(slash_command_specs().len(), 22);
-        assert_eq!(resume_supported_slash_commands().len(), 11);
+        assert_eq!(slash_command_specs().len(), 23);
+        assert_eq!(resume_supported_slash_commands().len(), 12);
     }
 
     #[test]
@@ -609,6 +633,7 @@ mod tests {
         assert!(
             handle_slash_command("/config env", &session, CompactionConfig::default()).is_none()
         );
+        assert!(handle_slash_command("/skills", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/diff", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/version", &session, CompactionConfig::default()).is_none());
         assert!(

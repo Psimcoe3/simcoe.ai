@@ -1,10 +1,12 @@
 use std::env;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::args::brand_model_name;
 use commands::render_slash_command_help;
 use runtime::{ConfigLoader, ConfigSource, ContentBlock, ProjectContext, Session, TokenUsage};
+use tools::{list_skills, load_skill};
 
 #[derive(Debug, Clone)]
 pub(crate) struct StatusContext {
@@ -355,6 +357,80 @@ pub(crate) fn render_memory_report() -> Result<String, Box<dyn std::error::Error
         }
     }
     Ok(lines.join("\n"))
+}
+
+pub(crate) fn render_skills_report(
+    skill: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let requested = skill.map(str::trim).filter(|value| !value.is_empty());
+
+    if let Some(requested) = requested {
+        let loaded = load_skill(requested, None)
+            .map_err(|error| io::Error::new(io::ErrorKind::NotFound, error))?;
+        let name = loaded
+            .skill
+            .trim()
+            .trim_start_matches('/')
+            .trim_start_matches('$')
+            .to_string();
+        let description = loaded
+            .description
+            .unwrap_or_else(|| "not provided".to_string());
+        return Ok(format!(
+            "Skill
+  Name             {name}
+  Path             {path}
+  Description      {description}
+
+Prompt
+{prompt}",
+            name = name,
+            path = loaded.path,
+            description = description,
+            prompt = loaded.prompt.trim_end(),
+        ));
+    }
+
+    let skills = list_skills();
+    let skill_count = skills.len();
+    if skills.is_empty() {
+        return Ok(String::from(
+            "Skills
+  Available        0
+  Usage            /skills <name>
+  Search path      CODEX_HOME/skills/<name>/SKILL.md",
+        ));
+    }
+
+    let width = skills
+        .iter()
+        .map(|entry| entry.name.len())
+        .max()
+        .unwrap_or(5)
+        + 2;
+    let entries = skills
+        .into_iter()
+        .map(|entry| {
+            let summary = entry.description.unwrap_or_else(|| entry.path.clone());
+            format!(
+                "  {name:<width$}{summary}",
+                name = entry.name,
+                width = width
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Ok(format!(
+        "Skills
+  Available        {count}
+  Usage            /skills <name>
+
+Entries
+{entries}",
+        count = skill_count,
+        entries = entries,
+    ))
 }
 
 pub(crate) fn render_diff_report() -> Result<String, Box<dyn std::error::Error>> {
