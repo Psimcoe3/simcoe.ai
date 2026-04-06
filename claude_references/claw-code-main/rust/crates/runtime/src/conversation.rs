@@ -31,6 +31,20 @@ pub enum AssistantEvent {
     MessageStop,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolResultTrace {
+    pub tool_use_id: String,
+    pub tool_name: String,
+    pub output: String,
+    pub is_error: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssistantTurnTrace {
+    pub events: Vec<AssistantEvent>,
+    pub tool_results: Vec<ToolResultTrace>,
+}
+
 pub trait ApiClient {
     fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>, RuntimeError>;
 }
@@ -87,6 +101,7 @@ impl std::error::Error for RuntimeError {}
 pub struct TurnSummary {
     pub assistant_messages: Vec<ConversationMessage>,
     pub tool_results: Vec<ConversationMessage>,
+    pub transport_trace: Vec<AssistantTurnTrace>,
     pub iterations: usize,
     pub usage: TokenUsage,
     pub auto_compaction: Option<AutoCompactionEvent>,
@@ -178,6 +193,7 @@ where
 
         let mut assistant_messages = Vec::new();
         let mut tool_results = Vec::new();
+        let mut transport_trace = Vec::new();
         let mut iterations = 0;
 
         loop {
@@ -193,6 +209,7 @@ where
                 messages: self.session.messages.clone(),
             };
             let events = self.api_client.stream(request)?;
+            let turn_events = events.clone();
             let (assistant_message, usage) = build_assistant_message(events)?;
             if let Some(usage) = usage {
                 self.usage_tracker.record(usage);
@@ -207,11 +224,16 @@ where
                     _ => None,
                 })
                 .collect::<Vec<_>>();
+            let mut turn_trace = AssistantTurnTrace {
+                events: turn_events,
+                tool_results: Vec::new(),
+            };
 
             self.session.messages.push(assistant_message.clone());
             assistant_messages.push(assistant_message);
 
             if pending_tool_uses.is_empty() {
+                transport_trace.push(turn_trace);
                 break;
             }
 
@@ -267,8 +289,13 @@ where
                     }
                 };
                 self.session.messages.push(result_message.clone());
+                turn_trace
+                    .tool_results
+                    .extend(tool_result_traces(&result_message));
                 tool_results.push(result_message);
             }
+
+            transport_trace.push(turn_trace);
         }
 
         let auto_compaction = self.maybe_auto_compact();
@@ -276,6 +303,7 @@ where
         Ok(TurnSummary {
             assistant_messages,
             tool_results,
+            transport_trace,
             iterations,
             usage: self.usage_tracker.cumulative_usage(),
             auto_compaction,
@@ -397,6 +425,27 @@ fn flush_text_block(text: &mut String, blocks: &mut Vec<ContentBlock>) {
     }
 }
 
+fn tool_result_traces(message: &ConversationMessage) -> Vec<ToolResultTrace> {
+    message
+        .blocks
+        .iter()
+        .filter_map(|block| match block {
+            ContentBlock::ToolResult {
+                tool_use_id,
+                tool_name,
+                output,
+                is_error,
+            } => Some(ToolResultTrace {
+                tool_use_id: tool_use_id.clone(),
+                tool_name: tool_name.clone(),
+                output: output.clone(),
+                is_error: *is_error,
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
 fn format_hook_message(result: &HookRunResult, fallback: &str) -> String {
     if result.messages().is_empty() {
         fallback.to_string()
@@ -460,7 +509,7 @@ mod tests {
     use super::{
         parse_auto_compaction_threshold, ApiClient, ApiRequest, AssistantEvent,
         AutoCompactionEvent, ConversationRuntime, RuntimeError, StaticToolExecutor,
-        DEFAULT_AUTO_COMPACTION_INPUT_TOKENS_THRESHOLD,
+        ToolResultTrace, DEFAULT_AUTO_COMPACTION_INPUT_TOKENS_THRESHOLD,
     };
     use crate::compact::CompactionConfig;
     use crate::config::{RuntimeFeatureConfig, RuntimeHookConfig};
@@ -569,9 +618,38 @@ mod tests {
         assert_eq!(summary.iterations, 2);
         assert_eq!(summary.assistant_messages.len(), 2);
         assert_eq!(summary.tool_results.len(), 1);
+        assert_eq!(summary.transport_trace.len(), 2);
         assert_eq!(runtime.session().messages.len(), 4);
         assert_eq!(summary.usage.output_tokens, 10);
         assert_eq!(summary.auto_compaction, None);
+        assert_eq!(
+            summary.transport_trace[0].events,
+            vec![
+                AssistantEvent::TextDelta("Let me calculate that.".to_string()),
+                AssistantEvent::ToolUse {
+                    id: "tool-1".to_string(),
+                    name: "add".to_string(),
+                    input: "2,2".to_string(),
+                },
+                AssistantEvent::Usage(TokenUsage {
+                    input_tokens: 20,
+                    output_tokens: 6,
+                    cache_creation_input_tokens: 1,
+                    cache_read_input_tokens: 2,
+                }),
+                AssistantEvent::MessageStop,
+            ]
+        );
+        assert_eq!(
+            summary.transport_trace[0].tool_results,
+            vec![ToolResultTrace {
+                tool_use_id: "tool-1".to_string(),
+                tool_name: "add".to_string(),
+                output: "4".to_string(),
+                is_error: false,
+            }]
+        );
+        assert!(summary.transport_trace[1].tool_results.is_empty());
         assert!(matches!(
             runtime.session().messages[1].blocks[1],
             ContentBlock::ToolUse { .. }
@@ -633,6 +711,16 @@ mod tests {
             .expect("conversation should continue after denied tool");
 
         assert_eq!(summary.tool_results.len(), 1);
+        assert_eq!(summary.transport_trace.len(), 2);
+        assert_eq!(
+            summary.transport_trace[0].tool_results,
+            vec![ToolResultTrace {
+                tool_use_id: "tool-1".to_string(),
+                tool_name: "blocked".to_string(),
+                output: "not now".to_string(),
+                is_error: true,
+            }]
+        );
         assert!(matches!(
             &summary.tool_results[0].blocks[0],
             ContentBlock::ToolResult { is_error: true, output, .. } if output == "not now"

@@ -5,6 +5,7 @@ mod init;
 mod input;
 mod render;
 mod session_manager;
+mod transport;
 mod tui;
 
 use std::env;

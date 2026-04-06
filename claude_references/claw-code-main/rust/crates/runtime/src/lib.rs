@@ -31,8 +31,9 @@ pub use config::{
     ScopedMcpServerConfig, SIMCOE_AI_SETTINGS_SCHEMA_NAME,
 };
 pub use conversation::{
-    auto_compaction_threshold_from_env, ApiClient, ApiRequest, AssistantEvent, AutoCompactionEvent,
-    ConversationRuntime, RuntimeError, StaticToolExecutor, ToolError, ToolExecutor, TurnSummary,
+    auto_compaction_threshold_from_env, ApiClient, ApiRequest, AssistantEvent, AssistantTurnTrace,
+    AutoCompactionEvent, ConversationRuntime, RuntimeError, StaticToolExecutor, ToolError,
+    ToolExecutor, ToolResultTrace, TurnSummary,
 };
 pub use file_ops::{
     edit_file, glob_search, grep_search, read_file, write_file, EditFileOutput, GlobSearchOutput,

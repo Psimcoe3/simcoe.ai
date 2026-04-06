@@ -184,6 +184,7 @@ impl LiveCli {
                 })),
                 "tool_uses": crate::collect_tool_uses(&summary),
                 "tool_results": crate::collect_tool_results(&summary),
+                "transport": crate::transport::build_turn_transport(&summary),
                 "usage": {
                     "input_tokens": summary.usage.input_tokens,
                     "output_tokens": summary.usage.output_tokens,

@@ -1,0 +1,282 @@
+use std::collections::BTreeMap;
+use std::env;
+
+use runtime::{AssistantEvent, TokenUsage, TurnSummary, UpstreamProxyBootstrap};
+use serde_json::{json, Value};
+
+pub(crate) fn build_turn_transport(summary: &TurnSummary) -> Value {
+    let env_map = env::vars().collect::<BTreeMap<String, String>>();
+    build_turn_transport_from_env_map(summary, &env_map)
+}
+
+fn build_turn_transport_from_env_map(
+    summary: &TurnSummary,
+    env_map: &BTreeMap<String, String>,
+) -> Value {
+    let bootstrap = UpstreamProxyBootstrap::from_env_map(env_map);
+    let ready = bootstrap.should_enable();
+
+    json!({
+        "kind": if ready { "upstream-proxy" } else { "local" },
+        "bootstrap": {
+            "remote_enabled": bootstrap.remote.enabled,
+            "session_id": bootstrap.remote.session_id.clone(),
+            "base_url": non_empty_string(&bootstrap.remote.base_url),
+            "upstream_proxy_enabled": bootstrap.upstream_proxy_enabled,
+            "ready": ready,
+            "ws_url": ready.then(|| bootstrap.ws_url()),
+        },
+        "events": structured_turn_events(summary),
+    })
+}
+
+fn structured_turn_events(summary: &TurnSummary) -> Vec<Value> {
+    let mut events = Vec::new();
+
+    for (assistant_index, turn) in summary.transport_trace.iter().enumerate() {
+        events.push(json!({
+            "type": "message_start",
+            "assistant_index": assistant_index,
+            "role": "assistant",
+        }));
+
+        for event in &turn.events {
+            match event {
+                AssistantEvent::TextDelta(text) => {
+                    if !text.is_empty() {
+                        events.push(json!({
+                            "type": "text",
+                            "assistant_index": assistant_index,
+                            "text": text,
+                        }));
+                    }
+                }
+                AssistantEvent::ToolUse { id, name, input } => {
+                    events.push(json!({
+                        "type": "tool_use",
+                        "assistant_index": assistant_index,
+                        "id": id,
+                        "name": name,
+                        "input": parse_json_value(input),
+                    }));
+                }
+                AssistantEvent::Usage(usage) => {
+                    events.push(usage_event(assistant_index, *usage));
+                }
+                AssistantEvent::MessageStop => {
+                    events.push(json!({
+                        "type": "message_stop",
+                        "assistant_index": assistant_index,
+                    }));
+                }
+            }
+        }
+
+        for result in &turn.tool_results {
+            events.push(json!({
+                "type": "tool_result",
+                "assistant_index": assistant_index,
+                "tool_use_id": result.tool_use_id,
+                "tool_name": result.tool_name,
+                "output": parse_json_value(&result.output),
+                "is_error": result.is_error,
+            }));
+        }
+    }
+
+    events
+}
+
+fn usage_event(assistant_index: usize, usage: TokenUsage) -> Value {
+    json!({
+        "type": "usage",
+        "assistant_index": assistant_index,
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "cache_creation_input_tokens": usage.cache_creation_input_tokens,
+        "cache_read_input_tokens": usage.cache_read_input_tokens,
+    })
+}
+
+fn parse_json_value(value: &str) -> Value {
+    serde_json::from_str(value).unwrap_or_else(|_| Value::String(value.to_string()))
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_turn_transport_from_env_map, structured_turn_events};
+    use runtime::{
+        AssistantEvent, AssistantTurnTrace, ContentBlock, ConversationMessage, TokenUsage,
+        ToolResultTrace, TurnSummary,
+    };
+    use serde_json::json;
+    use std::collections::BTreeMap;
+    use std::fs;
+
+    fn sample_summary() -> TurnSummary {
+        TurnSummary {
+            assistant_messages: vec![
+                ConversationMessage::assistant_with_usage(
+                    vec![
+                        ContentBlock::Text {
+                            text: "Inspecting Cargo.toml".to_string(),
+                        },
+                        ContentBlock::ToolUse {
+                            id: "toolu_1".to_string(),
+                            name: "read_file".to_string(),
+                            input: "{\"path\":\"Cargo.toml\"}".to_string(),
+                        },
+                    ],
+                    Some(TokenUsage {
+                        input_tokens: 3,
+                        output_tokens: 1,
+                        cache_creation_input_tokens: 0,
+                        cache_read_input_tokens: 0,
+                    }),
+                ),
+                ConversationMessage::assistant_with_usage(
+                    vec![ContentBlock::Text {
+                        text: "Done".to_string(),
+                    }],
+                    Some(TokenUsage {
+                        input_tokens: 3,
+                        output_tokens: 4,
+                        cache_creation_input_tokens: 0,
+                        cache_read_input_tokens: 0,
+                    }),
+                ),
+            ],
+            tool_results: vec![ConversationMessage::tool_result(
+                "toolu_1",
+                "read_file",
+                "{\"content\":\"[package]\"}",
+                false,
+            )],
+            transport_trace: vec![
+                AssistantTurnTrace {
+                    events: vec![
+                        AssistantEvent::TextDelta("Inspect".to_string()),
+                        AssistantEvent::TextDelta("ing Cargo.toml".to_string()),
+                        AssistantEvent::ToolUse {
+                            id: "toolu_1".to_string(),
+                            name: "read_file".to_string(),
+                            input: "{\"path\":\"Cargo.toml\"}".to_string(),
+                        },
+                        AssistantEvent::Usage(TokenUsage {
+                            input_tokens: 3,
+                            output_tokens: 1,
+                            cache_creation_input_tokens: 0,
+                            cache_read_input_tokens: 0,
+                        }),
+                        AssistantEvent::MessageStop,
+                    ],
+                    tool_results: vec![ToolResultTrace {
+                        tool_use_id: "toolu_1".to_string(),
+                        tool_name: "read_file".to_string(),
+                        output: "{\"content\":\"[package]\"}".to_string(),
+                        is_error: false,
+                    }],
+                },
+                AssistantTurnTrace {
+                    events: vec![
+                        AssistantEvent::TextDelta("Done".to_string()),
+                        AssistantEvent::Usage(TokenUsage {
+                            input_tokens: 3,
+                            output_tokens: 4,
+                            cache_creation_input_tokens: 0,
+                            cache_read_input_tokens: 0,
+                        }),
+                        AssistantEvent::MessageStop,
+                    ],
+                    tool_results: Vec::new(),
+                },
+            ],
+            iterations: 2,
+            usage: TokenUsage {
+                input_tokens: 6,
+                output_tokens: 5,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            },
+            auto_compaction: None,
+        }
+    }
+
+    #[test]
+    fn structured_turn_events_preserve_assistant_and_tool_order() {
+        let events = structured_turn_events(&sample_summary());
+        let event_types = events
+            .iter()
+            .map(|event| event["type"].as_str().expect("event type"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            event_types,
+            vec![
+                "message_start",
+                "text",
+                "text",
+                "tool_use",
+                "usage",
+                "message_stop",
+                "tool_result",
+                "message_start",
+                "text",
+                "usage",
+                "message_stop",
+            ]
+        );
+        assert_eq!(events[1]["text"], json!("Inspect"));
+        assert_eq!(events[2]["text"], json!("ing Cargo.toml"));
+        assert_eq!(events[3]["input"], json!({"path": "Cargo.toml"}));
+        assert_eq!(events[6]["tool_use_id"], json!("toolu_1"));
+        assert_eq!(events[6]["output"], json!({"content": "[package]"}));
+        assert_eq!(events[6]["assistant_index"], json!(0));
+    }
+
+    #[test]
+    fn build_turn_transport_reports_upstream_proxy_bootstrap() {
+        let token_dir = std::env::temp_dir().join(format!(
+            "claw-transport-test-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("main")
+        ));
+        let _ = fs::remove_dir_all(&token_dir);
+        fs::create_dir_all(&token_dir).expect("create token dir");
+        let token_path = token_dir.join("session_token");
+        fs::write(&token_path, "token-value\n").expect("write session token");
+
+        let env_map = BTreeMap::from([
+            ("SIMCOE_AI_REMOTE".to_string(), "true".to_string()),
+            (
+                "SIMCOE_AI_REMOTE_SESSION_ID".to_string(),
+                "session-123".to_string(),
+            ),
+            (
+                "SIMCOE_AI_BASE_URL".to_string(),
+                "https://remote.test".to_string(),
+            ),
+            ("CCR_UPSTREAM_PROXY_ENABLED".to_string(), "true".to_string()),
+            (
+                "CCR_SESSION_TOKEN_PATH".to_string(),
+                token_path.display().to_string(),
+            ),
+        ]);
+
+        let transport = build_turn_transport_from_env_map(&sample_summary(), &env_map);
+
+        assert_eq!(transport["kind"], json!("upstream-proxy"));
+        assert_eq!(transport["bootstrap"]["remote_enabled"], json!(true));
+        assert_eq!(transport["bootstrap"]["ready"], json!(true));
+        assert_eq!(
+            transport["bootstrap"]["ws_url"],
+            json!("wss://remote.test/v1/code/upstreamproxy/ws")
+        );
+
+        let _ = fs::remove_dir_all(token_dir);
+    }
+}

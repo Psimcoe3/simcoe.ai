@@ -150,7 +150,7 @@ Evidence:
 
 ### Missing or broken in Rust
 - Missing major TS command families beyond inspection-only parity and many others.
-- No Rust equivalent to the full TS structured IO / remote transport layers beyond env/bootstrap inspection.
+- Rust now emits a structured turn-transport envelope in JSON prompt mode, including ordered streamed assistant/tool events plus remote upstream-proxy bootstrap metadata, backed by a live per-turn trace from `rust/crates/runtime/src/conversation.rs`; it still lacks the full TS remote structured IO / websocket transport runtime.
 - No TS-style handler decomposition for auth/plugins/MCP/agents.
 
 **Status:** functional local CLI core, much narrower than TS.
@@ -169,6 +169,7 @@ Evidence:
 Evidence:
 - Core loop in `rust/crates/runtime/src/conversation.rs`.
 - Stream/tool event translation in `rust/crates/rusty-claude-cli/src/main.rs`.
+- Structured JSON turn-transport output in `rust/crates/runtime/src/conversation.rs`, `rust/crates/simcoe-ai-cli/src/transport.rs`, and `rust/crates/simcoe-ai-cli/src/app.rs`.
 - Session persistence in `rust/crates/runtime/src/session.rs`.
 
 ### Missing or broken in Rust
@@ -226,4 +227,4 @@ Evidence:
 
 ### Remaining notable parity issue
 - **Structured/remote transport parity**
-  - Rust now inspects remote env/bootstrap state through `/remote-env` and `/remote-setup`, but still lacks the TS structured IO and remote transport stack, so machine-readable integrations remain thinner even with the local JSON path hardened.
+  - Rust now exposes a structured turn-transport envelope in JSON prompt mode, including ordered streamed assistant/tool events and remote bootstrap metadata from a shared runtime trace, but it still lacks the TS live remote structured IO / websocket transport path.
