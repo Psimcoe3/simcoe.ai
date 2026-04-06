@@ -28,9 +28,10 @@ use commands::{
 use compat_harness::{extract_manifest, UpstreamPaths};
 use format::{
     format_compact_report, format_cost_report, format_status_report, render_agents_report,
-    render_config_report, render_diff_report, render_hooks_report, render_mcp_report,
-    render_memory_report, render_plugin_report, render_repl_help, render_skills_report,
-    render_tasks_report, render_version_report, status_context, StatusUsage,
+    render_config_report, render_diff_report, render_doctor_report, render_hooks_report,
+    render_mcp_report, render_memory_report, render_plugin_report, render_reload_plugins_report,
+    render_remote_env_report, render_remote_setup_report, render_repl_help, render_skills_report,
+    render_tasks_report, render_tools_report, render_version_report, status_context, StatusUsage,
 };
 use init::initialize_repo;
 use render::{MarkdownStreamState, TerminalRenderer};
@@ -548,6 +549,26 @@ fn run_resume_command(
             session: session.clone(),
             message: Some(render_plugin_report(surface.as_deref())?),
         }),
+        SlashCommand::ReloadPlugins => Ok(ResumeCommandOutcome {
+            session: session.clone(),
+            message: Some(render_reload_plugins_report()?),
+        }),
+        SlashCommand::RemoteEnv => Ok(ResumeCommandOutcome {
+            session: session.clone(),
+            message: Some(render_remote_env_report()?),
+        }),
+        SlashCommand::RemoteSetup => Ok(ResumeCommandOutcome {
+            session: session.clone(),
+            message: Some(render_remote_setup_report()?),
+        }),
+        SlashCommand::Tools { tool } => Ok(ResumeCommandOutcome {
+            session: session.clone(),
+            message: Some(render_tools_report(tool.as_deref())?),
+        }),
+        SlashCommand::Doctor => Ok(ResumeCommandOutcome {
+            session: session.clone(),
+            message: Some(render_doctor_report()?),
+        }),
         SlashCommand::Skills { skill } => Ok(ResumeCommandOutcome {
             session: session.clone(),
             message: Some(render_skills_report(skill.as_deref())?),
@@ -592,6 +613,8 @@ fn run_resume_command(
         | SlashCommand::Resume { .. }
         | SlashCommand::Model { .. }
         | SlashCommand::Permissions { .. }
+        | SlashCommand::Login
+        | SlashCommand::Logout
         | SlashCommand::Session { .. }
         | SlashCommand::Unknown(_) => Err("unsupported resumed slash command".into()),
     }
@@ -1706,9 +1729,11 @@ mod tests {
     use super::format::{
         format_compact_report, format_cost_report, format_model_report, format_model_switch_report,
         format_permissions_report, format_permissions_switch_report, format_resume_report,
-        format_status_report, render_agents_report, render_config_report, render_hooks_report,
-        render_mcp_report, render_memory_report, render_plugin_report, render_repl_help,
-        render_skills_report, render_tasks_report, status_context, StatusContext, StatusUsage,
+        format_status_report, render_agents_report, render_config_report, render_doctor_report,
+        render_hooks_report, render_mcp_report, render_memory_report, render_plugin_report,
+        render_reload_plugins_report, render_remote_env_report, render_remote_setup_report,
+        render_repl_help, render_skills_report, render_tasks_report, render_tools_report,
+        status_context, StatusContext, StatusUsage,
     };
     use super::{
         filter_tool_specs, format_tool_call_start, format_tool_result, oauth_config_for_login,
@@ -1727,6 +1752,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::{Mutex, OnceLock};
     use std::thread;
+    use tools::mvp_tool_specs;
 
     #[test]
     fn defaults_to_repl_when_no_args() {
@@ -1982,6 +2008,8 @@ mod tests {
         assert!(help.contains("/permissions [read-only|workspace-write|danger-full-access]"));
         assert!(help.contains("/clear [--confirm]"));
         assert!(help.contains("/cost"));
+        assert!(help.contains("/login"));
+        assert!(help.contains("/logout"));
         assert!(help.contains("/resume <session-path>"));
         assert!(help.contains("/config [env|hooks|model]"));
         assert!(help.contains("/hooks [pre|post]"));
@@ -1989,6 +2017,11 @@ mod tests {
         assert!(help.contains("/memory"));
         assert!(help.contains("/agents [name]"));
         assert!(help.contains("/plugin [name]"));
+        assert!(help.contains("/reload-plugins"));
+        assert!(help.contains("/remote-env"));
+        assert!(help.contains("/remote-setup"));
+        assert!(help.contains("/tools [name]"));
+        assert!(help.contains("/doctor"));
         assert!(help.contains("/skills [skill]"));
         assert!(help.contains("/tasks [id]"));
         assert!(help.contains("/review [context]"));
@@ -2010,8 +2043,28 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "help", "status", "compact", "clear", "cost", "config", "hooks", "mcp", "memory",
-                "agents", "plugin", "skills", "tasks", "init", "diff", "version", "export",
+                "help",
+                "status",
+                "compact",
+                "clear",
+                "cost",
+                "config",
+                "hooks",
+                "mcp",
+                "memory",
+                "agents",
+                "plugin",
+                "reload-plugins",
+                "remote-env",
+                "remote-setup",
+                "tools",
+                "doctor",
+                "skills",
+                "tasks",
+                "init",
+                "diff",
+                "version",
+                "export",
             ]
         );
     }
@@ -2025,7 +2078,8 @@ mod tests {
             r#"[
   {"name":"plugin","source_hint":"commands/plugin/index.tsx","responsibility":"plugin index"},
   {"name":"plugin","source_hint":"commands/plugin/plugin.tsx","responsibility":"plugin flow"},
-  {"name":"reload-plugins","source_hint":"commands/reload-plugins/index.ts","responsibility":"reload index"}
+    {"name":"reload-plugins","source_hint":"commands/reload-plugins/index.ts","responsibility":"reload index"},
+    {"name":"reload-plugins","source_hint":"commands/reload-plugins/reload-plugins.ts","responsibility":"reload flow"}
 ]"#,
         )
         .expect("write commands snapshot");
@@ -2039,6 +2093,91 @@ mod tests {
 }"#,
         )
         .expect("write plugin snapshot");
+    }
+
+    fn write_remote_snapshots(repo_root: &std::path::Path) {
+        let reference_data = repo_root.join("src/reference_data");
+        let subsystems = reference_data.join("subsystems");
+        fs::create_dir_all(&subsystems).expect("create snapshot dirs");
+        fs::write(
+                        reference_data.join("commands_snapshot.json"),
+                        r#"[
+    {"name":"remote-env","source_hint":"commands/remote-env/index.ts","responsibility":"remote env index"},
+    {"name":"remote-env","source_hint":"commands/remote-env/remote-env.tsx","responsibility":"remote env flow"},
+    {"name":"api","source_hint":"commands/remote-setup/api.ts","responsibility":"remote setup api"},
+    {"name":"remote-setup","source_hint":"commands/remote-setup/index.ts","responsibility":"remote setup index"},
+    {"name":"remote-setup","source_hint":"commands/remote-setup/remote-setup.tsx","responsibility":"remote setup flow"}
+]"#,
+                )
+                .expect("write commands snapshot");
+        fs::write(
+            subsystems.join("cli.json"),
+            r#"{
+    "archive_name": "cli",
+    "package_name": "cli",
+    "module_count": 6,
+    "sample_files": [
+        "cli/handlers/plugins.ts",
+        "cli/remoteIO.ts",
+        "cli/structuredIO.ts",
+        "cli/transports/HybridTransport.ts",
+        "cli/transports/WebSocketTransport.ts",
+        "cli/transports/transportUtils.ts"
+    ]
+}"#,
+        )
+        .expect("write cli snapshot");
+    }
+
+    fn write_tools_snapshot(repo_root: &std::path::Path) {
+        let reference_data = repo_root.join("src/reference_data");
+        fs::create_dir_all(&reference_data).expect("create snapshot dir");
+        fs::write(
+            reference_data.join("tools_snapshot.json"),
+            r#"[
+  {"name":"BashTool","source_hint":"tools/BashTool/BashTool.tsx","responsibility":"bash tool"},
+  {"name":"bashPermissions","source_hint":"tools/BashTool/bashPermissions.ts","responsibility":"bash permissions"},
+  {"name":"ToolSearchTool","source_hint":"tools/ToolSearchTool/ToolSearchTool.ts","responsibility":"tool search"},
+  {"name":"queryParser","source_hint":"tools/ToolSearchTool/queryParser.ts","responsibility":"query parser"}
+]"#,
+        )
+        .expect("write tools snapshot");
+    }
+
+    fn write_doctor_settings(config_home: &std::path::Path) {
+        fs::create_dir_all(config_home).expect("create config home");
+        fs::write(
+            config_home.join("settings.json"),
+            r#"{
+    "hooks": {
+        "PreToolUse": ["python pre_hook.py"],
+        "PostToolUse": ["python post_hook.py"]
+    },
+    "mcpServers": {
+        "local": {
+            "command": "node",
+            "args": ["server.js"]
+        },
+        "remote": {
+            "type": "ws",
+            "url": "ws://example.test/socket"
+        }
+    },
+    "oauth": {
+        "clientId": "simcoe-cli",
+        "authorizeUrl": "https://console.test/oauth/authorize",
+        "tokenUrl": "https://console.test/oauth/token",
+        "scopes": ["openid", "profile"]
+    },
+    "model": "simcoe-sonnet-4-6",
+    "permissionMode": "workspace-write",
+    "sandbox": {
+        "enabled": true,
+        "filesystemMode": "workspace-only"
+    }
+}"#,
+        )
+        .expect("write doctor settings");
     }
 
     #[test]
@@ -2499,7 +2638,7 @@ mod tests {
         let report = render_plugin_report(None).expect("plugin report should render");
         assert!(report.contains("Plugin"));
         assert!(report.contains("Archive           plugins"));
-        assert!(report.contains("Rust status       planned only"));
+        assert!(report.contains("Rust status       inspection only"));
         assert!(report.contains("Archived commands 2"));
         assert!(report.contains("plugins/builtinPlugins.ts"));
         assert!(report.contains("reload-plugins"));
@@ -2525,10 +2664,314 @@ mod tests {
         assert!(report.contains("Plugin"));
         assert!(report.contains("Name             reload-plugins"));
         assert!(report.contains("Kind             command"));
-        assert!(report.contains("Rust status      planned only"));
-        assert!(report.contains("Archived files   1"));
+        assert!(report.contains("Rust status      inspection only"));
+        assert!(report.contains("Archived files   2"));
         assert!(report.contains("commands/reload-plugins/index.ts"));
+        assert!(report.contains("commands/reload-plugins/reload-plugins.ts"));
 
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn reload_plugins_report_is_inspection_only() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("reload-plugins-report");
+        let nested_cwd = repo_root.join("rust");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        write_plugin_snapshots(&repo_root);
+
+        let original_cwd = set_test_cwd(&nested_cwd);
+
+        let report = render_reload_plugins_report().expect("reload report should render");
+        assert!(report.contains("Reload plugins"));
+        assert!(report.contains("Rust status      inspection only"));
+        assert!(
+            report.contains("Runtime support  no plugin loader or live reload flow is implemented")
+        );
+        assert!(report.contains("Archived files   2"));
+        assert!(report.contains("Archived modules 2"));
+        assert_eq!(SlashCommand::parse("/login"), Some(SlashCommand::Login));
+        assert_eq!(SlashCommand::parse("/logout"), Some(SlashCommand::Logout));
+        assert!(report.contains("commands/reload-plugins/index.ts"));
+        assert!(report.contains("commands/reload-plugins/reload-plugins.ts"));
+
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn remote_env_report_reads_bootstrap_state() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let root = temp_path("remote-env-report");
+        let token_path = root.join("session_token");
+        let ca_bundle = root.join("ca-bundle.crt");
+        fs::create_dir_all(&root).expect("create temp dir");
+        fs::write(&token_path, "secret-token\n").expect("write token");
+        fs::write(&ca_bundle, "ca").expect("write ca bundle");
+
+        let original_remote = std::env::var("SIMCOE_AI_REMOTE").ok();
+        let original_session = std::env::var("SIMCOE_AI_REMOTE_SESSION_ID").ok();
+        let original_base = std::env::var("SIMCOE_AI_BASE_URL").ok();
+        let original_proxy = std::env::var("CCR_UPSTREAM_PROXY_ENABLED").ok();
+        let original_token_path = std::env::var("CCR_SESSION_TOKEN_PATH").ok();
+        let original_ca_bundle = std::env::var("CCR_CA_BUNDLE_PATH").ok();
+
+        std::env::set_var("SIMCOE_AI_REMOTE", "1");
+        std::env::set_var("SIMCOE_AI_REMOTE_SESSION_ID", "session-123");
+        std::env::set_var("SIMCOE_AI_BASE_URL", "https://remote.test");
+        std::env::set_var("CCR_UPSTREAM_PROXY_ENABLED", "true");
+        std::env::set_var("CCR_SESSION_TOKEN_PATH", &token_path);
+        std::env::set_var("CCR_CA_BUNDLE_PATH", &ca_bundle);
+
+        let report = render_remote_env_report().expect("remote env report should render");
+        assert!(report.contains("Remote env"));
+        assert!(report.contains("Rust status      bootstrap foundation only"));
+        assert!(report.contains("Remote enabled   yes"));
+        assert!(report.contains("Session id       session-123"));
+        assert!(report.contains("Base URL         https://remote.test"));
+        assert!(report.contains("Upstream proxy   yes"));
+        assert!(report.contains("Proxy ready      yes"));
+        assert!(report.contains("Token present    yes"));
+        assert!(report.contains("WS target        wss://remote.test/v1/code/upstreamproxy/ws"));
+        assert!(report.contains("Missing          <none>"));
+
+        match original_remote {
+            Some(value) => std::env::set_var("SIMCOE_AI_REMOTE", value),
+            None => std::env::remove_var("SIMCOE_AI_REMOTE"),
+        }
+        match original_session {
+            Some(value) => std::env::set_var("SIMCOE_AI_REMOTE_SESSION_ID", value),
+            None => std::env::remove_var("SIMCOE_AI_REMOTE_SESSION_ID"),
+        }
+        match original_base {
+            Some(value) => std::env::set_var("SIMCOE_AI_BASE_URL", value),
+            None => std::env::remove_var("SIMCOE_AI_BASE_URL"),
+        }
+        match original_proxy {
+            Some(value) => std::env::set_var("CCR_UPSTREAM_PROXY_ENABLED", value),
+            None => std::env::remove_var("CCR_UPSTREAM_PROXY_ENABLED"),
+        }
+        match original_token_path {
+            Some(value) => std::env::set_var("CCR_SESSION_TOKEN_PATH", value),
+            None => std::env::remove_var("CCR_SESSION_TOKEN_PATH"),
+        }
+        match original_ca_bundle {
+            Some(value) => std::env::set_var("CCR_CA_BUNDLE_PATH", value),
+            None => std::env::remove_var("CCR_CA_BUNDLE_PATH"),
+        }
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn remote_setup_report_combines_runtime_and_archive_state() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("remote-setup-report");
+        let nested_cwd = repo_root.join("rust");
+        let token_path = repo_root.join("session_token");
+        let ca_bundle = repo_root.join("ca-bundle.crt");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::write(&token_path, "secret-token\n").expect("write token");
+        fs::write(&ca_bundle, "ca").expect("write ca bundle");
+        write_remote_snapshots(&repo_root);
+
+        let original_cwd = set_test_cwd(&nested_cwd);
+        let original_remote = std::env::var("SIMCOE_AI_REMOTE").ok();
+        let original_session = std::env::var("SIMCOE_AI_REMOTE_SESSION_ID").ok();
+        let original_base = std::env::var("SIMCOE_AI_BASE_URL").ok();
+        let original_proxy = std::env::var("CCR_UPSTREAM_PROXY_ENABLED").ok();
+        let original_token_path = std::env::var("CCR_SESSION_TOKEN_PATH").ok();
+        let original_ca_bundle = std::env::var("CCR_CA_BUNDLE_PATH").ok();
+
+        std::env::set_var("SIMCOE_AI_REMOTE", "1");
+        std::env::set_var("SIMCOE_AI_REMOTE_SESSION_ID", "session-setup");
+        std::env::set_var("SIMCOE_AI_BASE_URL", "https://remote.test");
+        std::env::set_var("CCR_UPSTREAM_PROXY_ENABLED", "true");
+        std::env::set_var("CCR_SESSION_TOKEN_PATH", &token_path);
+        std::env::set_var("CCR_CA_BUNDLE_PATH", &ca_bundle);
+
+        let report = render_remote_setup_report().expect("remote setup report should render");
+        assert!(report.contains("Remote setup"));
+        assert!(report.contains("Rust status       bootstrap foundation only"));
+        assert!(report.contains("Remote ready      yes"));
+        assert!(report.contains("Remote enabled    yes"));
+        assert!(report.contains("Session id        session-setup"));
+        assert!(report.contains("Archive           cli"));
+        assert!(report.contains("Archived files    3"));
+        assert!(report.contains("Transport files   5"));
+        assert!(report.contains("Summary           remote setup flow"));
+        assert!(report.contains("Missing           <none>"));
+        assert!(report.contains("commands/remote-setup/api.ts"));
+        assert!(report.contains("cli/structuredIO.ts"));
+
+        match original_remote {
+            Some(value) => std::env::set_var("SIMCOE_AI_REMOTE", value),
+            None => std::env::remove_var("SIMCOE_AI_REMOTE"),
+        }
+        match original_session {
+            Some(value) => std::env::set_var("SIMCOE_AI_REMOTE_SESSION_ID", value),
+            None => std::env::remove_var("SIMCOE_AI_REMOTE_SESSION_ID"),
+        }
+        match original_base {
+            Some(value) => std::env::set_var("SIMCOE_AI_BASE_URL", value),
+            None => std::env::remove_var("SIMCOE_AI_BASE_URL"),
+        }
+        match original_proxy {
+            Some(value) => std::env::set_var("CCR_UPSTREAM_PROXY_ENABLED", value),
+            None => std::env::remove_var("CCR_UPSTREAM_PROXY_ENABLED"),
+        }
+        match original_token_path {
+            Some(value) => std::env::set_var("CCR_SESSION_TOKEN_PATH", value),
+            None => std::env::remove_var("CCR_SESSION_TOKEN_PATH"),
+        }
+        match original_ca_bundle {
+            Some(value) => std::env::set_var("CCR_CA_BUNDLE_PATH", value),
+            None => std::env::remove_var("CCR_CA_BUNDLE_PATH"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn tools_report_lists_rust_and_archived_tools() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("tools-report");
+        let nested_cwd = repo_root.join("rust");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        write_tools_snapshot(&repo_root);
+
+        let original_cwd = set_test_cwd(&nested_cwd);
+
+        let report = render_tools_report(None).expect("tools report should render");
+        assert!(report.contains("Tools"));
+        assert!(report.contains(&format!("Rust tools         {}", mvp_tool_specs().len())));
+        assert!(report.contains("Archived families  2"));
+        assert!(report.contains("Archived files     4"));
+        assert!(report.contains("Rust registry"));
+        assert!(report.contains("bash"));
+        assert!(report.contains("ToolSearchTool"));
+
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn tools_report_renders_selected_tool_and_archived_family() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("tools-selected");
+        let nested_cwd = repo_root.join("rust");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        write_tools_snapshot(&repo_root);
+
+        let original_cwd = set_test_cwd(&nested_cwd);
+
+        let report =
+            render_tools_report(Some("bash")).expect("selected tools report should render");
+        assert!(report.contains("Tool"));
+        assert!(report.contains("Name             bash"));
+        assert!(report.contains("Source           rust tool registry"));
+        assert!(report.contains("Required mode    danger-full-access"));
+        assert!(report.contains("dangerouslyDisableSandbox"));
+        assert!(report.contains("Archived TS family"));
+        assert!(report.contains("Name             BashTool"));
+        assert!(report.contains("Archived files   2"));
+        assert!(report.contains("tools/BashTool/BashTool.tsx"));
+
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn doctor_report_summarizes_runtime_health() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("doctor-report");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        write_doctor_settings(&config_home);
+        fs::write(
+            config_home.join("credentials.json"),
+            r#"{
+  "oauth": {
+    "accessToken": "token-value",
+    "refreshToken": "refresh-value",
+    "expiresAt": 4102444800,
+    "scopes": ["openid", "profile"]
+  }
+}"#,
+        )
+        .expect("write oauth credentials");
+
+        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
+        let original_cwd = set_test_cwd(&nested_cwd);
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+
+        let report = render_doctor_report().expect("doctor report should render");
+        assert!(report.contains("Doctor"));
+        assert!(report.contains("Status            ok"));
+        assert!(report.contains("Permission mode   workspace-write"));
+        assert!(report.contains("OAuth config      yes"));
+        assert!(report.contains("Stored creds      yes"));
+        assert!(report.contains("Refresh token     yes"));
+        assert!(report.contains("MCP servers       2"));
+        assert!(report.contains("MCP transports    stdio=1, ws=1"));
+        assert!(report.contains("Pre hooks         1"));
+        assert!(report.contains("Post hooks        1"));
+        assert!(report.contains("Filesystem mode   workspace-only"));
+        assert!(report.contains("no instruction files discovered"));
+
+        match original_config_home {
+            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
+            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn doctor_report_handles_invalid_config() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("doctor-invalid-config");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+        fs::write(config_home.join("settings.json"), "[]\n").expect("write invalid settings");
+
+        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
+        let original_cwd = set_test_cwd(&nested_cwd);
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+
+        let report = render_doctor_report().expect("doctor report should still render");
+        assert!(report.contains("Doctor"));
+        assert!(report.contains("Status            error"));
+        assert!(report.contains("config load failed"));
+        assert!(report.contains("Stored creds      no"));
+
+        match original_config_home {
+            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
+            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+        }
         std::env::set_current_dir(original_cwd).expect("restore cwd");
         let _ = fs::remove_dir_all(repo_root);
     }
@@ -3044,6 +3487,29 @@ mod tests {
                 surface: Some("reload-plugins".to_string())
             })
         );
+        assert_eq!(
+            SlashCommand::parse("/reload-plugins"),
+            Some(SlashCommand::ReloadPlugins)
+        );
+        assert_eq!(
+            SlashCommand::parse("/remote-env"),
+            Some(SlashCommand::RemoteEnv)
+        );
+        assert_eq!(
+            SlashCommand::parse("/remote-setup"),
+            Some(SlashCommand::RemoteSetup)
+        );
+        assert_eq!(
+            SlashCommand::parse("/tools"),
+            Some(SlashCommand::Tools { tool: None })
+        );
+        assert_eq!(
+            SlashCommand::parse("/tools bash"),
+            Some(SlashCommand::Tools {
+                tool: Some("bash".to_string())
+            })
+        );
+        assert_eq!(SlashCommand::parse("/doctor"), Some(SlashCommand::Doctor));
         assert_eq!(
             SlashCommand::parse("/skills context-map"),
             Some(SlashCommand::Skills {

@@ -14,10 +14,11 @@ use crate::format::{
     format_auto_compaction_notice, format_compact_report, format_cost_report, format_model_report,
     format_model_switch_report, format_permissions_report, format_permissions_switch_report,
     format_resume_report, format_status_report, render_agents_report, render_config_report,
-    render_diff_report, render_hooks_report, render_last_tool_debug_report, render_mcp_report,
-    render_memory_report, render_plugin_report, render_repl_help, render_skills_report,
-    render_tasks_report, render_teleport_report, render_version_report, status_context,
-    StatusUsage,
+    render_diff_report, render_doctor_report, render_hooks_report, render_last_tool_debug_report,
+    render_mcp_report, render_memory_report, render_plugin_report, render_reload_plugins_report,
+    render_remote_env_report, render_remote_setup_report, render_repl_help, render_skills_report,
+    render_tasks_report, render_teleport_report, render_tools_report, render_version_report,
+    status_context, StatusUsage,
 };
 use crate::render::{Spinner, TerminalRenderer};
 use crate::session_manager::{
@@ -254,6 +255,14 @@ impl LiveCli {
                 self.print_cost();
                 false
             }
+            commands::SlashCommand::Login => {
+                crate::run_login()?;
+                false
+            }
+            commands::SlashCommand::Logout => {
+                crate::run_logout()?;
+                false
+            }
             commands::SlashCommand::Resume { session_path } => self.resume_session(session_path)?,
             commands::SlashCommand::Config { section } => {
                 Self::print_config(section.as_deref())?;
@@ -277,6 +286,26 @@ impl LiveCli {
             }
             commands::SlashCommand::Plugin { surface } => {
                 Self::print_plugin(surface.as_deref())?;
+                false
+            }
+            commands::SlashCommand::ReloadPlugins => {
+                Self::print_reload_plugins()?;
+                false
+            }
+            commands::SlashCommand::RemoteEnv => {
+                Self::print_remote_env()?;
+                false
+            }
+            commands::SlashCommand::RemoteSetup => {
+                Self::print_remote_setup()?;
+                false
+            }
+            commands::SlashCommand::Tools { tool } => {
+                Self::print_tools(tool.as_deref())?;
+                false
+            }
+            commands::SlashCommand::Doctor => {
+                Self::print_doctor()?;
                 false
             }
             commands::SlashCommand::Skills { skill } => {
@@ -540,6 +569,31 @@ impl LiveCli {
 
     fn print_plugin(surface: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", render_plugin_report(surface)?);
+        Ok(())
+    }
+
+    fn print_reload_plugins() -> Result<(), Box<dyn std::error::Error>> {
+        println!("{}", render_reload_plugins_report()?);
+        Ok(())
+    }
+
+    fn print_remote_env() -> Result<(), Box<dyn std::error::Error>> {
+        println!("{}", render_remote_env_report()?);
+        Ok(())
+    }
+
+    fn print_remote_setup() -> Result<(), Box<dyn std::error::Error>> {
+        println!("{}", render_remote_setup_report()?);
+        Ok(())
+    }
+
+    fn print_tools(tool: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        println!("{}", render_tools_report(tool)?);
+        Ok(())
+    }
+
+    fn print_doctor() -> Result<(), Box<dyn std::error::Error>> {
+        println!("{}", render_doctor_report()?);
         Ok(())
     }
 

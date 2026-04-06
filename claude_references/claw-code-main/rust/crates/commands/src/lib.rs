@@ -82,6 +82,18 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         resume_supported: true,
     },
     SlashCommandSpec {
+        name: "login",
+        summary: "Authenticate with Simcoe AI using OAuth",
+        argument_hint: None,
+        resume_supported: false,
+    },
+    SlashCommandSpec {
+        name: "logout",
+        summary: "Clear stored Simcoe AI OAuth credentials",
+        argument_hint: None,
+        resume_supported: false,
+    },
+    SlashCommandSpec {
         name: "resume",
         summary: "Load a saved session into the REPL",
         argument_hint: Some("<session-path>"),
@@ -121,6 +133,36 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         name: "plugin",
         summary: "Inspect archived plugin surfaces or one surface",
         argument_hint: Some("[name]"),
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "reload-plugins",
+        summary: "Inspect the archived plugin reload flow",
+        argument_hint: None,
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "remote-env",
+        summary: "Inspect current remote-session bootstrap environment",
+        argument_hint: None,
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "remote-setup",
+        summary: "Inspect archived remote setup and transport surfaces",
+        argument_hint: None,
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "tools",
+        summary: "Inspect Rust tool specs or archived TS tool families",
+        argument_hint: Some("[name]"),
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "doctor",
+        summary: "Inspect workspace and runtime readiness diagnostics",
+        argument_hint: None,
         resume_supported: true,
     },
     SlashCommandSpec {
@@ -259,6 +301,8 @@ pub enum SlashCommand {
         confirm: bool,
     },
     Cost,
+    Login,
+    Logout,
     Resume {
         session_path: Option<String>,
     },
@@ -278,6 +322,13 @@ pub enum SlashCommand {
     Plugin {
         surface: Option<String>,
     },
+    ReloadPlugins,
+    RemoteEnv,
+    RemoteSetup,
+    Tools {
+        tool: Option<String>,
+    },
+    Doctor,
     Skills {
         skill: Option<String>,
     },
@@ -344,6 +395,8 @@ impl SlashCommand {
                 confirm: parts.next() == Some("--confirm"),
             },
             "cost" => Self::Cost,
+            "login" => Self::Login,
+            "logout" => Self::Logout,
             "resume" => Self::Resume {
                 session_path: parts.next().map(ToOwned::to_owned),
             },
@@ -363,6 +416,13 @@ impl SlashCommand {
             "plugin" => Self::Plugin {
                 surface: remainder_after_command(trimmed, command),
             },
+            "reload-plugins" => Self::ReloadPlugins,
+            "remote-env" => Self::RemoteEnv,
+            "remote-setup" => Self::RemoteSetup,
+            "tools" => Self::Tools {
+                tool: remainder_after_command(trimmed, command),
+            },
+            "doctor" => Self::Doctor,
             "skills" => Self::Skills {
                 skill: remainder_after_command(trimmed, command),
             },
@@ -473,6 +533,8 @@ pub fn handle_slash_command(
         | SlashCommand::Permissions { .. }
         | SlashCommand::Clear { .. }
         | SlashCommand::Cost
+        | SlashCommand::Login
+        | SlashCommand::Logout
         | SlashCommand::Resume { .. }
         | SlashCommand::Config { .. }
         | SlashCommand::Hooks { .. }
@@ -480,6 +542,11 @@ pub fn handle_slash_command(
         | SlashCommand::Memory
         | SlashCommand::Agents { .. }
         | SlashCommand::Plugin { .. }
+        | SlashCommand::ReloadPlugins
+        | SlashCommand::RemoteEnv
+        | SlashCommand::RemoteSetup
+        | SlashCommand::Tools { .. }
+        | SlashCommand::Doctor
         | SlashCommand::Skills { .. }
         | SlashCommand::Tasks { .. }
         | SlashCommand::Init
@@ -575,6 +642,8 @@ mod tests {
             Some(SlashCommand::Clear { confirm: true })
         );
         assert_eq!(SlashCommand::parse("/cost"), Some(SlashCommand::Cost));
+        assert_eq!(SlashCommand::parse("/login"), Some(SlashCommand::Login));
+        assert_eq!(SlashCommand::parse("/logout"), Some(SlashCommand::Logout));
         assert_eq!(
             SlashCommand::parse("/resume session.json"),
             Some(SlashCommand::Resume {
@@ -616,6 +685,29 @@ mod tests {
                 surface: Some("reload-plugins".to_string())
             })
         );
+        assert_eq!(
+            SlashCommand::parse("/reload-plugins"),
+            Some(SlashCommand::ReloadPlugins)
+        );
+        assert_eq!(
+            SlashCommand::parse("/remote-env"),
+            Some(SlashCommand::RemoteEnv)
+        );
+        assert_eq!(
+            SlashCommand::parse("/remote-setup"),
+            Some(SlashCommand::RemoteSetup)
+        );
+        assert_eq!(
+            SlashCommand::parse("/tools"),
+            Some(SlashCommand::Tools { tool: None })
+        );
+        assert_eq!(
+            SlashCommand::parse("/tools bash"),
+            Some(SlashCommand::Tools {
+                tool: Some("bash".to_string())
+            })
+        );
+        assert_eq!(SlashCommand::parse("/doctor"), Some(SlashCommand::Doctor));
         assert_eq!(
             SlashCommand::parse("/skills"),
             Some(SlashCommand::Skills { skill: None })
@@ -669,12 +761,19 @@ mod tests {
         assert!(help.contains("/clear [--confirm]"));
         assert!(help.contains("/cost"));
         assert!(help.contains("/resume <session-path>"));
+        assert!(help.contains("/login"));
+        assert!(help.contains("/logout"));
         assert!(help.contains("/config [env|hooks|model]"));
         assert!(help.contains("/hooks [pre|post]"));
         assert!(help.contains("/mcp [server]"));
         assert!(help.contains("/memory"));
         assert!(help.contains("/agents [name]"));
         assert!(help.contains("/plugin [name]"));
+        assert!(help.contains("/reload-plugins"));
+        assert!(help.contains("/remote-env"));
+        assert!(help.contains("/remote-setup"));
+        assert!(help.contains("/tools [name]"));
+        assert!(help.contains("/doctor"));
         assert!(help.contains("/skills [skill]"));
         assert!(help.contains("/tasks [id]"));
         assert!(help.contains("/init"));
@@ -684,8 +783,8 @@ mod tests {
         assert!(help.contains("/plan [task]"));
         assert!(help.contains("/export [file]"));
         assert!(help.contains("/session [list|switch <session-id>]"));
-        assert_eq!(slash_command_specs().len(), 30);
-        assert_eq!(resume_supported_slash_commands().len(), 17);
+        assert_eq!(slash_command_specs().len(), 37);
+        assert_eq!(resume_supported_slash_commands().len(), 22);
     }
 
     #[test]
@@ -765,6 +864,8 @@ mod tests {
                 .is_none()
         );
         assert!(handle_slash_command("/cost", &session, CompactionConfig::default()).is_none());
+        assert!(handle_slash_command("/login", &session, CompactionConfig::default()).is_none());
+        assert!(handle_slash_command("/logout", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command(
             "/resume session.json",
             &session,
@@ -779,6 +880,18 @@ mod tests {
         assert!(handle_slash_command("/mcp", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/agents", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/plugin", &session, CompactionConfig::default()).is_none());
+        assert!(
+            handle_slash_command("/reload-plugins", &session, CompactionConfig::default())
+                .is_none()
+        );
+        assert!(
+            handle_slash_command("/remote-env", &session, CompactionConfig::default()).is_none()
+        );
+        assert!(
+            handle_slash_command("/remote-setup", &session, CompactionConfig::default()).is_none()
+        );
+        assert!(handle_slash_command("/tools", &session, CompactionConfig::default()).is_none());
+        assert!(handle_slash_command("/doctor", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/skills", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/tasks", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/diff", &session, CompactionConfig::default()).is_none());

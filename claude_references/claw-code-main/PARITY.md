@@ -39,13 +39,14 @@ Evidence:
 - Current built-ins include shell/file/search/web/todo/skill/agent/config/notebook/repl/powershell primitives.
 - Rust agent tooling now also exposes built-in sub-agent profile inspection via `list_agent_profiles()` and `load_agent_profile()`, alongside persisted task inspection.
 - Runtime execution is wired through `rust/crates/tools/src/lib.rs` and `rust/crates/runtime/src/conversation.rs`.
+- Rust now exposes `/tools [name]` via `rust/crates/compat-harness/src/lib.rs`, `rust/crates/tools/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect both the live Rust tool registry and archived TypeScript tool families from `src/reference_data/tools_snapshot.json`.
 
 ### Missing or broken in Rust
 - No Rust equivalents for major TS tools such as `AskUserQuestionTool`, `LSPTool`, `ListMcpResourcesTool`, `MCPTool`, `McpAuthTool`, `ReadMcpResourceTool`, `RemoteTriggerTool`, `ScheduleCronTool`, `Task*`, `Team*`, and several workflow/system tools.
-- Rust tool surface is still explicitly an MVP registry, not a parity registry.
+- Rust tool surface is still explicitly an MVP registry, not a parity registry, even though it is now inspectable through `/tools`.
 - Rust lacks TS’s layered tool orchestration split.
 
-**Status:** partial core only.
+**Status:** partial core with inspection parity.
 
 ---
 
@@ -84,12 +85,12 @@ Evidence:
 ### Rust exists
 Evidence:
 - No dedicated plugin subsystem appears under `rust/crates/`.
-- Rust now exposes `/plugin [name]` via `rust/crates/compat-harness/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect archived plugin command/module surfaces from the TypeScript snapshot data.
+- Rust now exposes `/plugin [name]` and `/reload-plugins` via `rust/crates/compat-harness/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect archived plugin command/module surfaces from the TypeScript snapshot data.
 
 ### Missing or broken in Rust
 - No plugin loader.
 - No marketplace install/update/enable/disable flow.
-- No actual `/plugin` management flow or `/reload-plugins` execution parity.
+- No actual `/plugin` management flow or live `/reload-plugins` execution parity.
 - No plugin-provided hook/tool/command/MCP extension path.
 
 **Status:** archived-surface inspection exists, but runtime/plugin-management parity is still missing.
@@ -132,17 +133,23 @@ Evidence:
 ### Rust exists
 Evidence:
 - Shared slash command registry in `rust/crates/commands/src/lib.rs`.
-- Rust slash commands currently cover `help`, `status`, `compact`, `model`, `permissions`, `clear`, `cost`, `resume`, `config`, `hooks`, `mcp`, `memory`, `agents`, `plugin`, `skills`, `tasks`, `init`, `diff`, `version`, `bughunter`, `review`, `plan`, `commit`, `pr`, `issue`, `ultraplan`, `teleport`, `debug-tool-call`, `export`, `session`.
+- Rust slash commands currently cover `help`, `status`, `compact`, `model`, `permissions`, `clear`, `cost`, `login`, `logout`, `resume`, `config`, `hooks`, `mcp`, `memory`, `agents`, `plugin`, `reload-plugins`, `remote-env`, `remote-setup`, `tools`, `doctor`, `skills`, `tasks`, `init`, `diff`, `version`, `bughunter`, `review`, `plan`, `commit`, `pr`, `issue`, `ultraplan`, `teleport`, `debug-tool-call`, `export`, `session`.
 - Rust now exposes `/hooks [pre|post]` via `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect configured pre/post hook commands.
 - Rust now exposes `/mcp [server]` via `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect configured MCP servers and their derived bootstrap transport details.
 - Rust now exposes `/agents [name]` via `rust/crates/tools/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect built-in sub-agent profiles, aliases, allowed-tool subsets, and recent persisted tasks.
 - Rust now exposes `/plugin [name]` via `rust/crates/compat-harness/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect archived plugin command/module surfaces from the upstream snapshot data.
+- Rust now exposes `/reload-plugins` via `rust/crates/compat-harness/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` as an inspection-only report over the archived reload flow metadata.
+- Rust now exposes `/remote-env` via `rust/crates/runtime/src/remote.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect the current remote-session environment plus derived upstream-proxy bootstrap state.
+- Rust now exposes `/remote-setup` via `rust/crates/compat-harness/src/lib.rs`, `rust/crates/runtime/src/remote.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` as a read-only report over archived remote setup command surfaces and CLI transport modules, combined with current bootstrap readiness.
+- Rust now exposes `/tools [name]` via `rust/crates/compat-harness/src/lib.rs`, `rust/crates/tools/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect the live Rust tool registry and archived TypeScript tool-family snapshots.
+- Rust now exposes `/doctor` via `rust/crates/runtime/src/config.rs`, `rust/crates/runtime/src/oauth.rs`, `rust/crates/runtime/src/prompt.rs`, `rust/crates/runtime/src/sandbox.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` as a read-only runtime diagnostic that summarizes config load state, workspace context, sandbox activation, OAuth credentials, hooks, MCP transports, and remote bootstrap readiness.
+- Rust now exposes `/login` and `/logout` in the REPL via the shared slash-command registry plus the existing live OAuth helpers in `rust/crates/simcoe-ai-cli/src/main.rs`; they reuse the direct CLI auth flow and remain intentionally unsupported with `--resume` because they mutate account-level credentials rather than session files.
 - Rust now exposes `/tasks [id]` via `rust/crates/tools/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect persisted sub-agent task manifests and outputs.
 - Main CLI/repl/prompt handling lives in `rust/crates/simcoe-ai-cli/src/main.rs`.
 
 ### Missing or broken in Rust
 - Missing major TS command families beyond inspection-only parity and many others.
-- No Rust equivalent to TS structured IO / remote transport layers.
+- No Rust equivalent to the full TS structured IO / remote transport layers beyond env/bootstrap inspection.
 - No TS-style handler decomposition for auth/plugins/MCP/agents.
 
 **Status:** functional local CLI core, much narrower than TS.
@@ -218,4 +225,4 @@ Evidence:
 
 ### Remaining notable parity issue
 - **Structured/remote transport parity**
-  - Rust still lacks the TS structured IO and remote transport stack, so machine-readable integrations remain thinner even with the local JSON path hardened.
+  - Rust now inspects remote env/bootstrap state through `/remote-env` and `/remote-setup`, but still lacks the TS structured IO and remote transport stack, so machine-readable integrations remain thinner even with the local JSON path hardened.

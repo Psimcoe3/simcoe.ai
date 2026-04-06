@@ -1,20 +1,26 @@
+use std::collections::BTreeMap;
 use std::env;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::args::brand_model_name;
 use commands::render_slash_command_help;
 use compat_harness::{
-    load_plugin_catalog_from_cwd, load_plugin_surface_from_cwd, PluginSurfaceKind,
+    load_plugin_catalog_from_cwd, load_plugin_surface_from_cwd, load_remote_catalog_from_cwd,
+    load_remote_command_from_cwd, load_tool_catalog_from_cwd, load_tool_family_from_cwd,
+    PluginSurfaceKind,
 };
 use runtime::{
-    ConfigLoader, ConfigSource, ContentBlock, McpClientAuth, McpClientBootstrap,
-    McpClientTransport, ProjectContext, Session, TokenUsage,
+    credentials_path, inherited_upstream_proxy_env, load_oauth_credentials, ConfigLoader,
+    ConfigSource, ContentBlock, McpClientAuth, McpClientBootstrap, McpClientTransport,
+    McpTransport, ProjectContext, RemoteSessionContext, ResolvedPermissionMode, Session,
+    TokenUsage, UpstreamProxyBootstrap,
 };
 use tools::{
     list_agent_profiles, list_agent_tasks, list_skills, load_agent_profile, load_agent_task,
-    load_skill,
+    load_skill, mvp_tool_specs, ToolSpec,
 };
 
 #[derive(Debug, Clone)]
@@ -586,6 +592,289 @@ pub(crate) fn render_agents_report(
     ))
 }
 
+pub(crate) fn render_doctor_report() -> Result<String, Box<dyn std::error::Error>> {
+    let cwd = env::current_dir()?;
+    let loader = ConfigLoader::default_for(&cwd);
+    let discovered = loader.discover();
+    let project_context = ProjectContext::discover_with_git(&cwd, crate::DEFAULT_DATE)?;
+    let (project_root, git_branch) =
+        crate::parse_git_status_metadata(project_context.git_status.as_deref());
+    let instruction_file_count = project_context.instruction_files.len();
+    let env_map = env::vars().collect::<BTreeMap<String, String>>();
+    let remote = RemoteSessionContext::from_env_map(&env_map);
+    let bootstrap = UpstreamProxyBootstrap::from_env_map(&env_map);
+
+    let mut issues = Vec::new();
+    if instruction_file_count == 0 {
+        issues.push(String::from("no instruction files discovered"));
+    }
+
+    let credentials_path_result = credentials_path();
+    let credentials_path_display = match &credentials_path_result {
+        Ok(path) => path.display().to_string(),
+        Err(error) => {
+            issues.push(format!("oauth credentials path unavailable: {error}"));
+            format!("<error: {error}>")
+        }
+    };
+
+    let (stored_creds, refresh_token, expiry, scopes, has_stored_creds) =
+        if credentials_path_result.is_ok() {
+            match load_oauth_credentials() {
+                Ok(Some(token_set)) => (
+                    String::from("yes"),
+                    yes_no(token_set.refresh_token.is_some()).to_string(),
+                    oauth_expiry_summary(token_set.expires_at),
+                    summarize_scopes(&token_set.scopes),
+                    true,
+                ),
+                Ok(None) => (
+                    String::from("no"),
+                    String::from("<unavailable>"),
+                    String::from("<unavailable>"),
+                    String::from("<none>"),
+                    false,
+                ),
+                Err(error) => {
+                    issues.push(format!("failed to load oauth credentials: {error}"));
+                    (
+                        String::from("error"),
+                        String::from("<unavailable>"),
+                        format!("<error: {error}>"),
+                        String::from("<unavailable>"),
+                        false,
+                    )
+                }
+            }
+        } else {
+            (
+                String::from("error"),
+                String::from("<unavailable>"),
+                String::from("<unavailable>"),
+                String::from("<unavailable>"),
+                false,
+            )
+        };
+
+    let remote_missing = if remote.enabled {
+        remote_setup_gaps(&bootstrap)
+    } else {
+        String::from("<disabled>")
+    };
+    if remote.enabled && !bootstrap.should_enable() {
+        issues.push(format!("remote bootstrap incomplete: {remote_missing}"));
+    }
+
+    let project_root_display = project_root.as_ref().map_or_else(
+        || String::from("unknown"),
+        |path| path.display().to_string(),
+    );
+    let git_branch_display = git_branch.as_deref().unwrap_or("unknown");
+    let session_id = remote
+        .session_id
+        .clone()
+        .unwrap_or_else(|| String::from("<unset>"));
+    let base_url = if remote.base_url.is_empty() {
+        String::from("<unset>")
+    } else {
+        remote.base_url.clone()
+    };
+
+    match loader.load() {
+        Ok(runtime_config) => {
+            if runtime_config.loaded_entries().is_empty() {
+                issues.push(String::from("no config files loaded"));
+            }
+
+            let sandbox_status =
+                runtime::sandbox::resolve_sandbox_status(runtime_config.sandbox(), &cwd);
+            if sandbox_status.enabled && !sandbox_status.active {
+                issues.push(match &sandbox_status.fallback_reason {
+                    Some(reason) => format!("sandbox requested but inactive: {reason}"),
+                    None => String::from("sandbox requested but inactive"),
+                });
+            }
+
+            if runtime_config.oauth().is_some() && !has_stored_creds {
+                issues.push(String::from(
+                    "oauth is configured but no stored credentials were found",
+                ));
+            }
+
+            let hooks = runtime_config.hooks();
+            let mcp_servers = runtime_config.mcp().servers();
+
+            Ok(format!(
+                "Doctor\n  Rust status       inspection only\n  Working directory {cwd}\n  Project root      {project_root}\n  Git branch        {git_branch}\n  Instruction files {instruction_files}\n  Issues            {issue_count}\n\nConfig\n  Status            ok\n  Discovered files  {discovered_files}\n  Loaded files      {loaded_files}\n  Model             {model}\n  Permission mode   {permission_mode}\n  Sandbox enabled   {sandbox_enabled}\n  Sandbox active    {sandbox_active}\n  Filesystem mode   {filesystem_mode}\n  Network isolation {network_isolation}\n  Detail            {sandbox_detail}\n\nAuth\n  OAuth config      {oauth_config}\n  Credentials path  {credentials_path}\n  Stored creds      {stored_creds}\n  Refresh token     {refresh_token}\n  Expiry            {expiry}\n  Scopes            {scopes}\n\nHooks + MCP\n  Pre hooks         {pre_hooks}\n  Post hooks        {post_hooks}\n  MCP servers       {mcp_servers}\n  MCP transports    {mcp_transports}\n\nRemote\n  Enabled           {remote_enabled}\n  Proxy ready       {proxy_ready}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Missing           {remote_missing}\n\nIssues\n{issue_lines}",
+                cwd = cwd.display(),
+                project_root = project_root_display,
+                git_branch = git_branch_display,
+                instruction_files = instruction_file_count,
+                issue_count = issues.len(),
+                discovered_files = discovered.len(),
+                loaded_files = runtime_config.loaded_entries().len(),
+                model = runtime_config.model().unwrap_or("<unset>"),
+                permission_mode = runtime_config
+                    .permission_mode()
+                    .map(resolved_permission_mode_label)
+                    .unwrap_or("<unset>"),
+                sandbox_enabled = yes_no(sandbox_status.enabled),
+                sandbox_active = yes_no(sandbox_status.active),
+                filesystem_mode = sandbox_status.filesystem_mode.as_str(),
+                network_isolation = yes_no(sandbox_status.network_active),
+                sandbox_detail = sandbox_status.fallback_reason.as_deref().unwrap_or("<none>"),
+                oauth_config = yes_no(runtime_config.oauth().is_some()),
+                credentials_path = credentials_path_display,
+                stored_creds = stored_creds,
+                refresh_token = refresh_token,
+                expiry = expiry,
+                scopes = scopes,
+                pre_hooks = hooks.pre_tool_use().len(),
+                post_hooks = hooks.post_tool_use().len(),
+                mcp_servers = mcp_servers.len(),
+                mcp_transports = summarize_mcp_transports(mcp_servers),
+                remote_enabled = yes_no(remote.enabled),
+                proxy_ready = yes_no(bootstrap.should_enable()),
+                session_id = session_id,
+                base_url = base_url,
+                remote_missing = remote_missing,
+                issue_lines = summarize_doctor_issues(&issues),
+            ))
+        }
+        Err(error) => {
+            issues.push(format!("config load failed: {error}"));
+
+            Ok(format!(
+                "Doctor\n  Rust status       inspection only\n  Working directory {cwd}\n  Project root      {project_root}\n  Git branch        {git_branch}\n  Instruction files {instruction_files}\n  Issues            {issue_count}\n\nConfig\n  Status            error\n  Discovered files  {discovered_files}\n  Loaded files      0\n  Model             <unavailable>\n  Permission mode   <unavailable>\n  Sandbox enabled   <unavailable>\n  Sandbox active    <unavailable>\n  Filesystem mode   <unavailable>\n  Network isolation <unavailable>\n  Detail            {config_error}\n\nAuth\n  OAuth config      <unavailable>\n  Credentials path  {credentials_path}\n  Stored creds      {stored_creds}\n  Refresh token     {refresh_token}\n  Expiry            {expiry}\n  Scopes            {scopes}\n\nHooks + MCP\n  Pre hooks         <unavailable>\n  Post hooks        <unavailable>\n  MCP servers       <unavailable>\n  MCP transports    <unavailable>\n\nRemote\n  Enabled           {remote_enabled}\n  Proxy ready       {proxy_ready}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Missing           {remote_missing}\n\nIssues\n{issue_lines}",
+                cwd = cwd.display(),
+                project_root = project_root_display,
+                git_branch = git_branch_display,
+                instruction_files = instruction_file_count,
+                issue_count = issues.len(),
+                discovered_files = discovered.len(),
+                config_error = error,
+                credentials_path = credentials_path_display,
+                stored_creds = stored_creds,
+                refresh_token = refresh_token,
+                expiry = expiry,
+                scopes = scopes,
+                remote_enabled = yes_no(remote.enabled),
+                proxy_ready = yes_no(bootstrap.should_enable()),
+                session_id = session_id,
+                base_url = base_url,
+                remote_missing = remote_missing,
+                issue_lines = summarize_doctor_issues(&issues),
+            ))
+        }
+    }
+}
+
+pub(crate) fn render_tools_report(
+    tool: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let requested = tool.map(str::trim).filter(|value| !value.is_empty());
+    let rust_tools = mvp_tool_specs();
+    let archived_catalog = load_tool_catalog_from_cwd().ok();
+
+    if let Some(requested) = requested {
+        let rust_match = rust_tools
+            .iter()
+            .find(|spec| matches_tool_request(spec.name, requested));
+        let archived_match = load_tool_family_from_cwd(requested).ok();
+
+        if rust_match.is_none() && archived_match.is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("unknown Rust tool or archived tool family: {requested}"),
+            )
+            .into());
+        }
+
+        let mut sections = Vec::new();
+        if let Some(spec) = rust_match {
+            sections.push(render_tool_detail(spec)?);
+        }
+        if let Some(family) = archived_match {
+            let source_hints = family
+                .source_hints
+                .iter()
+                .map(|hint| format!("  - {hint}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            sections.push(format!(
+                "Archived TS family\n  Name             {name}\n  Archived files   {archived_files}\n  Summary          {summary}\n\nSource hints\n{source_hints}",
+                name = family.name,
+                archived_files = family.archived_file_count,
+                summary = family.summary,
+                source_hints = source_hints,
+            ));
+        }
+
+        return Ok(sections.join("\n\n"));
+    }
+
+    let rust_width = rust_tools
+        .iter()
+        .map(|spec| spec.name.len())
+        .max()
+        .unwrap_or(4)
+        + 2;
+    let rust_entries = rust_tools
+        .iter()
+        .map(|spec| {
+            format!(
+                "  {name:<rust_width$}{mode:<20}{description}",
+                name = spec.name,
+                mode = spec.required_permission.as_str(),
+                description = spec.description,
+                rust_width = rust_width,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let (archived_family_count, archived_file_count, archived_entries) =
+        if let Some(catalog) = archived_catalog {
+            let family_width = catalog
+                .families
+                .iter()
+                .map(|family| family.name.len())
+                .max()
+                .unwrap_or(6)
+                + 2;
+            let entries = catalog
+                .families
+                .iter()
+                .map(|family| {
+                    format!(
+                        "  {name:<family_width$}{count:>2} files  {summary}",
+                        name = family.name,
+                        count = family.archived_file_count,
+                        summary = family.summary,
+                        family_width = family_width,
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            (catalog.families.len(), catalog.archived_file_count, entries)
+        } else {
+            (
+                0,
+                0,
+                String::from("  Snapshot unavailable from current directory"),
+            )
+        };
+
+    Ok(format!(
+        "Tools\n  Rust tools         {rust_tool_count}\n  Archived families  {archived_family_count}\n  Archived files     {archived_file_count}\n  Usage              /tools <name>\n\nRust registry\n{rust_entries}\n\nArchived TS families\n{archived_entries}",
+        rust_tool_count = rust_tools.len(),
+        archived_family_count = archived_family_count,
+        archived_file_count = archived_file_count,
+        rust_entries = rust_entries,
+        archived_entries = archived_entries,
+    ))
+}
+
 pub(crate) fn render_plugin_report(
     surface: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
@@ -601,7 +890,7 @@ pub(crate) fn render_plugin_report(
             .collect::<Vec<_>>()
             .join("\n");
         return Ok(format!(
-            "Plugin\n  Name             {name}\n  Kind             {kind}\n  Rust status      planned only\n  Archived files   {archived_files}\n  Summary          {summary}\n\nSource hints\n{source_hints}",
+            "Plugin\n  Name             {name}\n  Kind             {kind}\n  Rust status      inspection only\n  Archived files   {archived_files}\n  Summary          {summary}\n\nSource hints\n{source_hints}",
             name = surface.name,
             kind = surface.kind.as_str(),
             archived_files = surface.archived_file_count,
@@ -653,13 +942,263 @@ pub(crate) fn render_plugin_report(
         .join("\n");
 
     Ok(format!(
-        "Plugin\n  Archive           {archive}\n  Package           {package}\n  Rust status       planned only\n  Runtime support   no plugin loader, install flow, or marketplace support\n  Archived commands {command_count}\n  Archived modules  {module_count}\n  Visible modules   {module_surface_count}\n  Usage             /plugin <name>\n\nCommands\n{commands}\n\nModules\n{modules}",
+        "Plugin\n  Archive           {archive}\n  Package           {package}\n  Rust status       inspection only\n  Runtime support   no plugin loader, install flow, or marketplace support\n  Archived commands {command_count}\n  Archived modules  {module_count}\n  Visible modules   {module_surface_count}\n  Usage             /plugin <name>\n\nCommands\n{commands}\n\nModules\n{modules}",
         archive = catalog.archive_name,
         package = catalog.package_name,
         module_count = catalog.module_count,
         commands = commands,
         modules = modules,
     ))
+}
+
+pub(crate) fn render_reload_plugins_report() -> Result<String, Box<dyn std::error::Error>> {
+    let catalog = load_plugin_catalog_from_cwd()?;
+    let surface = load_plugin_surface_from_cwd("reload-plugins")
+        .map_err(|error| io::Error::new(io::ErrorKind::NotFound, error))?;
+    let source_hints = surface
+        .source_hints
+        .iter()
+        .map(|hint| format!("  - {hint}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Ok(format!(
+        "Reload plugins\n  Rust status      inspection only\n  Runtime support  no plugin loader or live reload flow is implemented\n  Archive          {archive}\n  Package          {package}\n  Archived files   {archived_files}\n  Archived modules {module_count}\n  Summary          {summary}\n\nSource hints\n{source_hints}",
+        archive = catalog.archive_name,
+        package = catalog.package_name,
+        archived_files = surface.archived_file_count,
+        module_count = catalog.module_count,
+        summary = surface.summary,
+        source_hints = source_hints,
+    ))
+}
+
+pub(crate) fn render_remote_env_report() -> Result<String, Box<dyn std::error::Error>> {
+    let env_map = env::vars().collect::<BTreeMap<String, String>>();
+    let remote = RemoteSessionContext::from_env_map(&env_map);
+    let bootstrap = UpstreamProxyBootstrap::from_env_map(&env_map);
+    let inherited = inherited_upstream_proxy_env(&env_map);
+    let missing = remote_setup_gaps(&bootstrap);
+    let session_id = remote
+        .session_id
+        .clone()
+        .unwrap_or_else(|| String::from("<unset>"));
+    let base_url = if remote.base_url.is_empty() {
+        String::from("<unset>")
+    } else {
+        remote.base_url.clone()
+    };
+    let ws_target = if remote.base_url.is_empty() {
+        String::from("<unavailable>")
+    } else {
+        bootstrap.ws_url()
+    };
+
+    Ok(format!(
+        "Remote env\n  Rust status      bootstrap foundation only\n  Remote enabled   {remote_enabled}\n  Session id       {session_id}\n  Base URL         {base_url}\n  Upstream proxy   {upstream_proxy}\n  Proxy ready      {proxy_ready}\n  Token path       {token_path}\n  Token present    {token_present}\n  CA bundle path   {ca_bundle}\n  System CA path   {system_ca}\n  WS target        {ws_target}\n  Inherited proxy  {inherited_count} vars\n  Missing          {missing}\n  Usage            /remote-setup",
+        remote_enabled = yes_no(remote.enabled),
+        session_id = session_id,
+        base_url = base_url,
+        upstream_proxy = yes_no(bootstrap.upstream_proxy_enabled),
+        proxy_ready = yes_no(bootstrap.should_enable()),
+        token_path = bootstrap.token_path.display(),
+        token_present = yes_no(bootstrap.token.is_some()),
+        ca_bundle = bootstrap.ca_bundle_path.display(),
+        system_ca = bootstrap.system_ca_path.display(),
+        ws_target = ws_target,
+        inherited_count = inherited.len(),
+        missing = missing,
+    ))
+}
+
+pub(crate) fn render_remote_setup_report() -> Result<String, Box<dyn std::error::Error>> {
+    let env_map = env::vars().collect::<BTreeMap<String, String>>();
+    let remote = RemoteSessionContext::from_env_map(&env_map);
+    let bootstrap = UpstreamProxyBootstrap::from_env_map(&env_map);
+    let catalog = load_remote_catalog_from_cwd()?;
+    let surface = load_remote_command_from_cwd("remote-setup")
+        .map_err(|error| io::Error::new(io::ErrorKind::NotFound, error))?;
+    let missing = remote_setup_gaps(&bootstrap);
+    let session_id = remote
+        .session_id
+        .clone()
+        .unwrap_or_else(|| String::from("<unset>"));
+    let base_url = if remote.base_url.is_empty() {
+        String::from("<unset>")
+    } else {
+        remote.base_url.clone()
+    };
+    let source_hints = surface
+        .source_hints
+        .iter()
+        .map(|hint| format!("  - {hint}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let transport_hints = catalog
+        .transport_files
+        .iter()
+        .map(|hint| format!("  - {hint}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Ok(format!(
+        "Remote setup\n  Rust status       bootstrap foundation only\n  Remote ready      {ready}\n  Remote enabled    {remote_enabled}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Token present     {token_present}\n  Archive           {archive}\n  Package           {package}\n  Archived files    {archived_files}\n  Transport files   {transport_files}\n  Summary           {summary}\n  Missing           {missing}\n  Usage             /remote-env\n\nSource hints\n{source_hints}\n\nTransport hints\n{transport_hints}",
+        ready = yes_no(bootstrap.should_enable()),
+        remote_enabled = yes_no(remote.enabled),
+        session_id = session_id,
+        base_url = base_url,
+        token_present = yes_no(bootstrap.token.is_some()),
+        archive = catalog.archive_name,
+        package = catalog.package_name,
+        archived_files = surface.archived_file_count,
+        transport_files = catalog.transport_files.len(),
+        summary = surface.summary,
+        missing = missing,
+        source_hints = source_hints,
+        transport_hints = transport_hints,
+    ))
+}
+
+fn yes_no(value: bool) -> &'static str {
+    if value {
+        "yes"
+    } else {
+        "no"
+    }
+}
+
+fn resolved_permission_mode_label(mode: ResolvedPermissionMode) -> &'static str {
+    match mode {
+        ResolvedPermissionMode::ReadOnly => "read-only",
+        ResolvedPermissionMode::WorkspaceWrite => "workspace-write",
+        ResolvedPermissionMode::DangerFullAccess => "danger-full-access",
+    }
+}
+
+fn summarize_mcp_transports(servers: &BTreeMap<String, runtime::ScopedMcpServerConfig>) -> String {
+    if servers.is_empty() {
+        return String::from("<none>");
+    }
+
+    let mut counts = BTreeMap::<&'static str, usize>::new();
+    for server in servers.values() {
+        let label = match server.transport() {
+            McpTransport::Stdio => "stdio",
+            McpTransport::Sse => "sse",
+            McpTransport::Http => "http",
+            McpTransport::Ws => "ws",
+            McpTransport::Sdk => "sdk",
+            McpTransport::SimcoeAiProxy => "simcoe-ai-proxy",
+        };
+        *counts.entry(label).or_default() += 1;
+    }
+
+    counts
+        .into_iter()
+        .map(|(label, count)| format!("{label}={count}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn oauth_expiry_summary(expires_at: Option<u64>) -> String {
+    match expires_at {
+        Some(timestamp) => match current_unix_timestamp() {
+            Some(now) if timestamp <= now => format!("expired at {timestamp}"),
+            Some(_) => format!("valid until {timestamp}"),
+            None => format!("unix {timestamp}"),
+        },
+        None => String::from("<unset>"),
+    }
+}
+
+fn current_unix_timestamp() -> Option<u64> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_secs())
+}
+
+fn summarize_scopes(scopes: &[String]) -> String {
+    if scopes.is_empty() {
+        String::from("<none>")
+    } else {
+        scopes.join(", ")
+    }
+}
+
+fn summarize_doctor_issues(issues: &[String]) -> String {
+    if issues.is_empty() {
+        String::from("  <none>")
+    } else {
+        issues
+            .iter()
+            .map(|issue| format!("  - {issue}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+fn render_tool_detail(spec: &ToolSpec) -> Result<String, Box<dyn std::error::Error>> {
+    Ok(format!(
+        "Tool\n  Name             {name}\n  Source           rust tool registry\n  Required mode    {required_mode}\n  Description      {description}\n\nInput schema\n{schema}",
+        name = spec.name,
+        required_mode = spec.required_permission.as_str(),
+        description = spec.description,
+        schema = render_json_block(&spec.input_schema)?,
+    ))
+}
+
+fn render_json_block(value: &serde_json::Value) -> Result<String, serde_json::Error> {
+    Ok(serde_json::to_string_pretty(value)?
+        .lines()
+        .map(|line| format!("  {line}"))
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+
+fn remote_setup_gaps(bootstrap: &UpstreamProxyBootstrap) -> String {
+    let mut missing = Vec::new();
+    if !bootstrap.remote.enabled {
+        missing.push("SIMCOE_AI_REMOTE disabled");
+    }
+    if bootstrap.remote.session_id.is_none() {
+        missing.push("missing remote session id");
+    }
+    if bootstrap.remote.base_url.is_empty() {
+        missing.push("missing base URL");
+    }
+    if !bootstrap.upstream_proxy_enabled {
+        missing.push("CCR_UPSTREAM_PROXY_ENABLED disabled");
+    }
+    if bootstrap.token.is_none() {
+        missing.push("missing session token");
+    }
+    if missing.is_empty() {
+        String::from("<none>")
+    } else {
+        missing.join(", ")
+    }
+}
+
+fn matches_tool_request(name: &str, requested: &str) -> bool {
+    canonical_tool_query(name) == canonical_tool_query(requested)
+        || canonical_token(name) == canonical_token(requested)
+}
+
+fn canonical_tool_query(value: &str) -> String {
+    let canonical = canonical_token(value);
+    canonical
+        .strip_suffix("tool")
+        .unwrap_or(canonical.as_str())
+        .to_string()
+}
+
+fn canonical_token(value: &str) -> String {
+    value
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 pub(crate) fn render_skills_report(

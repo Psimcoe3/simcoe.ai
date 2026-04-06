@@ -54,9 +54,21 @@ impl UpstreamPaths {
     }
 
     #[must_use]
+    pub fn tools_snapshot_path(&self) -> PathBuf {
+        self.repo_root
+            .join("src/reference_data/tools_snapshot.json")
+    }
+
+    #[must_use]
     pub fn plugins_snapshot_path(&self) -> PathBuf {
         self.repo_root
             .join("src/reference_data/subsystems/plugins.json")
+    }
+
+    #[must_use]
+    pub fn cli_snapshot_path(&self) -> PathBuf {
+        self.repo_root
+            .join("src/reference_data/subsystems/cli.json")
     }
 }
 
@@ -101,6 +113,37 @@ pub struct PluginCatalog {
     pub surfaces: Vec<PluginSurfaceSummary>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteCommandSummary {
+    pub name: String,
+    pub summary: String,
+    pub source_hints: Vec<String>,
+    pub archived_file_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteCatalog {
+    pub archive_name: String,
+    pub package_name: String,
+    pub module_count: usize,
+    pub transport_files: Vec<String>,
+    pub commands: Vec<RemoteCommandSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchivedToolFamilySummary {
+    pub name: String,
+    pub summary: String,
+    pub source_hints: Vec<String>,
+    pub archived_file_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolCatalog {
+    pub archived_file_count: usize,
+    pub families: Vec<ArchivedToolFamilySummary>,
+}
+
 #[derive(Debug, Deserialize)]
 struct SnapshotEntry {
     name: String,
@@ -109,7 +152,7 @@ struct SnapshotEntry {
 }
 
 #[derive(Debug, Deserialize)]
-struct PluginSubsystemSnapshot {
+struct ArchivedSubsystemSnapshot {
     archive_name: String,
     package_name: String,
     module_count: usize,
@@ -161,7 +204,7 @@ pub fn extract_manifest(paths: &UpstreamPaths) -> std::io::Result<ExtractedManif
 }
 
 pub fn load_plugin_catalog(paths: &UpstreamPaths) -> std::io::Result<PluginCatalog> {
-    let subsystem = read_json::<PluginSubsystemSnapshot>(&paths.plugins_snapshot_path())?;
+    let subsystem = read_json::<ArchivedSubsystemSnapshot>(&paths.plugins_snapshot_path())?;
     let commands = read_json::<Vec<SnapshotEntry>>(&paths.commands_snapshot_path())?;
 
     let mut grouped =
@@ -225,7 +268,7 @@ pub fn load_plugin_catalog(paths: &UpstreamPaths) -> std::io::Result<PluginCatal
 
 pub fn load_plugin_catalog_from_cwd() -> std::io::Result<PluginCatalog> {
     let cwd = std::env::current_dir()?;
-    let repo_root = find_snapshot_repo_root(&cwd).ok_or_else(|| {
+    let repo_root = find_snapshot_repo_root(&cwd, "plugins.json").ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,
             "could not locate archived plugin snapshots from the current directory",
@@ -259,6 +302,182 @@ pub fn load_plugin_surface_from_cwd(requested: &str) -> Result<PluginSurfaceSumm
         [] => Err(format!("unknown plugin surface: {requested}")),
         _ => Err(format!(
             "multiple plugin surfaces matched '{requested}'; use a more specific name"
+        )),
+    }
+}
+
+pub fn load_remote_catalog(paths: &UpstreamPaths) -> std::io::Result<RemoteCatalog> {
+    let subsystem = read_json::<ArchivedSubsystemSnapshot>(&paths.cli_snapshot_path())?;
+    let commands = read_json::<Vec<SnapshotEntry>>(&paths.commands_snapshot_path())?;
+
+    let mut grouped = std::collections::BTreeMap::<String, RemoteCommandSummary>::new();
+
+    for entry in commands.into_iter().filter(|entry| {
+        entry.source_hint.starts_with("commands/remote-env/")
+            || entry.source_hint.starts_with("commands/remote-setup/")
+    }) {
+        let family = command_family_from_source_hint(&entry.source_hint)
+            .unwrap_or_else(|| entry.name.clone());
+        let surface = grouped
+            .entry(family.clone())
+            .or_insert_with(|| RemoteCommandSummary {
+                name: family.clone(),
+                summary: entry.responsibility.clone(),
+                source_hints: Vec::new(),
+                archived_file_count: 0,
+            });
+        if canonical_token(&entry.name) == canonical_token(&family) || surface.summary.is_empty() {
+            surface.summary = entry.responsibility.clone();
+        }
+        surface.archived_file_count += 1;
+        if !surface
+            .source_hints
+            .iter()
+            .any(|hint| hint == &entry.source_hint)
+        {
+            surface.source_hints.push(entry.source_hint);
+        }
+    }
+
+    let mut command_surfaces = grouped.into_values().collect::<Vec<_>>();
+    command_surfaces.sort_by(|left, right| left.name.cmp(&right.name));
+
+    let transport_files = subsystem
+        .sample_files
+        .iter()
+        .filter(|file| is_remote_transport_sample_file(file))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    Ok(RemoteCatalog {
+        archive_name: subsystem.archive_name,
+        package_name: subsystem.package_name,
+        module_count: subsystem.module_count,
+        transport_files,
+        commands: command_surfaces,
+    })
+}
+
+pub fn load_remote_catalog_from_cwd() -> std::io::Result<RemoteCatalog> {
+    let cwd = std::env::current_dir()?;
+    let repo_root = find_snapshot_repo_root(&cwd, "cli.json").ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "could not locate archived cli snapshots from the current directory",
+        )
+    })?;
+    load_remote_catalog(&UpstreamPaths::from_repo_root(repo_root))
+}
+
+pub fn load_remote_command_from_cwd(requested: &str) -> Result<RemoteCommandSummary, String> {
+    let requested = requested.trim();
+    if requested.is_empty() {
+        return Err(String::from("remote command name must not be empty"));
+    }
+
+    let catalog = load_remote_catalog_from_cwd().map_err(|error| error.to_string())?;
+    let wanted = canonical_token(requested);
+    let matches = catalog
+        .commands
+        .into_iter()
+        .filter(|command| {
+            canonical_token(&command.name) == wanted
+                || command
+                    .source_hints
+                    .iter()
+                    .any(|hint| canonical_token(hint) == wanted)
+        })
+        .collect::<Vec<_>>();
+
+    match matches.as_slice() {
+        [command] => Ok(command.clone()),
+        [] => Err(format!("unknown remote command: {requested}")),
+        _ => Err(format!(
+            "multiple remote commands matched '{requested}'; use a more specific name"
+        )),
+    }
+}
+
+pub fn load_tool_catalog(paths: &UpstreamPaths) -> std::io::Result<ToolCatalog> {
+    let entries = read_json::<Vec<SnapshotEntry>>(&paths.tools_snapshot_path())?;
+    let mut grouped = std::collections::BTreeMap::<String, ArchivedToolFamilySummary>::new();
+    let mut archived_file_count = 0;
+
+    for entry in entries
+        .into_iter()
+        .filter(|entry| entry.source_hint.starts_with("tools/"))
+    {
+        archived_file_count += 1;
+        let family = tool_family_from_source_hint(&entry.source_hint)
+            .unwrap_or_else(|| tool_surface_name_from_path(&entry.source_hint));
+        let surface = grouped
+            .entry(family.clone())
+            .or_insert_with(|| ArchivedToolFamilySummary {
+                name: family.clone(),
+                summary: entry.responsibility.clone(),
+                source_hints: Vec::new(),
+                archived_file_count: 0,
+            });
+        if matches_tool_query(&entry.name, &family) || surface.summary.is_empty() {
+            surface.summary = entry.responsibility.clone();
+        }
+        surface.archived_file_count += 1;
+        if !surface
+            .source_hints
+            .iter()
+            .any(|hint| hint == &entry.source_hint)
+        {
+            surface.source_hints.push(entry.source_hint);
+        }
+    }
+
+    let mut families = grouped.into_values().collect::<Vec<_>>();
+    families.sort_by(|left, right| left.name.cmp(&right.name));
+
+    Ok(ToolCatalog {
+        archived_file_count,
+        families,
+    })
+}
+
+pub fn load_tool_catalog_from_cwd() -> std::io::Result<ToolCatalog> {
+    let cwd = std::env::current_dir()?;
+    let repo_root = find_tools_snapshot_repo_root(&cwd).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "could not locate archived tool snapshots from the current directory",
+        )
+    })?;
+    load_tool_catalog(&UpstreamPaths::from_repo_root(repo_root))
+}
+
+pub fn load_tool_family_from_cwd(requested: &str) -> Result<ArchivedToolFamilySummary, String> {
+    let requested = requested.trim();
+    if requested.is_empty() {
+        return Err(String::from("tool family name must not be empty"));
+    }
+
+    let catalog = load_tool_catalog_from_cwd().map_err(|error| error.to_string())?;
+    let wanted = canonical_tool_query(requested);
+    let requested_path = canonical_token(requested);
+    let matches = catalog
+        .families
+        .into_iter()
+        .filter(|family| {
+            matches_tool_query(&family.name, requested)
+                || family
+                    .source_hints
+                    .iter()
+                    .any(|hint| canonical_token(hint) == requested_path)
+                || canonical_tool_query(&family.name) == wanted
+        })
+        .collect::<Vec<_>>();
+
+    match matches.as_slice() {
+        [family] => Ok(family.clone()),
+        [] => Err(format!("unknown tool family: {requested}")),
+        _ => Err(format!(
+            "multiple tool families matched '{requested}'; use a more specific name"
         )),
     }
 }
@@ -469,12 +688,42 @@ fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> std::io::Result<T> 
     })
 }
 
-fn find_snapshot_repo_root(start: &Path) -> Option<PathBuf> {
+fn find_snapshot_repo_root(start: &Path, subsystem_snapshot: &str) -> Option<PathBuf> {
     start.ancestors().find_map(|ancestor| {
         let commands = ancestor.join("src/reference_data/commands_snapshot.json");
-        let plugins = ancestor.join("src/reference_data/subsystems/plugins.json");
-        (commands.is_file() && plugins.is_file()).then(|| ancestor.to_path_buf())
+        let subsystem = ancestor
+            .join("src/reference_data/subsystems")
+            .join(subsystem_snapshot);
+        (commands.is_file() && subsystem.is_file()).then(|| ancestor.to_path_buf())
     })
+}
+
+fn find_tools_snapshot_repo_root(start: &Path) -> Option<PathBuf> {
+    start.ancestors().find_map(|ancestor| {
+        ancestor
+            .join("src/reference_data/tools_snapshot.json")
+            .is_file()
+            .then(|| ancestor.to_path_buf())
+    })
+}
+
+fn command_family_from_source_hint(source_hint: &str) -> Option<String> {
+    let mut parts = source_hint.split('/');
+    match (parts.next(), parts.next()) {
+        (Some("commands"), Some(family)) if !family.is_empty() => Some(family.to_string()),
+        _ => None,
+    }
+}
+
+fn tool_family_from_source_hint(source_hint: &str) -> Option<String> {
+    let trimmed = source_hint.strip_prefix("tools/")?;
+    let mut parts = trimmed.split('/');
+    let first = parts.next()?;
+    if parts.next().is_some() {
+        Some(first.to_string())
+    } else {
+        Some(tool_surface_name_from_path(first))
+    }
 }
 
 fn plugin_surface_name_from_path(path: &str) -> String {
@@ -491,6 +740,20 @@ fn plugin_surface_name_from_path(path: &str) -> String {
     }
 }
 
+fn tool_surface_name_from_path(path: &str) -> String {
+    let path = Path::new(path);
+    match path.file_stem().and_then(|stem| stem.to_str()) {
+        Some(stem) => stem.to_string(),
+        None => path.to_string_lossy().to_string(),
+    }
+}
+
+fn is_remote_transport_sample_file(path: &str) -> bool {
+    path == "cli/remoteIO.ts"
+        || path == "cli/structuredIO.ts"
+        || path.starts_with("cli/transports/")
+}
+
 fn canonical_token(value: &str) -> String {
     value
         .chars()
@@ -499,9 +762,27 @@ fn canonical_token(value: &str) -> String {
         .collect()
 }
 
+fn canonical_tool_query(value: &str) -> String {
+    let canonical = canonical_token(value);
+    canonical
+        .strip_suffix("tool")
+        .unwrap_or(canonical.as_str())
+        .to_string()
+}
+
+fn matches_tool_query(value: &str, requested: &str) -> bool {
+    canonical_tool_query(value) == canonical_tool_query(requested)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     fn fixture_paths() -> UpstreamPaths {
         let workspace_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -562,6 +843,9 @@ mod tests {
 
     #[test]
     fn loads_plugin_catalog_and_surface_from_snapshots() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let root = std::env::temp_dir().join(format!(
             "compat-harness-plugin-{}",
             std::time::SystemTime::now()
@@ -635,6 +919,141 @@ mod tests {
             module.source_hints,
             vec![String::from("plugins/bundled/index.ts")]
         );
+
+        std::env::set_current_dir(&original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn loads_remote_catalog_and_command_from_snapshots() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let root = std::env::temp_dir().join(format!(
+            "compat-harness-remote-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        let commands_dir = root.join("src/reference_data");
+        let subsystems_dir = commands_dir.join("subsystems");
+        let rust_dir = root.join("rust");
+        fs::create_dir_all(&subsystems_dir).expect("create snapshot dirs");
+        fs::create_dir_all(&rust_dir).expect("create rust dir");
+        fs::write(
+            commands_dir.join("commands_snapshot.json"),
+            r#"[
+  {"name":"remote-env","source_hint":"commands/remote-env/index.ts","responsibility":"remote env index"},
+  {"name":"remote-env","source_hint":"commands/remote-env/remote-env.tsx","responsibility":"remote env flow"},
+  {"name":"api","source_hint":"commands/remote-setup/api.ts","responsibility":"remote setup api"},
+  {"name":"remote-setup","source_hint":"commands/remote-setup/index.ts","responsibility":"remote setup index"},
+  {"name":"remote-setup","source_hint":"commands/remote-setup/remote-setup.tsx","responsibility":"remote setup flow"},
+  {"name":"other","source_hint":"commands/other/index.ts","responsibility":"other"}
+]"#,
+        )
+        .expect("write command snapshot");
+        fs::write(
+            subsystems_dir.join("cli.json"),
+            r#"{
+  "archive_name": "cli",
+  "package_name": "cli",
+  "module_count": 5,
+  "sample_files": [
+    "cli/print.ts",
+    "cli/remoteIO.ts",
+    "cli/structuredIO.ts",
+    "cli/transports/WebSocketTransport.ts",
+    "cli/transports/transportUtils.ts"
+  ]
+}"#,
+        )
+        .expect("write cli snapshot");
+
+        let catalog = load_remote_catalog(&UpstreamPaths::from_repo_root(&root))
+            .expect("catalog should load");
+        assert_eq!(catalog.archive_name, "cli");
+        assert_eq!(catalog.module_count, 5);
+        assert_eq!(catalog.transport_files.len(), 4);
+        assert!(catalog
+            .commands
+            .iter()
+            .any(|command| command.name == "remote-env"));
+        assert!(catalog
+            .commands
+            .iter()
+            .any(|command| command.name == "remote-setup"));
+
+        let original_cwd = std::env::current_dir().expect("cwd");
+        std::env::set_current_dir(&rust_dir).expect("set cwd");
+
+        let setup = load_remote_command_from_cwd("remote-setup").expect("remote setup should load");
+        assert_eq!(setup.archived_file_count, 3);
+        assert!(setup
+            .source_hints
+            .iter()
+            .any(|hint| hint == "commands/remote-setup/api.ts"));
+        assert!(setup.summary.contains("remote setup"));
+
+        std::env::set_current_dir(&original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn loads_tool_catalog_and_family_from_snapshots() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let root = std::env::temp_dir().join(format!(
+            "compat-harness-tools-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        let reference_data = root.join("src/reference_data");
+        let rust_dir = root.join("rust");
+        fs::create_dir_all(&reference_data).expect("create snapshot dir");
+        fs::create_dir_all(&rust_dir).expect("create rust dir");
+        fs::write(
+            reference_data.join("tools_snapshot.json"),
+            r#"[
+  {"name":"BashTool","source_hint":"tools/BashTool/BashTool.tsx","responsibility":"bash tool"},
+  {"name":"bashPermissions","source_hint":"tools/BashTool/bashPermissions.ts","responsibility":"bash permissions"},
+  {"name":"ToolSearchTool","source_hint":"tools/ToolSearchTool/ToolSearchTool.ts","responsibility":"tool search"},
+  {"name":"queryParser","source_hint":"tools/ToolSearchTool/queryParser.ts","responsibility":"query parser"},
+  {"name":"helper","source_hint":"tools/helper.ts","responsibility":"helper"}
+]"#,
+        )
+        .expect("write tool snapshot");
+
+        let catalog =
+            load_tool_catalog(&UpstreamPaths::from_repo_root(&root)).expect("catalog should load");
+        assert_eq!(catalog.archived_file_count, 5);
+        assert!(catalog
+            .families
+            .iter()
+            .any(|family| family.name == "BashTool"));
+        assert!(catalog
+            .families
+            .iter()
+            .any(|family| family.name == "ToolSearchTool"));
+        assert!(catalog
+            .families
+            .iter()
+            .any(|family| family.name == "helper"));
+
+        let original_cwd = std::env::current_dir().expect("cwd");
+        std::env::set_current_dir(&rust_dir).expect("set cwd");
+
+        let bash = load_tool_family_from_cwd("bash").expect("bash family should load");
+        assert_eq!(bash.name, "BashTool");
+        assert_eq!(bash.archived_file_count, 2);
+        assert!(bash
+            .source_hints
+            .iter()
+            .any(|hint| hint == "tools/BashTool/BashTool.tsx"));
+        assert!(bash.summary.contains("bash tool"));
 
         std::env::set_current_dir(&original_cwd).expect("restore cwd");
         let _ = fs::remove_dir_all(root);
