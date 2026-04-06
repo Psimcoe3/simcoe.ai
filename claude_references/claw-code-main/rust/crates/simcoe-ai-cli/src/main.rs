@@ -71,9 +71,9 @@ fn main() {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
     match parse_args(&args)? {
-        CliAction::DumpManifests => dump_manifests(),
+        CliAction::DumpManifests => dump_manifests()?,
         CliAction::BootstrapPlan => print_bootstrap_plan(),
-        CliAction::PrintSystemPrompt { cwd, date } => print_system_prompt(cwd, date),
+        CliAction::PrintSystemPrompt { cwd, date } => print_system_prompt(cwd, date)?,
         CliAction::Version => print_version(),
         CliAction::ResumeSession {
             session_path,
@@ -107,20 +107,21 @@ fn filter_tool_specs(allowed_tools: Option<&AllowedToolSet>) -> Vec<tools::ToolS
         .collect()
 }
 
-fn dump_manifests() {
+fn dump_manifests_report() -> Result<String, Box<dyn std::error::Error>> {
     let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let paths = UpstreamPaths::from_workspace_dir(&workspace_dir);
-    match extract_manifest(&paths) {
-        Ok(manifest) => {
-            println!("commands: {}", manifest.commands.entries().len());
-            println!("tools: {}", manifest.tools.entries().len());
-            println!("bootstrap phases: {}", manifest.bootstrap.phases().len());
-        }
-        Err(error) => {
-            eprintln!("failed to extract manifests: {error}");
-            std::process::exit(1);
-        }
-    }
+    let manifest = extract_manifest(&paths)?;
+    Ok(format!(
+        "commands: {}\ntools: {}\nbootstrap phases: {}",
+        manifest.commands.entries().len(),
+        manifest.tools.entries().len(),
+        manifest.bootstrap.phases().len(),
+    ))
+}
+
+fn dump_manifests() -> Result<(), Box<dyn std::error::Error>> {
+    println!("{}", dump_manifests_report()?);
+    Ok(())
 }
 
 fn run_repl(
@@ -229,10 +230,17 @@ fn write_temp_text_file(
     Ok(path)
 }
 
+fn bootstrap_plan_report() -> String {
+    runtime::BootstrapPlan::simcoe_ai_default()
+        .phases()
+        .iter()
+        .map(|phase| format!("- {phase:?}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn print_bootstrap_plan() {
-    for phase in runtime::BootstrapPlan::simcoe_ai_default().phases() {
-        println!("- {phase:?}");
-    }
+    println!("{}", bootstrap_plan_report());
 }
 
 fn oauth_config_for_login<'a>(
@@ -357,14 +365,55 @@ fn wait_for_oauth_callback(
     Ok(callback)
 }
 
-fn print_system_prompt(cwd: PathBuf, date: String) {
-    match load_system_prompt(cwd, date, env::consts::OS, "unknown") {
-        Ok(sections) => println!("{}", sections.join("\n\n")),
-        Err(error) => {
-            eprintln!("failed to build system prompt: {error}");
-            std::process::exit(1);
+fn parse_system_prompt_command_args(
+    args: Option<&str>,
+) -> Result<(PathBuf, String), Box<dyn std::error::Error>> {
+    let mut cwd = env::current_dir()?;
+    let mut date = DEFAULT_DATE.to_string();
+    let tokens = args
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.split_whitespace().collect::<Vec<_>>())
+        .unwrap_or_default();
+    let mut index = 0;
+
+    while index < tokens.len() {
+        match tokens[index] {
+            "--cwd" => {
+                let value = tokens.get(index + 1).ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "missing value for --cwd")
+                })?;
+                cwd = PathBuf::from(value);
+                index += 2;
+            }
+            "--date" => {
+                let value = tokens.get(index + 1).ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "missing value for --date")
+                })?;
+                date = (*value).to_string();
+                index += 2;
+            }
+            other => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("unknown system-prompt option: {other}"),
+                )
+                .into())
+            }
         }
     }
+
+    Ok((cwd, date))
+}
+
+fn system_prompt_report(cwd: PathBuf, date: String) -> Result<String, Box<dyn std::error::Error>> {
+    let sections = load_system_prompt(cwd, date, env::consts::OS, "unknown")?;
+    Ok(sections.join("\n\n"))
+}
+
+fn print_system_prompt(cwd: PathBuf, date: String) -> Result<(), Box<dyn std::error::Error>> {
+    println!("{}", system_prompt_report(cwd, date)?);
+    Ok(())
 }
 
 fn print_version() {
@@ -525,10 +574,25 @@ fn run_resume_command(
                 message: Some(format_cost_report(usage)),
             })
         }
+        SlashCommand::DumpManifests => Ok(ResumeCommandOutcome {
+            session: session.clone(),
+            message: Some(dump_manifests_report()?),
+        }),
+        SlashCommand::BootstrapPlan => Ok(ResumeCommandOutcome {
+            session: session.clone(),
+            message: Some(bootstrap_plan_report()),
+        }),
         SlashCommand::Config { section } => Ok(ResumeCommandOutcome {
             session: session.clone(),
             message: Some(render_config_report(section.as_deref())?),
         }),
+        SlashCommand::SystemPrompt { args } => {
+            let (cwd, date) = parse_system_prompt_command_args(args.as_deref())?;
+            Ok(ResumeCommandOutcome {
+                session: session.clone(),
+                message: Some(system_prompt_report(cwd, date)?),
+            })
+        }
         SlashCommand::Hooks { event } => Ok(ResumeCommandOutcome {
             session: session.clone(),
             message: Some(render_hooks_report(event.as_deref())?),
@@ -2008,9 +2072,12 @@ mod tests {
         assert!(help.contains("/permissions [read-only|workspace-write|danger-full-access]"));
         assert!(help.contains("/clear [--confirm]"));
         assert!(help.contains("/cost"));
+        assert!(help.contains("/dump-manifests"));
+        assert!(help.contains("/bootstrap-plan"));
         assert!(help.contains("/login"));
         assert!(help.contains("/logout"));
         assert!(help.contains("/resume <session-path>"));
+        assert!(help.contains("/system-prompt [--cwd PATH] [--date YYYY-MM-DD]"));
         assert!(help.contains("/config [env|hooks|model]"));
         assert!(help.contains("/hooks [pre|post]"));
         assert!(help.contains("/mcp [server]"));
@@ -2048,6 +2115,9 @@ mod tests {
                 "compact",
                 "clear",
                 "cost",
+                "dump-manifests",
+                "bootstrap-plan",
+                "system-prompt",
                 "config",
                 "hooks",
                 "mcp",
@@ -2693,8 +2763,6 @@ mod tests {
         );
         assert!(report.contains("Archived files   2"));
         assert!(report.contains("Archived modules 2"));
-        assert_eq!(SlashCommand::parse("/login"), Some(SlashCommand::Login));
-        assert_eq!(SlashCommand::parse("/logout"), Some(SlashCommand::Logout));
         assert!(report.contains("commands/reload-plugins/index.ts"));
         assert!(report.contains("commands/reload-plugins/reload-plugins.ts"));
 
@@ -3451,6 +3519,26 @@ mod tests {
         assert_eq!(
             SlashCommand::parse("/clear --confirm"),
             Some(SlashCommand::Clear { confirm: true })
+        );
+        assert_eq!(
+            SlashCommand::parse("/dump-manifests"),
+            Some(SlashCommand::DumpManifests)
+        );
+        assert_eq!(
+            SlashCommand::parse("/bootstrap-plan"),
+            Some(SlashCommand::BootstrapPlan)
+        );
+        assert_eq!(SlashCommand::parse("/login"), Some(SlashCommand::Login));
+        assert_eq!(SlashCommand::parse("/logout"), Some(SlashCommand::Logout));
+        assert_eq!(
+            SlashCommand::parse("/system-prompt"),
+            Some(SlashCommand::SystemPrompt { args: None })
+        );
+        assert_eq!(
+            SlashCommand::parse("/system-prompt --cwd repo --date 2026-04-05"),
+            Some(SlashCommand::SystemPrompt {
+                args: Some("--cwd repo --date 2026-04-05".to_string())
+            })
         );
         assert_eq!(
             SlashCommand::parse("/config"),

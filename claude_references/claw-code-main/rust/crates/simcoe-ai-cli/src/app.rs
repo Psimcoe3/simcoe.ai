@@ -255,6 +255,14 @@ impl LiveCli {
                 self.print_cost();
                 false
             }
+            commands::SlashCommand::DumpManifests => {
+                Self::print_dump_manifests()?;
+                false
+            }
+            commands::SlashCommand::BootstrapPlan => {
+                Self::print_bootstrap_plan();
+                false
+            }
             commands::SlashCommand::Login => {
                 crate::run_login()?;
                 false
@@ -264,6 +272,10 @@ impl LiveCli {
                 false
             }
             commands::SlashCommand::Resume { session_path } => self.resume_session(session_path)?,
+            commands::SlashCommand::SystemPrompt { args } => {
+                Self::print_system_prompt(args.as_deref())?;
+                false
+            }
             commands::SlashCommand::Config { section } => {
                 Self::print_config(section.as_deref())?;
                 false
@@ -549,6 +561,21 @@ impl LiveCli {
 
     fn print_memory() -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", render_memory_report()?);
+        Ok(())
+    }
+
+    fn print_dump_manifests() -> Result<(), Box<dyn std::error::Error>> {
+        println!("{}", crate::dump_manifests_report()?);
+        Ok(())
+    }
+
+    fn print_bootstrap_plan() {
+        println!("{}", crate::bootstrap_plan_report());
+    }
+
+    fn print_system_prompt(args: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        let (cwd, date) = crate::parse_system_prompt_command_args(args)?;
+        println!("{}", crate::system_prompt_report(cwd, date)?);
         Ok(())
     }
 

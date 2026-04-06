@@ -82,6 +82,18 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         resume_supported: true,
     },
     SlashCommandSpec {
+        name: "dump-manifests",
+        summary: "Show archived manifest counts for commands, tools, and bootstrap",
+        argument_hint: None,
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "bootstrap-plan",
+        summary: "Show the default runtime bootstrap phases",
+        argument_hint: None,
+        resume_supported: true,
+    },
+    SlashCommandSpec {
         name: "login",
         summary: "Authenticate with Simcoe AI using OAuth",
         argument_hint: None,
@@ -98,6 +110,12 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         summary: "Load a saved session into the REPL",
         argument_hint: Some("<session-path>"),
         resume_supported: false,
+    },
+    SlashCommandSpec {
+        name: "system-prompt",
+        summary: "Render the current system prompt scaffold",
+        argument_hint: Some("[--cwd PATH] [--date YYYY-MM-DD]"),
+        resume_supported: true,
     },
     SlashCommandSpec {
         name: "config",
@@ -301,10 +319,15 @@ pub enum SlashCommand {
         confirm: bool,
     },
     Cost,
+    DumpManifests,
+    BootstrapPlan,
     Login,
     Logout,
     Resume {
         session_path: Option<String>,
+    },
+    SystemPrompt {
+        args: Option<String>,
     },
     Config {
         section: Option<String>,
@@ -395,10 +418,15 @@ impl SlashCommand {
                 confirm: parts.next() == Some("--confirm"),
             },
             "cost" => Self::Cost,
+            "dump-manifests" => Self::DumpManifests,
+            "bootstrap-plan" => Self::BootstrapPlan,
             "login" => Self::Login,
             "logout" => Self::Logout,
             "resume" => Self::Resume {
                 session_path: parts.next().map(ToOwned::to_owned),
+            },
+            "system-prompt" => Self::SystemPrompt {
+                args: remainder_after_command(trimmed, command),
             },
             "config" => Self::Config {
                 section: parts.next().map(ToOwned::to_owned),
@@ -533,9 +561,12 @@ pub fn handle_slash_command(
         | SlashCommand::Permissions { .. }
         | SlashCommand::Clear { .. }
         | SlashCommand::Cost
+        | SlashCommand::DumpManifests
+        | SlashCommand::BootstrapPlan
         | SlashCommand::Login
         | SlashCommand::Logout
         | SlashCommand::Resume { .. }
+        | SlashCommand::SystemPrompt { .. }
         | SlashCommand::Config { .. }
         | SlashCommand::Hooks { .. }
         | SlashCommand::Mcp { .. }
@@ -642,12 +673,30 @@ mod tests {
             Some(SlashCommand::Clear { confirm: true })
         );
         assert_eq!(SlashCommand::parse("/cost"), Some(SlashCommand::Cost));
+        assert_eq!(
+            SlashCommand::parse("/dump-manifests"),
+            Some(SlashCommand::DumpManifests)
+        );
+        assert_eq!(
+            SlashCommand::parse("/bootstrap-plan"),
+            Some(SlashCommand::BootstrapPlan)
+        );
         assert_eq!(SlashCommand::parse("/login"), Some(SlashCommand::Login));
         assert_eq!(SlashCommand::parse("/logout"), Some(SlashCommand::Logout));
         assert_eq!(
             SlashCommand::parse("/resume session.json"),
             Some(SlashCommand::Resume {
                 session_path: Some("session.json".to_string()),
+            })
+        );
+        assert_eq!(
+            SlashCommand::parse("/system-prompt"),
+            Some(SlashCommand::SystemPrompt { args: None })
+        );
+        assert_eq!(
+            SlashCommand::parse("/system-prompt --cwd repo --date 2026-04-05"),
+            Some(SlashCommand::SystemPrompt {
+                args: Some("--cwd repo --date 2026-04-05".to_string())
             })
         );
         assert_eq!(
@@ -760,9 +809,12 @@ mod tests {
         assert!(help.contains("/permissions [read-only|workspace-write|danger-full-access]"));
         assert!(help.contains("/clear [--confirm]"));
         assert!(help.contains("/cost"));
+        assert!(help.contains("/dump-manifests"));
+        assert!(help.contains("/bootstrap-plan"));
         assert!(help.contains("/resume <session-path>"));
         assert!(help.contains("/login"));
         assert!(help.contains("/logout"));
+        assert!(help.contains("/system-prompt [--cwd PATH] [--date YYYY-MM-DD]"));
         assert!(help.contains("/config [env|hooks|model]"));
         assert!(help.contains("/hooks [pre|post]"));
         assert!(help.contains("/mcp [server]"));
@@ -783,8 +835,8 @@ mod tests {
         assert!(help.contains("/plan [task]"));
         assert!(help.contains("/export [file]"));
         assert!(help.contains("/session [list|switch <session-id>]"));
-        assert_eq!(slash_command_specs().len(), 37);
-        assert_eq!(resume_supported_slash_commands().len(), 22);
+        assert_eq!(slash_command_specs().len(), 40);
+        assert_eq!(resume_supported_slash_commands().len(), 25);
     }
 
     #[test]
@@ -864,6 +916,14 @@ mod tests {
                 .is_none()
         );
         assert!(handle_slash_command("/cost", &session, CompactionConfig::default()).is_none());
+        assert!(
+            handle_slash_command("/dump-manifests", &session, CompactionConfig::default())
+                .is_none()
+        );
+        assert!(
+            handle_slash_command("/bootstrap-plan", &session, CompactionConfig::default())
+                .is_none()
+        );
         assert!(handle_slash_command("/login", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command("/logout", &session, CompactionConfig::default()).is_none());
         assert!(handle_slash_command(
@@ -872,6 +932,9 @@ mod tests {
             CompactionConfig::default()
         )
         .is_none());
+        assert!(
+            handle_slash_command("/system-prompt", &session, CompactionConfig::default()).is_none()
+        );
         assert!(handle_slash_command("/config", &session, CompactionConfig::default()).is_none());
         assert!(
             handle_slash_command("/config env", &session, CompactionConfig::default()).is_none()
