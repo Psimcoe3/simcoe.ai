@@ -1,32 +1,75 @@
 use std::collections::BTreeMap;
 use std::env;
 
-use runtime::{AssistantEvent, TokenUsage, TurnSummary, UpstreamProxyBootstrap};
+use runtime::{
+    inherited_upstream_proxy_env, AssistantEvent, TokenUsage, TurnSummary, UpstreamProxyBootstrap,
+};
 use serde_json::{json, Value};
 
 pub(crate) fn build_turn_transport(summary: &TurnSummary) -> Value {
+    let metadata = build_turn_transport_metadata();
+    json!({
+        "kind": metadata["kind"].clone(),
+        "active_transport_kind": metadata["active_transport_kind"].clone(),
+        "capabilities": metadata["capabilities"].clone(),
+        "bootstrap": metadata["bootstrap"].clone(),
+        "events": build_turn_transport_events(summary),
+    })
+}
+
+pub(crate) fn build_turn_transport_metadata() -> Value {
     let env_map = env::vars().collect::<BTreeMap<String, String>>();
-    build_turn_transport_from_env_map(summary, &env_map)
+    build_turn_transport_metadata_from_env_map(&env_map)
+}
+
+pub(crate) fn build_turn_transport_events(summary: &TurnSummary) -> Vec<Value> {
+    structured_turn_events(summary)
 }
 
 fn build_turn_transport_from_env_map(
     summary: &TurnSummary,
     env_map: &BTreeMap<String, String>,
 ) -> Value {
+    let metadata = build_turn_transport_metadata_from_env_map(env_map);
+    json!({
+        "kind": metadata["kind"].clone(),
+        "active_transport_kind": metadata["active_transport_kind"].clone(),
+        "capabilities": metadata["capabilities"].clone(),
+        "bootstrap": metadata["bootstrap"].clone(),
+        "events": build_turn_transport_events(summary),
+    })
+}
+
+fn build_turn_transport_metadata_from_env_map(env_map: &BTreeMap<String, String>) -> Value {
     let bootstrap = UpstreamProxyBootstrap::from_env_map(env_map);
     let ready = bootstrap.should_enable();
+    let inherited = inherited_upstream_proxy_env(env_map);
+    let inherited_keys = inherited.keys().cloned().collect::<Vec<_>>();
+    let missing = bootstrap.missing_requirements();
+    let ws_url = (!bootstrap.remote.base_url.is_empty()).then(|| bootstrap.ws_url());
 
     json!({
         "kind": if ready { "upstream-proxy" } else { "local" },
+        "active_transport_kind": "api-stream",
+        "capabilities": {
+            "structured_local_events": true,
+            "live_remote_transport": false,
+        },
         "bootstrap": {
             "remote_enabled": bootstrap.remote.enabled,
             "session_id": bootstrap.remote.session_id.clone(),
             "base_url": non_empty_string(&bootstrap.remote.base_url),
             "upstream_proxy_enabled": bootstrap.upstream_proxy_enabled,
             "ready": ready,
-            "ws_url": ready.then(|| bootstrap.ws_url()),
+            "ws_url": ws_url,
+            "token_path": bootstrap.token_path.display().to_string(),
+            "token_present": bootstrap.token.is_some(),
+            "ca_bundle_path": bootstrap.ca_bundle_path.display().to_string(),
+            "system_ca_path": bootstrap.system_ca_path.display().to_string(),
+            "inherited_proxy_env_count": inherited.len(),
+            "inherited_proxy_env_keys": inherited_keys,
+            "missing": missing,
         },
-        "events": structured_turn_events(summary),
     })
 }
 
@@ -108,7 +151,10 @@ fn non_empty_string(value: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_turn_transport_from_env_map, structured_turn_events};
+    use super::{
+        build_turn_transport_events, build_turn_transport_from_env_map,
+        build_turn_transport_metadata_from_env_map, structured_turn_events,
+    };
     use runtime::{
         AssistantEvent, AssistantTurnTrace, ContentBlock, ConversationMessage, TokenUsage,
         ToolResultTrace, TurnSummary,
@@ -270,13 +316,81 @@ mod tests {
         let transport = build_turn_transport_from_env_map(&sample_summary(), &env_map);
 
         assert_eq!(transport["kind"], json!("upstream-proxy"));
+        assert_eq!(transport["active_transport_kind"], json!("api-stream"));
+        assert_eq!(
+            transport["capabilities"]["live_remote_transport"],
+            json!(false)
+        );
         assert_eq!(transport["bootstrap"]["remote_enabled"], json!(true));
         assert_eq!(transport["bootstrap"]["ready"], json!(true));
+        assert_eq!(transport["bootstrap"]["token_present"], json!(true));
+        assert_eq!(transport["bootstrap"]["missing"], json!([]));
         assert_eq!(
             transport["bootstrap"]["ws_url"],
             json!("wss://remote.test/v1/code/upstreamproxy/ws")
         );
 
         let _ = fs::remove_dir_all(token_dir);
+    }
+
+    #[test]
+    fn build_turn_transport_metadata_reports_local_when_remote_is_unavailable() {
+        let metadata = build_turn_transport_metadata_from_env_map(&BTreeMap::new());
+
+        assert_eq!(metadata["kind"], json!("local"));
+        assert_eq!(metadata["active_transport_kind"], json!("api-stream"));
+        assert_eq!(metadata["bootstrap"]["remote_enabled"], json!(false));
+        assert_eq!(metadata["bootstrap"]["ready"], json!(false));
+        assert_eq!(metadata["bootstrap"]["token_present"], json!(false));
+        assert_eq!(metadata["bootstrap"]["inherited_proxy_env_count"], json!(0));
+        assert_eq!(
+            metadata["bootstrap"]["missing"],
+            json!([
+                "SIMCOE_AI_REMOTE disabled",
+                "missing remote session id",
+                "missing base URL",
+                "CCR_UPSTREAM_PROXY_ENABLED disabled",
+                "missing session token",
+            ])
+        );
+    }
+
+    #[test]
+    fn build_turn_transport_metadata_reports_inherited_proxy_env() {
+        let env_map = BTreeMap::from([
+            (
+                "HTTPS_PROXY".to_string(),
+                "http://127.0.0.1:8080".to_string(),
+            ),
+            (
+                "SSL_CERT_FILE".to_string(),
+                "/tmp/ca-bundle.crt".to_string(),
+            ),
+            ("NO_PROXY".to_string(), "localhost".to_string()),
+            (
+                "SIMCOE_AI_BASE_URL".to_string(),
+                "https://remote.test".to_string(),
+            ),
+        ]);
+
+        let metadata = build_turn_transport_metadata_from_env_map(&env_map);
+
+        assert_eq!(metadata["bootstrap"]["ready"], json!(false));
+        assert_eq!(
+            metadata["bootstrap"]["ws_url"],
+            json!("wss://remote.test/v1/code/upstreamproxy/ws")
+        );
+        assert_eq!(metadata["bootstrap"]["inherited_proxy_env_count"], json!(3));
+        assert_eq!(
+            metadata["bootstrap"]["inherited_proxy_env_keys"],
+            json!(["HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE"])
+        );
+    }
+
+    #[test]
+    fn build_turn_transport_events_matches_structured_event_list() {
+        let expected = structured_turn_events(&sample_summary());
+        let actual = build_turn_transport_events(&sample_summary());
+        assert_eq!(actual, expected);
     }
 }

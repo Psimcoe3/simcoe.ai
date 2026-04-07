@@ -9,16 +9,71 @@ pub(crate) type AllowedToolSet = BTreeSet<String>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CliAction {
-    DumpManifests,
-    BootstrapPlan,
+    DumpManifests {
+        output_format: CliOutputFormat,
+    },
+    BootstrapPlan {
+        output_format: CliOutputFormat,
+    },
     PrintSystemPrompt {
         cwd: PathBuf,
         date: String,
+        output_format: CliOutputFormat,
     },
-    Version,
+    Config {
+        section: Option<String>,
+        output_format: CliOutputFormat,
+    },
+    Hooks {
+        event: Option<String>,
+        output_format: CliOutputFormat,
+    },
+    Mcp {
+        server: Option<String>,
+        output_format: CliOutputFormat,
+    },
+    Memory {
+        output_format: CliOutputFormat,
+    },
+    Agents {
+        agent: Option<String>,
+        output_format: CliOutputFormat,
+    },
+    Plugin {
+        surface: Option<String>,
+        output_format: CliOutputFormat,
+    },
+    ReloadPlugins {
+        output_format: CliOutputFormat,
+    },
+    RemoteEnv {
+        output_format: CliOutputFormat,
+    },
+    RemoteSetup {
+        output_format: CliOutputFormat,
+    },
+    Tools {
+        tool: Option<String>,
+        output_format: CliOutputFormat,
+    },
+    Doctor {
+        output_format: CliOutputFormat,
+    },
+    Skills {
+        skill: Option<String>,
+        output_format: CliOutputFormat,
+    },
+    Tasks {
+        task: Option<String>,
+        output_format: CliOutputFormat,
+    },
+    Version {
+        output_format: CliOutputFormat,
+    },
     ResumeSession {
         session_path: PathBuf,
         commands: Vec<String>,
+        output_format: CliOutputFormat,
     },
     Prompt {
         prompt: String,
@@ -27,9 +82,15 @@ pub(crate) enum CliAction {
         allowed_tools: Option<AllowedToolSet>,
         permission_mode: PermissionMode,
     },
-    Login,
-    Logout,
-    Init,
+    Login {
+        output_format: CliOutputFormat,
+    },
+    Logout {
+        output_format: CliOutputFormat,
+    },
+    Init {
+        output_format: CliOutputFormat,
+    },
     Repl {
         model: String,
         allowed_tools: Option<AllowedToolSet>,
@@ -42,6 +103,7 @@ pub(crate) enum CliAction {
 pub(crate) enum CliOutputFormat {
     Text,
     Json,
+    Ndjson,
 }
 
 impl CliOutputFormat {
@@ -49,8 +111,9 @@ impl CliOutputFormat {
         match value {
             "text" => Ok(Self::Text),
             "json" => Ok(Self::Json),
+            "ndjson" => Ok(Self::Ndjson),
             other => Err(format!(
-                "unsupported value for --output-format: {other} (expected text or json)"
+                "unsupported value for --output-format: {other} (expected text, json, or ndjson)"
             )),
         }
     }
@@ -149,7 +212,7 @@ pub(crate) fn parse_args(args: &[String]) -> Result<CliAction, String> {
     }
 
     if wants_version {
-        return Ok(CliAction::Version);
+        return Ok(CliAction::Version { output_format });
     }
 
     let allowed_tools = normalize_allowed_tools(&allowed_tool_values)?;
@@ -165,16 +228,29 @@ pub(crate) fn parse_args(args: &[String]) -> Result<CliAction, String> {
         return Ok(CliAction::Help);
     }
     if rest.first().map(String::as_str) == Some("--resume") {
-        return parse_resume_args(&rest[1..]);
+        return parse_resume_args(&rest[1..], output_format);
     }
 
     match rest[0].as_str() {
-        "dump-manifests" => Ok(CliAction::DumpManifests),
-        "bootstrap-plan" => Ok(CliAction::BootstrapPlan),
-        "system-prompt" => parse_system_prompt_args(&rest[1..]),
-        "login" => Ok(CliAction::Login),
-        "logout" => Ok(CliAction::Logout),
-        "init" => Ok(CliAction::Init),
+        "dump-manifests" => Ok(CliAction::DumpManifests { output_format }),
+        "bootstrap-plan" => Ok(CliAction::BootstrapPlan { output_format }),
+        "system-prompt" => parse_system_prompt_args(&rest[1..], output_format),
+        "config" => parse_config_args(&rest[1..], output_format),
+        "hooks" => parse_hooks_args(&rest[1..], output_format),
+        "mcp" => parse_mcp_args(&rest[1..], output_format),
+        "memory" => parse_memory_args(&rest[1..], output_format),
+        "agents" => parse_agents_args(&rest[1..], output_format),
+        "plugin" => parse_plugin_args(&rest[1..], output_format),
+        "reload-plugins" => parse_reload_plugins_args(&rest[1..], output_format),
+        "remote-env" => parse_remote_env_args(&rest[1..], output_format),
+        "remote-setup" => parse_remote_setup_args(&rest[1..], output_format),
+        "tools" => parse_tools_args(&rest[1..], output_format),
+        "doctor" => parse_doctor_args(&rest[1..], output_format),
+        "skills" => parse_skills_args(&rest[1..], output_format),
+        "tasks" => parse_tasks_args(&rest[1..], output_format),
+        "login" => Ok(CliAction::Login { output_format }),
+        "logout" => Ok(CliAction::Logout { output_format }),
+        "init" => Ok(CliAction::Init { output_format }),
         "prompt" => {
             let prompt = rest[1..].join(" ");
             if prompt.trim().is_empty() {
@@ -301,7 +377,10 @@ fn parse_permission_mode_arg(value: &str) -> Result<PermissionMode, String> {
         .map(permission_mode_from_label)
 }
 
-fn parse_system_prompt_args(args: &[String]) -> Result<CliAction, String> {
+fn parse_system_prompt_args(
+    args: &[String],
+    output_format: CliOutputFormat,
+) -> Result<CliAction, String> {
     let mut cwd = env::current_dir().map_err(|error| error.to_string())?;
     let mut date = crate::DEFAULT_DATE.to_string();
     let mut index = 0;
@@ -326,10 +405,14 @@ fn parse_system_prompt_args(args: &[String]) -> Result<CliAction, String> {
         }
     }
 
-    Ok(CliAction::PrintSystemPrompt { cwd, date })
+    Ok(CliAction::PrintSystemPrompt {
+        cwd,
+        date,
+        output_format,
+    })
 }
 
-fn parse_resume_args(args: &[String]) -> Result<CliAction, String> {
+fn parse_resume_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
     let session_path = args
         .first()
         .ok_or_else(|| "missing session path for --resume".to_string())
@@ -344,5 +427,155 @@ fn parse_resume_args(args: &[String]) -> Result<CliAction, String> {
     Ok(CliAction::ResumeSession {
         session_path,
         commands,
+        output_format,
+    })
+}
+
+fn parse_optional_selector_arg(args: &[String], command: &str) -> Result<Option<String>, String> {
+    match args {
+        [] => Ok(None),
+        [value] => Ok(Some(value.clone())),
+        _ => Err(format!("{command} accepts at most one argument")),
+    }
+}
+
+fn parse_no_arg_command(args: &[String], command: &str) -> Result<(), String> {
+    if args.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("{command} does not accept positional arguments"))
+    }
+}
+
+fn parse_selector_command(
+    args: &[String],
+    output_format: CliOutputFormat,
+    command: &str,
+    build_action: impl FnOnce(Option<String>, CliOutputFormat) -> CliAction,
+) -> Result<CliAction, String> {
+    Ok(build_action(
+        parse_optional_selector_arg(args, command)?,
+        output_format,
+    ))
+}
+
+fn parse_no_arg_output_command(
+    args: &[String],
+    output_format: CliOutputFormat,
+    command: &str,
+    build_action: impl FnOnce(CliOutputFormat) -> CliAction,
+) -> Result<CliAction, String> {
+    parse_no_arg_command(args, command)?;
+    Ok(build_action(output_format))
+}
+
+fn parse_config_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
+    parse_selector_command(args, output_format, "config", |section, output_format| {
+        CliAction::Config {
+            section,
+            output_format,
+        }
+    })
+}
+
+fn parse_hooks_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
+    parse_selector_command(args, output_format, "hooks", |event, output_format| {
+        CliAction::Hooks {
+            event,
+            output_format,
+        }
+    })
+}
+
+fn parse_mcp_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
+    parse_selector_command(args, output_format, "mcp", |server, output_format| {
+        CliAction::Mcp {
+            server,
+            output_format,
+        }
+    })
+}
+
+fn parse_memory_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
+    parse_no_arg_output_command(args, output_format, "memory", |output_format| {
+        CliAction::Memory { output_format }
+    })
+}
+
+fn parse_agents_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
+    parse_selector_command(args, output_format, "agents", |agent, output_format| {
+        CliAction::Agents {
+            agent,
+            output_format,
+        }
+    })
+}
+
+fn parse_plugin_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
+    parse_selector_command(args, output_format, "plugin", |surface, output_format| {
+        CliAction::Plugin {
+            surface,
+            output_format,
+        }
+    })
+}
+
+fn parse_reload_plugins_args(
+    args: &[String],
+    output_format: CliOutputFormat,
+) -> Result<CliAction, String> {
+    parse_no_arg_output_command(args, output_format, "reload-plugins", |output_format| {
+        CliAction::ReloadPlugins { output_format }
+    })
+}
+
+fn parse_remote_env_args(
+    args: &[String],
+    output_format: CliOutputFormat,
+) -> Result<CliAction, String> {
+    parse_no_arg_output_command(args, output_format, "remote-env", |output_format| {
+        CliAction::RemoteEnv { output_format }
+    })
+}
+
+fn parse_remote_setup_args(
+    args: &[String],
+    output_format: CliOutputFormat,
+) -> Result<CliAction, String> {
+    parse_no_arg_output_command(args, output_format, "remote-setup", |output_format| {
+        CliAction::RemoteSetup { output_format }
+    })
+}
+
+fn parse_tools_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
+    parse_selector_command(args, output_format, "tools", |tool, output_format| {
+        CliAction::Tools {
+            tool,
+            output_format,
+        }
+    })
+}
+
+fn parse_doctor_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
+    parse_no_arg_output_command(args, output_format, "doctor", |output_format| {
+        CliAction::Doctor { output_format }
+    })
+}
+
+fn parse_skills_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
+    parse_selector_command(args, output_format, "skills", |skill, output_format| {
+        CliAction::Skills {
+            skill,
+            output_format,
+        }
+    })
+}
+
+fn parse_tasks_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
+    parse_selector_command(args, output_format, "tasks", |task, output_format| {
+        CliAction::Tasks {
+            task,
+            output_format,
+        }
     })
 }

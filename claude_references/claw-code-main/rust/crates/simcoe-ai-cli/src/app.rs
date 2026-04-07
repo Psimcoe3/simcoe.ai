@@ -1,7 +1,6 @@
 use std::env;
 use std::fs;
 use std::io;
-use std::process::Command;
 
 use runtime::{CompactionConfig, ConfigLoader, ConversationRuntime, PermissionMode, Session};
 use serde_json::json;
@@ -150,6 +149,7 @@ impl LiveCli {
         match output_format {
             CliOutputFormat::Text => self.run_turn(input),
             CliOutputFormat::Json => self.run_prompt_json(input),
+            CliOutputFormat::Ndjson => self.run_prompt_ndjson(input),
         }
     }
 
@@ -157,6 +157,26 @@ impl LiveCli {
         &mut self,
         input: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        let summary = self.run_noninteractive_turn(input)?;
+        println!("{}", self.turn_output_payload(&summary));
+        Ok(())
+    }
+
+    pub(crate) fn run_prompt_ndjson(
+        &mut self,
+        input: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let summary = self.run_noninteractive_turn(input)?;
+        for record in self.turn_output_ndjson_records(&summary) {
+            println!("{}", serde_json::to_string(&record)?);
+        }
+        Ok(())
+    }
+
+    fn run_noninteractive_turn(
+        &mut self,
+        input: &str,
+    ) -> Result<runtime::TurnSummary, Box<dyn std::error::Error>> {
         let session = self.runtime.session().clone();
         let mut runtime = crate::build_runtime(
             session,
@@ -172,28 +192,52 @@ impl LiveCli {
         let summary = runtime.run_turn(input, Some(&mut permission_prompter))?;
         self.runtime = runtime;
         self.persist_session()?;
-        println!(
-            "{}",
-            json!({
-                "message": crate::final_assistant_text(&summary),
-                "model": self.model,
-                "iterations": summary.iterations,
-                "auto_compaction": summary.auto_compaction.map(|event| json!({
-                    "removed_messages": event.removed_message_count,
-                    "notice": format_auto_compaction_notice(event.removed_message_count),
-                })),
-                "tool_uses": crate::collect_tool_uses(&summary),
-                "tool_results": crate::collect_tool_results(&summary),
-                "transport": crate::transport::build_turn_transport(&summary),
-                "usage": {
-                    "input_tokens": summary.usage.input_tokens,
-                    "output_tokens": summary.usage.output_tokens,
-                    "cache_creation_input_tokens": summary.usage.cache_creation_input_tokens,
-                    "cache_read_input_tokens": summary.usage.cache_read_input_tokens,
-                }
-            })
-        );
-        Ok(())
+        Ok(summary)
+    }
+
+    fn turn_output_payload(&self, summary: &runtime::TurnSummary) -> serde_json::Value {
+        json!({
+            "message": crate::final_assistant_text(summary),
+            "model": self.model,
+            "iterations": summary.iterations,
+            "auto_compaction": summary.auto_compaction.map(|event| json!({
+                "removed_messages": event.removed_message_count,
+                "notice": format_auto_compaction_notice(event.removed_message_count),
+            })),
+            "tool_uses": crate::collect_tool_uses(summary),
+            "tool_results": crate::collect_tool_results(summary),
+            "transport": crate::transport::build_turn_transport(summary),
+            "usage": {
+                "input_tokens": summary.usage.input_tokens,
+                "output_tokens": summary.usage.output_tokens,
+                "cache_creation_input_tokens": summary.usage.cache_creation_input_tokens,
+                "cache_read_input_tokens": summary.usage.cache_read_input_tokens,
+            }
+        })
+    }
+
+    fn turn_output_ndjson_records(&self, summary: &runtime::TurnSummary) -> Vec<serde_json::Value> {
+        let metadata = crate::transport::build_turn_transport_metadata();
+        let events = crate::transport::build_turn_transport_events(summary)
+            .into_iter()
+            .map(|event| {
+                json!({
+                    "type": "transport_event",
+                    "event": event,
+                })
+            });
+        let summary_record = json!({
+            "type": "turn_summary",
+            "summary": self.turn_output_payload(summary),
+        });
+
+        std::iter::once(json!({
+            "type": "transport",
+            "transport": metadata,
+        }))
+        .chain(events)
+        .chain(std::iter::once(summary_record))
+        .collect()
     }
 
     pub(crate) fn handle_repl_command(
@@ -265,11 +309,11 @@ impl LiveCli {
                 false
             }
             commands::SlashCommand::Login => {
-                crate::run_login()?;
+                crate::run_login(CliOutputFormat::Text)?;
                 false
             }
             commands::SlashCommand::Logout => {
-                crate::run_logout()?;
+                crate::run_logout(CliOutputFormat::Text)?;
                 false
             }
             commands::SlashCommand::Resume { session_path } => self.resume_session(session_path)?,
@@ -330,7 +374,7 @@ impl LiveCli {
                 false
             }
             commands::SlashCommand::Init => {
-                crate::run_init()?;
+                crate::run_init(CliOutputFormat::Text)?;
                 false
             }
             commands::SlashCommand::Diff => {
@@ -856,10 +900,9 @@ impl LiveCli {
         }
 
         let path = crate::write_temp_text_file("claw-commit-message.txt", &message)?;
-        let output = Command::new("git")
+        let output = crate::command_in_current_dir("git")?
             .args(["commit", "--file"])
             .arg(&path)
-            .current_dir(env::current_dir()?)
             .output()?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -888,10 +931,9 @@ impl LiveCli {
 
         if crate::command_exists("gh") {
             let body_path = crate::write_temp_text_file("claw-pr-body.md", &body)?;
-            let output = Command::new("gh")
+            let output = crate::command_in_current_dir("gh")?
                 .args(["pr", "create", "--title", &title, "--body-file"])
                 .arg(&body_path)
-                .current_dir(env::current_dir()?)
                 .output()?;
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -920,10 +962,9 @@ impl LiveCli {
 
         if crate::command_exists("gh") {
             let body_path = crate::write_temp_text_file("claw-issue-body.md", &body)?;
-            let output = Command::new("gh")
+            let output = crate::command_in_current_dir("gh")?
                 .args(["issue", "create", "--title", &title, "--body-file"])
                 .arg(&body_path)
-                .current_dir(env::current_dir()?)
                 .output()?;
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();

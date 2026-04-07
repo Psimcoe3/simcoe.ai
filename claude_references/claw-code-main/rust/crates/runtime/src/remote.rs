@@ -128,6 +128,27 @@ impl UpstreamProxyBootstrap {
     }
 
     #[must_use]
+    pub fn missing_requirements(&self) -> Vec<&'static str> {
+        let mut missing = Vec::new();
+        if !self.remote.enabled {
+            missing.push("SIMCOE_AI_REMOTE disabled");
+        }
+        if self.remote.session_id.is_none() {
+            missing.push("missing remote session id");
+        }
+        if self.remote.base_url.is_empty() {
+            missing.push("missing base URL");
+        }
+        if !self.upstream_proxy_enabled {
+            missing.push("CCR_UPSTREAM_PROXY_ENABLED disabled");
+        }
+        if self.token.is_none() {
+            missing.push("missing session token");
+        }
+        missing
+    }
+
+    #[must_use]
     pub fn ws_url(&self) -> String {
         upstream_proxy_ws_url(&self.remote.base_url)
     }
@@ -321,8 +342,25 @@ mod tests {
 
         let bootstrap = UpstreamProxyBootstrap::from_env_map(&env);
         assert!(!bootstrap.should_enable());
+        assert_eq!(bootstrap.missing_requirements(), vec!["missing base URL"]);
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn bootstrap_reports_all_missing_requirements() {
+        let bootstrap = UpstreamProxyBootstrap::from_env_map(&BTreeMap::new());
+
+        assert_eq!(
+            bootstrap.missing_requirements(),
+            vec![
+                "SIMCOE_AI_REMOTE disabled",
+                "missing remote session id",
+                "missing base URL",
+                "CCR_UPSTREAM_PROXY_ENABLED disabled",
+                "missing session token",
+            ]
+        );
     }
 
     #[test]

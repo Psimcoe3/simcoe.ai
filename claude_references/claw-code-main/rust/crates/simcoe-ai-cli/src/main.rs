@@ -22,17 +22,28 @@ use api::{
 };
 
 use app::LiveCli;
-use args::{default_permission_mode, parse_args, AllowedToolSet, CliAction};
+use args::{default_permission_mode, parse_args, AllowedToolSet, CliAction, CliOutputFormat};
 use commands::{
     render_slash_command_help, resume_supported_slash_commands, slash_command_specs, SlashCommand,
 };
-use compat_harness::{extract_manifest, UpstreamPaths};
+use compat_harness::{extract_manifest, PluginSurfaceKind, UpstreamPaths};
 use format::{
-    format_compact_report, format_cost_report, format_status_report, render_agents_report,
-    render_config_report, render_diff_report, render_doctor_report, render_hooks_report,
-    render_mcp_report, render_memory_report, render_plugin_report, render_reload_plugins_report,
-    render_remote_env_report, render_remote_setup_report, render_repl_help, render_skills_report,
-    render_tasks_report, render_tools_report, render_version_report, status_context, StatusUsage,
+    agents_report_snapshot, config_report_snapshot, doctor_snapshot, format_compact_report,
+    format_cost_report, format_status_report, hooks_report_snapshot, mcp_report_snapshot,
+    memory_report_snapshot, plugin_report_snapshot, reload_plugins_report_snapshot,
+    remote_env_report_snapshot, remote_setup_report_snapshot, render_agents_report,
+    render_agents_report_from_snapshot, render_config_report, render_config_report_from_snapshot,
+    render_diff_report, render_doctor_report, render_doctor_report_from_snapshot,
+    render_hooks_report, render_hooks_report_from_snapshot, render_mcp_report,
+    render_mcp_report_from_snapshot, render_memory_report, render_memory_report_from_snapshot,
+    render_plugin_report, render_plugin_report_from_snapshot, render_reload_plugins_report,
+    render_reload_plugins_report_from_snapshot, render_remote_env_report,
+    render_remote_env_report_from_snapshot, render_remote_setup_report,
+    render_remote_setup_report_from_snapshot, render_repl_help, render_skills_report,
+    render_skills_report_from_snapshot, render_tasks_report, render_tasks_report_from_snapshot,
+    render_tools_report, render_tools_report_from_snapshot, render_version_report,
+    skills_report_snapshot, status_context, tasks_report_snapshot, tools_report_snapshot,
+    McpServerDetailSnapshot, McpServerSnapshot, RemoteEnvReportSnapshot, StatusUsage,
 };
 use init::initialize_repo;
 use render::{MarkdownStreamState, TerminalRenderer};
@@ -62,35 +73,139 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const BUILD_TARGET: Option<&str> = option_env!("TARGET");
 const GIT_SHA: Option<&str> = option_env!("GIT_SHA");
 
-fn main() {
-    if let Err(error) = run() {
-        eprintln!("error: {error}\n\nRun `claw --help` for usage.");
-        std::process::exit(1);
+#[derive(Debug)]
+struct CliExitError {
+    message: String,
+    exit_code: i32,
+    operation: Option<String>,
+    command: Option<String>,
+}
+
+impl CliExitError {
+    fn new(message: impl Into<String>, exit_code: i32) -> Self {
+        Self {
+            message: message.into(),
+            exit_code,
+            operation: None,
+            command: None,
+        }
+    }
+
+    fn with_operation(mut self, operation: impl Into<String>) -> Self {
+        self.operation = Some(operation.into());
+        self
+    }
+
+    fn with_command(mut self, command: impl Into<String>) -> Self {
+        self.command = Some(command.into());
+        self
     }
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
+impl std::fmt::Display for CliExitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for CliExitError {}
+
+fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
+    if let Err(error) = run(&args) {
+        render_cli_error(&args, error.as_ref());
+        std::process::exit(exit_code_for_error(error.as_ref()));
+    }
+}
+
+fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     match parse_args(&args)? {
-        CliAction::DumpManifests => dump_manifests()?,
-        CliAction::BootstrapPlan => print_bootstrap_plan(),
-        CliAction::PrintSystemPrompt { cwd, date } => print_system_prompt(cwd, date)?,
-        CliAction::Version => print_version(),
+        CliAction::DumpManifests { output_format } => run_dump_manifests(output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("dump-manifests"), None))?,
+        CliAction::BootstrapPlan { output_format } => run_bootstrap_plan(output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("bootstrap-plan"), None))?,
+        CliAction::PrintSystemPrompt {
+            cwd,
+            date,
+            output_format,
+        } => run_system_prompt(cwd, date, output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("system-prompt"), None))?,
+        CliAction::Config {
+            section,
+            output_format,
+        } => run_config(section, output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("config"), None))?,
+        CliAction::Hooks {
+            event,
+            output_format,
+        } => run_hooks(event, output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("hooks"), None))?,
+        CliAction::Mcp {
+            server,
+            output_format,
+        } => run_mcp(server, output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("mcp"), None))?,
+        CliAction::Memory { output_format } => run_memory(output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("memory"), None))?,
+        CliAction::Agents {
+            agent,
+            output_format,
+        } => run_agents(agent, output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("agents"), None))?,
+        CliAction::Plugin {
+            surface,
+            output_format,
+        } => run_plugin(surface, output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("plugin"), None))?,
+        CliAction::ReloadPlugins { output_format } => run_reload_plugins(output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("reload-plugins"), None))?,
+        CliAction::RemoteEnv { output_format } => run_remote_env(output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("remote-env"), None))?,
+        CliAction::RemoteSetup { output_format } => run_remote_setup(output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("remote-setup"), None))?,
+        CliAction::Tools {
+            tool,
+            output_format,
+        } => run_tools(tool, output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("tools"), None))?,
+        CliAction::Doctor { output_format } => run_doctor(output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("doctor"), None))?,
+        CliAction::Skills {
+            skill,
+            output_format,
+        } => run_skills(skill, output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("skills"), None))?,
+        CliAction::Tasks {
+            task,
+            output_format,
+        } => run_tasks(task, output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("tasks"), None))?,
+        CliAction::Version { output_format } => run_version(output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("version"), None))?,
         CliAction::ResumeSession {
             session_path,
             commands,
-        } => resume_session(&session_path, &commands),
+            output_format,
+        } => resume_session(&session_path, &commands, output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("resume"), None))?,
         CliAction::Prompt {
             prompt,
             model,
             output_format,
             allowed_tools,
             permission_mode,
-        } => LiveCli::new(model, true, allowed_tools, permission_mode)?
-            .run_turn_with_output(&prompt, output_format)?,
-        CliAction::Login => run_login()?,
-        CliAction::Logout => run_logout()?,
-        CliAction::Init => run_init()?,
+        } => {
+            let mut cli = LiveCli::new(model, true, allowed_tools, permission_mode)
+                .map_err(|error| with_cli_error_context(error, 1, Some("prompt"), None))?;
+            cli.run_turn_with_output(&prompt, output_format)
+                .map_err(|error| with_cli_error_context(error, 1, Some("prompt"), None))?;
+        }
+        CliAction::Login { output_format } => run_login(output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("login"), None))?,
+        CliAction::Logout { output_format } => run_logout(output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("logout"), None))?,
+        CliAction::Init { output_format } => run_init(output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("init"), None))?,
         CliAction::Repl {
             model,
             allowed_tools,
@@ -101,6 +216,151 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn inferred_error_output_format(args: &[String]) -> CliOutputFormat {
+    let mut index = 0;
+    let mut output_format = CliOutputFormat::Text;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--output-format" => {
+                if let Some(value) = args.get(index + 1) {
+                    output_format = match value.as_str() {
+                        "json" => CliOutputFormat::Json,
+                        "ndjson" => CliOutputFormat::Ndjson,
+                        _ => CliOutputFormat::Text,
+                    };
+                }
+                index += 2;
+            }
+            flag if flag.starts_with("--output-format=") => {
+                output_format = match &flag[16..] {
+                    "json" => CliOutputFormat::Json,
+                    "ndjson" => CliOutputFormat::Ndjson,
+                    _ => CliOutputFormat::Text,
+                };
+                index += 1;
+            }
+            _ => {
+                index += 1;
+            }
+        }
+    }
+
+    output_format
+}
+
+fn inferred_error_metadata(args: &[String]) -> (Option<String>, Option<String>) {
+    let mut index = 0;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--version" | "-V" => return (Some("version".to_string()), None),
+            "--resume" => {
+                let command = args
+                    .get(index + 2)
+                    .filter(|value| value.starts_with('/'))
+                    .cloned();
+                return (Some("resume".to_string()), command);
+            }
+            "--model" | "--output-format" | "--permission-mode" | "--allowedTools"
+            | "--allowed-tools" | "--cwd" | "--date" => {
+                index += 2;
+            }
+            arg if arg.starts_with("--") => {
+                index += 1;
+            }
+            "dump-manifests" | "bootstrap-plan" | "system-prompt" | "config" | "hooks" | "mcp"
+            | "memory" | "agents" | "plugin" | "reload-plugins" | "remote-env" | "remote-setup"
+            | "tools" | "doctor" | "skills" | "tasks" | "login" | "logout" | "init" | "prompt" => {
+                return (Some(args[index].clone()), None);
+            }
+            arg if !arg.starts_with('/') => return (Some("prompt".to_string()), None),
+            _ => {
+                index += 1;
+            }
+        }
+    }
+
+    (None, None)
+}
+
+fn exit_code_for_error(error: &(dyn std::error::Error + 'static)) -> i32 {
+    error
+        .downcast_ref::<CliExitError>()
+        .map_or(1, |error| error.exit_code)
+}
+
+fn with_cli_error_context(
+    error: Box<dyn std::error::Error>,
+    exit_code: i32,
+    operation: Option<&str>,
+    command: Option<&str>,
+) -> Box<dyn std::error::Error> {
+    let existing = error.downcast_ref::<CliExitError>();
+    let mut cli_error = CliExitError::new(
+        error.to_string(),
+        existing.map_or(exit_code, |error| error.exit_code),
+    );
+    cli_error.operation = existing
+        .and_then(|error| error.operation.clone())
+        .or_else(|| operation.map(str::to_string));
+    cli_error.command = existing
+        .and_then(|error| error.command.clone())
+        .or_else(|| command.map(str::to_string));
+    Box::new(cli_error)
+}
+
+fn cli_error_payload(
+    args: &[String],
+    error: &(dyn std::error::Error + 'static),
+) -> serde_json::Value {
+    let cli_error = error.downcast_ref::<CliExitError>();
+    let (inferred_operation, inferred_command) = inferred_error_metadata(args);
+    let operation = cli_error
+        .and_then(|error| error.operation.clone())
+        .or(inferred_operation);
+    let command = cli_error
+        .and_then(|error| error.command.clone())
+        .or(inferred_command);
+
+    let mut payload = serde_json::Map::from_iter([
+        ("type".to_string(), json!("error")),
+        ("message".to_string(), json!(error.to_string())),
+        ("exit_code".to_string(), json!(exit_code_for_error(error))),
+        (
+            "help_hint".to_string(),
+            json!("Run `claw --help` for usage."),
+        ),
+    ]);
+    if let Some(operation) = operation {
+        payload.insert("operation".to_string(), json!(operation));
+    }
+    if let Some(command) = command {
+        payload.insert("command".to_string(), json!(command));
+    }
+
+    serde_json::Value::Object(payload)
+}
+
+fn render_cli_error(args: &[String], error: &(dyn std::error::Error + 'static)) {
+    let payload = cli_error_payload(args, error);
+
+    match inferred_error_output_format(args) {
+        CliOutputFormat::Text => {
+            eprintln!("error: {error}\n\nRun `claw --help` for usage.");
+        }
+        CliOutputFormat::Json => {
+            println!("{payload}");
+        }
+        CliOutputFormat::Ndjson => {
+            println!(
+                "{}",
+                serde_json::to_string(&payload).expect("error payload should serialize")
+            );
+        }
+    }
+}
+
 fn filter_tool_specs(allowed_tools: Option<&AllowedToolSet>) -> Vec<tools::ToolSpec> {
     mvp_tool_specs()
         .into_iter()
@@ -109,20 +369,667 @@ fn filter_tool_specs(allowed_tools: Option<&AllowedToolSet>) -> Vec<tools::ToolS
 }
 
 fn dump_manifests_report() -> Result<String, Box<dyn std::error::Error>> {
+    let (command_count, tool_count, bootstrap_phase_count) = manifest_counts()?;
+    Ok(format!(
+        "commands: {command_count}\ntools: {tool_count}\nbootstrap phases: {bootstrap_phase_count}",
+    ))
+}
+
+fn manifest_counts() -> Result<(usize, usize, usize), Box<dyn std::error::Error>> {
     let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let paths = UpstreamPaths::from_workspace_dir(&workspace_dir);
     let manifest = extract_manifest(&paths)?;
-    Ok(format!(
-        "commands: {}\ntools: {}\nbootstrap phases: {}",
+    Ok((
         manifest.commands.entries().len(),
         manifest.tools.entries().len(),
         manifest.bootstrap.phases().len(),
     ))
 }
 
-fn dump_manifests() -> Result<(), Box<dyn std::error::Error>> {
-    println!("{}", dump_manifests_report()?);
-    Ok(())
+fn dump_manifests_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let (command_count, tool_count, bootstrap_phase_count) = manifest_counts()?;
+    Ok(json!({
+        "type": "dump_manifests",
+        "command_count": command_count,
+        "tool_count": tool_count,
+        "bootstrap_phase_count": bootstrap_phase_count,
+    }))
+}
+
+fn content_payload_map(
+    kind: &str,
+    content: impl Into<String>,
+) -> serde_json::Map<String, serde_json::Value> {
+    let content = content.into();
+    serde_json::Map::from_iter([
+        ("type".to_string(), json!(kind)),
+        ("content".to_string(), json!(content)),
+    ])
+}
+
+fn inspection_payload(
+    kind: &str,
+    selector_key: Option<&str>,
+    selector_value: Option<&str>,
+    content: &str,
+) -> serde_json::Value {
+    let mut payload = content_payload_map(kind, content);
+    if let Some(selector_key) = selector_key {
+        payload.insert(selector_key.to_string(), json!(selector_value));
+    }
+    serde_json::Value::Object(payload)
+}
+
+fn parse_runtime_json_value(rendered: String) -> Result<serde_json::Value, io::Error> {
+    serde_json::from_str(&rendered).map_err(io::Error::other)
+}
+
+fn config_payload(
+    section: Option<String>,
+) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = config_report_snapshot(section.as_deref())?;
+    let content = render_config_report_from_snapshot(&snapshot);
+    let discovered_files = snapshot
+        .discovered_files
+        .iter()
+        .map(|entry| {
+            json!({
+                "source": entry.source,
+                "status": entry.status,
+                "path": entry.path,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let mut payload = content_payload_map("config", content);
+    payload.insert(
+        "working_directory".to_string(),
+        json!(snapshot.working_directory.as_str()),
+    );
+    payload.insert(
+        "loaded_file_count".to_string(),
+        json!(snapshot.loaded_file_count),
+    );
+    payload.insert(
+        "merged_key_count".to_string(),
+        json!(snapshot.merged_key_count),
+    );
+    payload.insert("discovered_files".to_string(), json!(discovered_files));
+
+    if let Some(section) = snapshot.requested_section.as_deref() {
+        payload.insert("section".to_string(), json!(section));
+        payload.insert(
+            "section_supported".to_string(),
+            json!(snapshot.section_supported),
+        );
+        payload.insert(
+            "supported_sections".to_string(),
+            json!(["env", "hooks", "model"]),
+        );
+        payload.insert(
+            "section_value".to_string(),
+            if snapshot.section_supported && snapshot.section_has_value {
+                parse_runtime_json_value(
+                    snapshot
+                        .section_value_rendered
+                        .clone()
+                        .unwrap_or_else(|| "null".to_string()),
+                )?
+            } else {
+                serde_json::Value::Null
+            },
+        );
+    } else {
+        payload.insert(
+            "merged_json".to_string(),
+            parse_runtime_json_value(
+                snapshot
+                    .merged_json_rendered
+                    .clone()
+                    .unwrap_or_else(|| "{}".to_string()),
+            )?,
+        );
+    }
+
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn hooks_payload(event: Option<String>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = hooks_report_snapshot(event.as_deref())?;
+    let content = render_hooks_report_from_snapshot(&snapshot);
+    let mut payload = content_payload_map("hooks", content);
+
+    if let Some(selected) = snapshot.selected_event.as_ref() {
+        payload.insert("event".to_string(), json!(selected.requested));
+        payload.insert("event_label".to_string(), json!(selected.label));
+        payload.insert(
+            "configured_count".to_string(),
+            json!(selected.commands.len()),
+        );
+        payload.insert("commands".to_string(), json!(selected.commands));
+        return Ok(serde_json::Value::Object(payload));
+    }
+
+    payload.insert(
+        "pre_tool_use_count".to_string(),
+        json!(snapshot.pre_commands.len()),
+    );
+    payload.insert(
+        "post_tool_use_count".to_string(),
+        json!(snapshot.post_commands.len()),
+    );
+    payload.insert("pre_tool_use".to_string(), json!(snapshot.pre_commands));
+    payload.insert("post_tool_use".to_string(), json!(snapshot.post_commands));
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn mcp_transport_payload(detail: &McpServerDetailSnapshot) -> serde_json::Value {
+    match detail {
+        McpServerDetailSnapshot::Stdio {
+            command,
+            args,
+            env_var_count,
+        } => json!({
+            "kind": "stdio",
+            "command": command,
+            "args": args,
+            "env_var_count": env_var_count,
+            "target": if args.is_empty() {
+                command.clone()
+            } else {
+                format!("{} {}", command, args.join(" "))
+            },
+        }),
+        McpServerDetailSnapshot::HttpLike {
+            target,
+            auth,
+            headers_count,
+            headers_helper,
+        } => json!({
+            "kind": "connection",
+            "target": target,
+            "auth": auth,
+            "headers_count": headers_count,
+            "headers_helper": headers_helper,
+        }),
+        McpServerDetailSnapshot::Sdk { name } => json!({
+            "kind": "sdk",
+            "name": name,
+            "target": format!("sdk:{name}"),
+        }),
+        McpServerDetailSnapshot::SimcoeAiProxy { target, proxy_id } => json!({
+            "kind": "simcoe-ai-proxy",
+            "target": target,
+            "proxy_id": proxy_id,
+        }),
+    }
+}
+
+fn mcp_server_payload(server: &McpServerSnapshot) -> serde_json::Value {
+    json!({
+        "name": server.name.as_str(),
+        "scope": server.scope,
+        "transport": server.transport,
+        "target": server.target.as_str(),
+        "normalized_name": server.normalized_name.as_str(),
+        "tool_prefix": server.tool_prefix.as_str(),
+        "signature": server.signature.as_deref(),
+        "details": mcp_transport_payload(&server.detail),
+    })
+}
+
+fn mcp_payload(server: Option<String>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = mcp_report_snapshot(server.as_deref())?;
+    let content = render_mcp_report_from_snapshot(&snapshot);
+    let mut payload = content_payload_map("mcp", content);
+
+    if let Some(server) = snapshot.selected_server.as_ref() {
+        payload.insert("server".to_string(), mcp_server_payload(server));
+        return Ok(serde_json::Value::Object(payload));
+    }
+
+    let entries = snapshot
+        .servers
+        .iter()
+        .map(mcp_server_payload)
+        .collect::<Vec<_>>();
+
+    payload.insert("configured_server_count".to_string(), json!(entries.len()));
+    payload.insert("servers".to_string(), json!(entries));
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn remote_transport_metadata_payload(snapshot: &RemoteEnvReportSnapshot) -> serde_json::Value {
+    let ready = snapshot.bootstrap.should_enable();
+    let ws_url = (!snapshot.remote.base_url.is_empty()).then(|| snapshot.bootstrap.ws_url());
+
+    json!({
+        "kind": if ready { "upstream-proxy" } else { "local" },
+        "active_transport_kind": "api-stream",
+        "capabilities": {
+            "structured_local_events": true,
+            "live_remote_transport": false,
+        },
+        "bootstrap": {
+            "remote_enabled": snapshot.remote.enabled,
+            "session_id": snapshot.remote.session_id.clone(),
+            "base_url": (!snapshot.remote.base_url.is_empty()).then(|| snapshot.remote.base_url.clone()),
+            "upstream_proxy_enabled": snapshot.bootstrap.upstream_proxy_enabled,
+            "ready": ready,
+            "ws_url": ws_url,
+            "token_path": snapshot.bootstrap.token_path.display().to_string(),
+            "token_present": snapshot.bootstrap.token.is_some(),
+            "ca_bundle_path": snapshot.bootstrap.ca_bundle_path.display().to_string(),
+            "system_ca_path": snapshot.bootstrap.system_ca_path.display().to_string(),
+            "inherited_proxy_env_count": snapshot.inherited_proxy_env_keys.len(),
+            "inherited_proxy_env_keys": snapshot.inherited_proxy_env_keys,
+            "missing": snapshot.bootstrap.missing_requirements(),
+        },
+    })
+}
+
+fn remote_env_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = remote_env_report_snapshot();
+    let mut payload = content_payload_map(
+        "remote_env",
+        render_remote_env_report_from_snapshot(&snapshot),
+    );
+    payload.insert(
+        "transport".to_string(),
+        remote_transport_metadata_payload(&snapshot),
+    );
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn remote_setup_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = remote_setup_report_snapshot()?;
+    let mut payload = content_payload_map(
+        "remote_setup",
+        render_remote_setup_report_from_snapshot(&snapshot),
+    );
+    payload.insert(
+        "transport".to_string(),
+        remote_transport_metadata_payload(&snapshot.env),
+    );
+    payload.insert(
+        "snapshot".to_string(),
+        json!({
+            "archive_name": snapshot.catalog.archive_name,
+            "package_name": snapshot.catalog.package_name,
+            "module_count": snapshot.catalog.module_count,
+            "transport_files": snapshot.catalog.transport_files,
+            "command": {
+                "name": snapshot.command.name,
+                "summary": snapshot.command.summary,
+                "source_hints": snapshot.command.source_hints,
+                "archived_file_count": snapshot.command.archived_file_count,
+            },
+        }),
+    );
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn agents_payload(agent: Option<String>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = agents_report_snapshot(agent.as_deref())?;
+    let content = render_agents_report_from_snapshot(&snapshot);
+    let mut payload = content_payload_map("agents", content);
+
+    if let Some(profile) = snapshot.selected_profile.as_ref() {
+        let counts = snapshot.selected_task_counts.unwrap_or_default();
+        payload.insert("profile".to_string(), json!(profile));
+        payload.insert(
+            "task_counts".to_string(),
+            json!({
+                "running": counts.running,
+                "completed": counts.completed,
+                "failed": counts.failed,
+            }),
+        );
+        payload.insert(
+            "recent_tasks".to_string(),
+            json!(snapshot.selected_recent_tasks),
+        );
+        return Ok(serde_json::Value::Object(payload));
+    }
+
+    let profiles = snapshot
+        .profiles
+        .iter()
+        .map(|profile| {
+            json!({
+                "name": profile.name,
+                "description": profile.description,
+                "aliases": profile.aliases,
+                "tool_count": profile.tool_count,
+                "recent_task_count": profile.recent_task_count,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    payload.insert("available_count".to_string(), json!(profiles.len()));
+    payload.insert(
+        "persisted_task_count".to_string(),
+        json!(snapshot.persisted_task_count),
+    );
+    payload.insert("profiles".to_string(), json!(profiles));
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn tasks_payload(task: Option<String>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = tasks_report_snapshot(task.as_deref())?;
+    let content = render_tasks_report_from_snapshot(&snapshot);
+    let mut payload = content_payload_map("tasks", content);
+
+    if let Some(loaded) = snapshot.selected_task.as_ref() {
+        payload.insert("task".to_string(), json!(loaded.task));
+        payload.insert("output".to_string(), json!(loaded.output));
+        return Ok(serde_json::Value::Object(payload));
+    }
+
+    let counts = snapshot.task_counts.unwrap_or_default();
+
+    payload.insert(
+        "task_counts".to_string(),
+        json!({
+            "persisted": snapshot.tasks.len(),
+            "running": counts.running,
+            "completed": counts.completed,
+            "failed": counts.failed,
+        }),
+    );
+    payload.insert("tasks".to_string(), json!(snapshot.tasks));
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn memory_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = memory_report_snapshot()?;
+    let content = render_memory_report_from_snapshot(&snapshot);
+    let instruction_files = snapshot
+        .instruction_files
+        .iter()
+        .map(|file| {
+            json!({
+                "path": file.path,
+                "line_count": file.line_count,
+                "preview": file.preview,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let mut payload = content_payload_map("memory", content);
+    payload.insert(
+        "working_directory".to_string(),
+        json!(snapshot.working_directory),
+    );
+    payload.insert(
+        "instruction_file_count".to_string(),
+        json!(instruction_files.len()),
+    );
+    payload.insert("instruction_files".to_string(), json!(instruction_files));
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn skills_payload(skill: Option<String>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = skills_report_snapshot(skill.as_deref())?;
+    let content = render_skills_report_from_snapshot(&snapshot);
+    let mut payload = content_payload_map("skills", content);
+
+    if let Some(loaded) = snapshot.selected_skill.as_ref() {
+        payload.insert("skill".to_string(), json!(loaded));
+        return Ok(serde_json::Value::Object(payload));
+    }
+
+    payload.insert("available_count".to_string(), json!(snapshot.skills.len()));
+    payload.insert("skills".to_string(), json!(snapshot.skills));
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn plugin_surface_payload(surface: &compat_harness::PluginSurfaceSummary) -> serde_json::Value {
+    json!({
+        "name": surface.name,
+        "kind": surface.kind.as_str(),
+        "summary": surface.summary,
+        "source_hints": surface.source_hints,
+        "archived_file_count": surface.archived_file_count,
+    })
+}
+
+fn plugin_payload(
+    surface: Option<String>,
+) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = plugin_report_snapshot(surface.as_deref())?;
+    let content = render_plugin_report_from_snapshot(&snapshot)?;
+    let mut payload = content_payload_map("plugin", content);
+
+    if let Some(surface) = snapshot.selected_surface.as_ref() {
+        payload.insert("surface".to_string(), plugin_surface_payload(surface));
+        return Ok(serde_json::Value::Object(payload));
+    }
+
+    let catalog = snapshot
+        .catalog
+        .as_ref()
+        .ok_or_else(|| io::Error::other("plugin catalog snapshot missing"))?;
+    let command_count = catalog
+        .surfaces
+        .iter()
+        .filter(|surface| matches!(surface.kind, PluginSurfaceKind::Command))
+        .count();
+    let module_surface_count = catalog
+        .surfaces
+        .iter()
+        .filter(|surface| matches!(surface.kind, PluginSurfaceKind::Module))
+        .count();
+    let commands = catalog
+        .surfaces
+        .iter()
+        .filter(|surface| matches!(surface.kind, PluginSurfaceKind::Command))
+        .map(plugin_surface_payload)
+        .collect::<Vec<_>>();
+    let modules = catalog
+        .surfaces
+        .iter()
+        .filter(|surface| matches!(surface.kind, PluginSurfaceKind::Module))
+        .map(plugin_surface_payload)
+        .collect::<Vec<_>>();
+
+    payload.insert(
+        "snapshot".to_string(),
+        json!({
+            "archive_name": catalog.archive_name,
+            "package_name": catalog.package_name,
+            "module_count": catalog.module_count,
+            "sample_files": catalog.sample_files,
+            "command_count": command_count,
+            "module_surface_count": module_surface_count,
+            "commands": commands,
+            "modules": modules,
+        }),
+    );
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn reload_plugins_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = reload_plugins_report_snapshot()?;
+    let mut payload = content_payload_map(
+        "reload_plugins",
+        render_reload_plugins_report_from_snapshot(&snapshot),
+    );
+    payload.insert(
+        "snapshot".to_string(),
+        json!({
+            "archive_name": snapshot.catalog.archive_name,
+            "package_name": snapshot.catalog.package_name,
+            "module_count": snapshot.catalog.module_count,
+            "sample_files": snapshot.catalog.sample_files,
+            "surface": plugin_surface_payload(&snapshot.surface),
+        }),
+    );
+    payload.insert("runtime_support".to_string(), json!("inspection only"));
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn doctor_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = doctor_snapshot()?;
+    let content = render_doctor_report_from_snapshot(&snapshot);
+    let sandbox = snapshot.config.sandbox.as_ref().map(|sandbox| {
+        json!({
+            "enabled": sandbox.enabled,
+            "active": sandbox.active,
+            "filesystem_mode": sandbox.filesystem_mode,
+            "network_isolation": sandbox.network_isolation,
+            "detail": sandbox.detail,
+        })
+    });
+
+    let mut payload = content_payload_map("doctor", content);
+    payload.insert("rust_status".to_string(), json!(snapshot.rust_status));
+    payload.insert(
+        "working_directory".to_string(),
+        json!(snapshot.working_directory),
+    );
+    payload.insert("project_root".to_string(), json!(snapshot.project_root));
+    payload.insert("git_branch".to_string(), json!(snapshot.git_branch));
+    payload.insert(
+        "instruction_file_count".to_string(),
+        json!(snapshot.instruction_file_count),
+    );
+    payload.insert("issue_count".to_string(), json!(snapshot.issue_count));
+    payload.insert("issues".to_string(), json!(snapshot.issues));
+    payload.insert(
+        "config".to_string(),
+        json!({
+            "status": snapshot.config.status,
+            "discovered_file_count": snapshot.config.discovered_file_count,
+            "loaded_file_count": snapshot.config.loaded_file_count,
+            "error": snapshot.config.error,
+            "model": snapshot.config.model,
+            "permission_mode": snapshot.config.permission_mode,
+            "sandbox": sandbox,
+        }),
+    );
+    payload.insert(
+        "auth".to_string(),
+        json!({
+            "oauth_configured": snapshot.auth.oauth_configured,
+            "credentials_path": snapshot.auth.credentials_path,
+            "stored_credentials_status": snapshot.auth.stored_credentials_status,
+            "refresh_token_present": snapshot.auth.refresh_token_present,
+            "expires_at": snapshot.auth.expires_at,
+            "scopes": snapshot.auth.scopes,
+        }),
+    );
+    payload.insert(
+        "hooks".to_string(),
+        json!({
+            "pre_count": snapshot.hooks.pre_count,
+            "post_count": snapshot.hooks.post_count,
+        }),
+    );
+    payload.insert(
+        "mcp".to_string(),
+        json!({
+            "server_count": snapshot.mcp.server_count,
+            "transport_counts": snapshot.mcp.transport_counts,
+        }),
+    );
+    payload.insert(
+        "remote".to_string(),
+        json!({
+            "enabled": snapshot.remote.enabled,
+            "proxy_ready": snapshot.remote.proxy_ready,
+            "session_id": snapshot.remote.session_id,
+            "base_url": snapshot.remote.base_url,
+            "missing_requirements": snapshot.remote.missing_requirements,
+        }),
+    );
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn rust_tool_summary_payload(spec: &ToolSpec) -> serde_json::Value {
+    json!({
+        "name": spec.name,
+        "description": spec.description,
+        "required_permission": spec.required_permission.as_str(),
+    })
+}
+
+fn rust_tool_detail_payload(spec: &ToolSpec) -> serde_json::Value {
+    json!({
+        "name": spec.name,
+        "description": spec.description,
+        "required_permission": spec.required_permission.as_str(),
+        "input_schema": spec.input_schema.clone(),
+    })
+}
+
+fn archived_tool_family_payload(
+    family: &compat_harness::ArchivedToolFamilySummary,
+) -> serde_json::Value {
+    json!({
+        "name": family.name,
+        "summary": family.summary,
+        "source_hints": family.source_hints,
+        "archived_file_count": family.archived_file_count,
+    })
+}
+
+fn tools_payload(tool: Option<String>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = tools_report_snapshot(tool.as_deref())?;
+    let content = render_tools_report_from_snapshot(&snapshot)?;
+    let mut payload = content_payload_map("tools", content);
+
+    if let Some(requested) = snapshot.requested_tool.as_deref() {
+        payload.insert("requested".to_string(), json!(requested));
+        payload.insert(
+            "rust_tool".to_string(),
+            json!(snapshot
+                .selected_rust_tool
+                .as_ref()
+                .map(rust_tool_detail_payload)),
+        );
+        payload.insert(
+            "archived_family".to_string(),
+            json!(snapshot
+                .selected_archived_family
+                .as_ref()
+                .map(archived_tool_family_payload)),
+        );
+        return Ok(serde_json::Value::Object(payload));
+    }
+
+    let archived_catalog = snapshot.archived_catalog.as_ref();
+    let archived_family_count = archived_catalog.map_or(0, |catalog| catalog.families.len());
+    let archived_file_count = archived_catalog.map_or(0, |catalog| catalog.archived_file_count);
+    let archived_families = archived_catalog.map_or_else(Vec::new, |catalog| {
+        catalog
+            .families
+            .iter()
+            .map(archived_tool_family_payload)
+            .collect::<Vec<_>>()
+    });
+
+    payload.insert(
+        "rust_registry".to_string(),
+        json!({
+            "tool_count": snapshot.rust_tools.len(),
+            "tools": snapshot
+                .rust_tools
+                .iter()
+                .map(rust_tool_summary_payload)
+                .collect::<Vec<_>>(),
+        }),
+    );
+    payload.insert(
+        "archived_snapshot".to_string(),
+        json!({
+            "available": archived_catalog.is_some(),
+            "family_count": archived_family_count,
+            "archived_file_count": archived_file_count,
+            "families": archived_families,
+        }),
+    );
+    Ok(serde_json::Value::Object(payload))
 }
 
 fn run_repl(
@@ -180,21 +1087,34 @@ fn run_repl(
     Ok(())
 }
 
-fn init_simcoe_md() -> Result<String, Box<dyn std::error::Error>> {
-    let cwd = env::current_dir()?;
-    Ok(initialize_repo(&cwd)?.render())
+fn init_simcoe_md_at(cwd: &Path) -> Result<String, Box<dyn std::error::Error>> {
+    Ok(initialize_repo(cwd)?.render())
 }
 
-fn run_init() -> Result<(), Box<dyn std::error::Error>> {
-    println!("{}", init_simcoe_md()?);
-    Ok(())
+fn init_simcoe_md() -> Result<String, Box<dyn std::error::Error>> {
+    let cwd = env::current_dir()?;
+    init_simcoe_md_at(&cwd)
+}
+
+fn init_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let cwd = env::current_dir()?;
+    let mut payload = content_payload_map("init", init_simcoe_md_at(&cwd)?);
+    payload.insert("cwd".to_string(), json!(cwd.display().to_string()));
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn run_init(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+    run_text_or_structured_command(output_format, init_simcoe_md, init_payload)
+}
+
+pub(crate) fn command_in_current_dir(program: &str) -> io::Result<Command> {
+    let mut command = Command::new(program);
+    command.current_dir(env::current_dir()?);
+    Ok(command)
 }
 
 fn git_output(args: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(env::current_dir()?)
-        .output()?;
+    let output = command_in_current_dir("git")?.args(args).output()?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(format!("git {} failed: {stderr}", args.join(" ")).into());
@@ -203,10 +1123,7 @@ fn git_output(args: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
 }
 
 fn git_status_ok(args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(env::current_dir()?)
-        .output()?;
+    let output = command_in_current_dir("git")?.args(args).output()?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(format!("git {} failed: {stderr}", args.join(" ")).into());
@@ -232,16 +1149,171 @@ fn write_temp_text_file(
 }
 
 fn bootstrap_plan_report() -> String {
-    runtime::BootstrapPlan::simcoe_ai_default()
-        .phases()
-        .iter()
-        .map(|phase| format!("- {phase:?}"))
+    bootstrap_plan_phases()
+        .into_iter()
+        .map(|phase| format!("- {phase}"))
         .collect::<Vec<_>>()
         .join("\n")
 }
 
-fn print_bootstrap_plan() {
-    println!("{}", bootstrap_plan_report());
+fn bootstrap_plan_phases() -> Vec<String> {
+    runtime::BootstrapPlan::simcoe_ai_default()
+        .phases()
+        .iter()
+        .map(|phase| format!("{phase:?}"))
+        .collect()
+}
+
+fn bootstrap_plan_payload() -> serde_json::Value {
+    json!({
+        "type": "bootstrap_plan",
+        "phases": bootstrap_plan_phases(),
+    })
+}
+
+fn run_text_or_structured_command(
+    output_format: CliOutputFormat,
+    render_text: impl FnOnce() -> Result<String, Box<dyn std::error::Error>>,
+    build_payload: impl FnOnce() -> Result<serde_json::Value, Box<dyn std::error::Error>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match output_format {
+        CliOutputFormat::Text => println!("{}", render_text()?),
+        CliOutputFormat::Json | CliOutputFormat::Ndjson => {
+            emit_noninteractive_payload(output_format, &build_payload()?)?
+        }
+    }
+    Ok(())
+}
+
+fn run_selector_text_or_structured_command(
+    selector: Option<String>,
+    output_format: CliOutputFormat,
+    render_text: impl FnOnce(Option<&str>) -> Result<String, Box<dyn std::error::Error>>,
+    build_payload: impl FnOnce(Option<String>) -> Result<serde_json::Value, Box<dyn std::error::Error>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let report_selector = selector.clone();
+    run_text_or_structured_command(
+        output_format,
+        move || render_text(report_selector.as_deref()),
+        move || build_payload(selector),
+    )
+}
+
+fn run_bootstrap_plan(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+    run_text_or_structured_command(
+        output_format,
+        || Ok(bootstrap_plan_report()),
+        || Ok(bootstrap_plan_payload()),
+    )
+}
+
+fn run_config(
+    section: Option<String>,
+    output_format: CliOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_selector_text_or_structured_command(
+        section,
+        output_format,
+        render_config_report,
+        config_payload,
+    )
+}
+
+fn run_hooks(
+    event: Option<String>,
+    output_format: CliOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_selector_text_or_structured_command(
+        event,
+        output_format,
+        render_hooks_report,
+        hooks_payload,
+    )
+}
+
+fn run_mcp(
+    server: Option<String>,
+    output_format: CliOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_selector_text_or_structured_command(server, output_format, render_mcp_report, mcp_payload)
+}
+
+fn run_memory(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+    run_text_or_structured_command(output_format, render_memory_report, memory_payload)
+}
+
+fn run_agents(
+    agent: Option<String>,
+    output_format: CliOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_selector_text_or_structured_command(
+        agent,
+        output_format,
+        render_agents_report,
+        agents_payload,
+    )
+}
+
+fn run_plugin(
+    surface: Option<String>,
+    output_format: CliOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_selector_text_or_structured_command(
+        surface,
+        output_format,
+        render_plugin_report,
+        plugin_payload,
+    )
+}
+
+fn run_reload_plugins(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+    run_text_or_structured_command(
+        output_format,
+        render_reload_plugins_report,
+        reload_plugins_payload,
+    )
+}
+
+fn run_remote_env(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+    run_text_or_structured_command(output_format, render_remote_env_report, remote_env_payload)
+}
+
+fn run_remote_setup(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+    run_text_or_structured_command(
+        output_format,
+        render_remote_setup_report,
+        remote_setup_payload,
+    )
+}
+
+fn run_tools(
+    tool: Option<String>,
+    output_format: CliOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_selector_text_or_structured_command(tool, output_format, render_tools_report, tools_payload)
+}
+
+fn run_doctor(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+    run_text_or_structured_command(output_format, render_doctor_report, doctor_payload)
+}
+
+fn run_skills(
+    skill: Option<String>,
+    output_format: CliOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_selector_text_or_structured_command(
+        skill,
+        output_format,
+        render_skills_report,
+        skills_payload,
+    )
+}
+
+fn run_tasks(
+    task: Option<String>,
+    output_format: CliOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_selector_text_or_structured_command(task, output_format, render_tasks_report, tasks_payload)
 }
 
 fn oauth_config_for_login<'a>(
@@ -255,7 +1327,68 @@ fn oauth_config_for_login<'a>(
     })
 }
 
-fn run_login() -> Result<(), Box<dyn std::error::Error>> {
+fn login_start_record(redirect_uri: &str) -> serde_json::Value {
+    json!({
+        "type": "login",
+        "event": "start",
+        "message": "Starting Simcoe AI OAuth login.",
+        "redirect_uri": redirect_uri,
+    })
+}
+
+fn login_browser_opened_record() -> serde_json::Value {
+    json!({
+        "type": "login",
+        "event": "browser_opened",
+        "message": "Opened the authorization URL in a browser.",
+    })
+}
+
+fn login_browser_warning_record(error: &str, authorize_url: &str) -> serde_json::Value {
+    json!({
+        "type": "login",
+        "event": "browser_warning",
+        "message": format!("failed to open browser automatically: {error}"),
+        "authorize_url": authorize_url,
+    })
+}
+
+fn login_complete_record(
+    redirect_uri: &str,
+    browser_opened: bool,
+    browser_open_error: Option<&str>,
+) -> serde_json::Value {
+    json!({
+        "type": "login",
+        "event": "complete",
+        "message": "Simcoe AI OAuth login complete.",
+        "redirect_uri": redirect_uri,
+        "browser_opened": browser_opened,
+        "browser_open_error": browser_open_error,
+    })
+}
+
+fn logout_payload() -> serde_json::Value {
+    json!({
+        "type": "logout",
+        "credentials_cleared": true,
+        "message": "Simcoe AI OAuth credentials cleared.",
+    })
+}
+
+fn emit_ndjson_record(record: &serde_json::Value) -> Result<(), Box<dyn std::error::Error>> {
+    println!("{}", serde_json::to_string(record)?);
+    Ok(())
+}
+
+fn run_login(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+    if matches!(output_format, CliOutputFormat::Json) {
+        return Err(Box::new(CliExitError::new(
+            "`claw login` does not support --output-format json; use text or ndjson because the OAuth flow may require manual browser fallback instructions.",
+            2,
+        )));
+    }
+
     let cwd = env::current_dir()?;
     let config = ConfigLoader::default_for(&cwd).load()?;
     let oauth = oauth_config_for_login(config.oauth())?;
@@ -267,12 +1400,37 @@ fn run_login() -> Result<(), Box<dyn std::error::Error>> {
         OAuthAuthorizationRequest::from_config(oauth, redirect_uri.clone(), state.clone(), &pkce)
             .build_url();
 
-    println!("Starting Simcoe AI OAuth login...");
-    println!("Listening for callback on {redirect_uri}");
-    if let Err(error) = open_browser(&authorize_url) {
-        eprintln!("warning: failed to open browser automatically: {error}");
-        println!("Open this URL manually:\n{authorize_url}");
+    match output_format {
+        CliOutputFormat::Text => {
+            println!("Starting Simcoe AI OAuth login...");
+            println!("Listening for callback on {redirect_uri}");
+        }
+        CliOutputFormat::Ndjson => emit_ndjson_record(&login_start_record(&redirect_uri))?,
+        CliOutputFormat::Json => unreachable!("login JSON output is rejected above"),
     }
+
+    let (browser_opened, browser_open_error) = match open_browser(&authorize_url) {
+        Ok(()) => {
+            if matches!(output_format, CliOutputFormat::Ndjson) {
+                emit_ndjson_record(&login_browser_opened_record())?;
+            }
+            (true, None)
+        }
+        Err(error) => {
+            let message = error.to_string();
+            match output_format {
+                CliOutputFormat::Text => {
+                    eprintln!("warning: failed to open browser automatically: {message}");
+                    println!("Open this URL manually:\n{authorize_url}");
+                }
+                CliOutputFormat::Ndjson => {
+                    emit_ndjson_record(&login_browser_warning_record(&message, &authorize_url))?;
+                }
+                CliOutputFormat::Json => unreachable!("login JSON output is rejected above"),
+            }
+            (false, Some(message))
+        }
+    };
 
     let callback = wait_for_oauth_callback(callback_port)?;
     if let Some(error) = callback.error {
@@ -293,7 +1451,7 @@ fn run_login() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = SimcoeApiClient::from_auth(AuthSource::None);
     let exchange_request =
-        OAuthTokenExchangeRequest::from_config(oauth, code, state, pkce.verifier, redirect_uri);
+        OAuthTokenExchangeRequest::from_config(oauth, code, state, pkce.verifier, &redirect_uri);
     let runtime = tokio::runtime::Runtime::new()?;
     let token_set = runtime.block_on(client.exchange_oauth_code(oauth, &exchange_request))?;
     save_oauth_credentials(&runtime::OAuthTokenSet {
@@ -302,14 +1460,25 @@ fn run_login() -> Result<(), Box<dyn std::error::Error>> {
         expires_at: token_set.expires_at,
         scopes: token_set.scopes,
     })?;
-    println!("Simcoe AI OAuth login complete.");
+    match output_format {
+        CliOutputFormat::Text => println!("Simcoe AI OAuth login complete."),
+        CliOutputFormat::Ndjson => emit_ndjson_record(&login_complete_record(
+            &redirect_uri,
+            browser_opened,
+            browser_open_error.as_deref(),
+        ))?,
+        CliOutputFormat::Json => unreachable!("login JSON output is rejected above"),
+    }
     Ok(())
 }
 
-fn run_logout() -> Result<(), Box<dyn std::error::Error>> {
+fn run_logout(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::Error>> {
     clear_oauth_credentials()?;
-    println!("Simcoe AI OAuth credentials cleared.");
-    Ok(())
+    run_text_or_structured_command(
+        output_format,
+        || Ok("Simcoe AI OAuth credentials cleared.".to_string()),
+        || Ok(logout_payload()),
+    )
 }
 
 fn open_browser(url: &str) -> io::Result<()> {
@@ -408,65 +1577,321 @@ fn parse_system_prompt_command_args(
 }
 
 fn system_prompt_report(cwd: PathBuf, date: String) -> Result<String, Box<dyn std::error::Error>> {
-    let sections = load_system_prompt(cwd, date, env::consts::OS, "unknown")?;
+    let sections = system_prompt_sections(&cwd, &date)?;
     Ok(sections.join("\n\n"))
 }
 
-fn print_system_prompt(cwd: PathBuf, date: String) -> Result<(), Box<dyn std::error::Error>> {
-    println!("{}", system_prompt_report(cwd, date)?);
+fn system_prompt_sections(
+    cwd: &Path,
+    date: &str,
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    Ok(load_system_prompt(
+        cwd.to_path_buf(),
+        date.to_string(),
+        env::consts::OS,
+        "unknown",
+    )?)
+}
+
+fn system_prompt_payload(
+    cwd: &Path,
+    date: &str,
+) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let sections = system_prompt_sections(cwd, date)?;
+    let mut payload = content_payload_map(
+        "system_prompt",
+        system_prompt_report(cwd.to_path_buf(), date.to_string())?,
+    );
+    payload.insert("cwd".to_string(), json!(cwd.display().to_string()));
+    payload.insert("date".to_string(), json!(date));
+    payload.insert("sections".to_string(), json!(sections));
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn run_system_prompt(
+    cwd: PathBuf,
+    date: String,
+    output_format: CliOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let report_cwd = cwd.clone();
+    let report_date = date.clone();
+    run_text_or_structured_command(
+        output_format,
+        move || system_prompt_report(report_cwd, report_date),
+        move || system_prompt_payload(&cwd, &date),
+    )
+}
+
+fn version_payload() -> serde_json::Value {
+    let mut payload = content_payload_map("version", render_version_report());
+    payload.insert("version".to_string(), json!(VERSION));
+    payload.insert("build_target".to_string(), json!(BUILD_TARGET));
+    payload.insert("git_sha".to_string(), json!(GIT_SHA));
+    serde_json::Value::Object(payload)
+}
+
+fn run_version(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+    run_text_or_structured_command(
+        output_format,
+        || Ok(render_version_report()),
+        || Ok(version_payload()),
+    )
+}
+
+fn run_dump_manifests(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+    run_text_or_structured_command(output_format, dump_manifests_report, dump_manifests_payload)
+}
+
+fn emit_noninteractive_payload(
+    output_format: CliOutputFormat,
+    payload: &serde_json::Value,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match output_format {
+        CliOutputFormat::Text => println!("{payload}"),
+        CliOutputFormat::Json => println!("{payload}"),
+        CliOutputFormat::Ndjson => println!("{}", serde_json::to_string(payload)?),
+    }
     Ok(())
 }
 
-fn print_version() {
-    println!("{}", render_version_report());
-}
+fn resume_session(
+    session_path: &Path,
+    commands: &[String],
+    output_format: CliOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let session = Session::load_from_path(session_path).map_err(|error| {
+        Box::new(
+            CliExitError::new(format!("failed to restore session: {error}"), 1)
+                .with_operation("resume"),
+        ) as Box<dyn std::error::Error>
+    })?;
 
-fn resume_session(session_path: &Path, commands: &[String]) {
-    let session = match Session::load_from_path(session_path) {
-        Ok(session) => session,
-        Err(error) => {
-            eprintln!("failed to restore session: {error}");
-            std::process::exit(1);
-        }
-    };
+    let initial_message_count = session.messages.len();
 
     if commands.is_empty() {
-        println!(
-            "Restored session from {} ({} messages).",
-            session_path.display(),
-            session.messages.len()
-        );
-        return;
+        match output_format {
+            CliOutputFormat::Text => {
+                println!(
+                    "{}",
+                    restored_session_message(session_path, initial_message_count)
+                );
+            }
+            CliOutputFormat::Json => {
+                println!(
+                    "{}",
+                    build_resume_json_payload(
+                        session_path,
+                        initial_message_count,
+                        Vec::new(),
+                        initial_message_count,
+                    )
+                );
+            }
+            CliOutputFormat::Ndjson => {
+                println!(
+                    "{}",
+                    build_resume_start_record(session_path, initial_message_count)
+                );
+                println!(
+                    "{}",
+                    build_resume_summary_record(
+                        session_path,
+                        initial_message_count,
+                        initial_message_count,
+                        0,
+                    )
+                );
+            }
+        }
+        return Ok(());
     }
 
     let mut session = session;
-    for raw_command in commands {
+    let mut command_records = Vec::new();
+    if matches!(output_format, CliOutputFormat::Ndjson) {
+        println!(
+            "{}",
+            build_resume_start_record(session_path, initial_message_count)
+        );
+    }
+    for (index, raw_command) in commands.iter().enumerate() {
         let Some(command) = SlashCommand::parse(raw_command) else {
-            eprintln!("unsupported resumed command: {raw_command}");
-            std::process::exit(2);
+            return Err(Box::new(
+                CliExitError::new(format!("unsupported resumed command: {raw_command}"), 2)
+                    .with_operation("resume")
+                    .with_command(raw_command.clone()),
+            ));
         };
         match run_resume_command(session_path, &session, &command) {
             Ok(ResumeCommandOutcome {
                 session: next_session,
                 message,
             }) => {
-                session = next_session;
-                if let Some(message) = message {
-                    println!("{message}");
+                let changed_session = next_session != session;
+                match output_format {
+                    CliOutputFormat::Text => {
+                        if let Some(message) = &message {
+                            println!("{message}");
+                        }
+                    }
+                    CliOutputFormat::Json => command_records.push(build_resume_command_record(
+                        index,
+                        raw_command,
+                        message.as_deref(),
+                        next_session.messages.len(),
+                        changed_session,
+                    )),
+                    CliOutputFormat::Ndjson => println!(
+                        "{}",
+                        build_resume_command_record(
+                            index,
+                            raw_command,
+                            message.as_deref(),
+                            next_session.messages.len(),
+                            changed_session,
+                        )
+                    ),
                 }
+                session = next_session;
             }
             Err(error) => {
-                eprintln!("{error}");
-                std::process::exit(2);
+                return Err(Box::new(
+                    CliExitError::new(error.to_string(), 2)
+                        .with_operation("resume")
+                        .with_command(raw_command.clone()),
+                ));
             }
         }
     }
+
+    match output_format {
+        CliOutputFormat::Text => {}
+        CliOutputFormat::Json => println!(
+            "{}",
+            build_resume_json_payload(
+                session_path,
+                initial_message_count,
+                command_records,
+                session.messages.len(),
+            )
+        ),
+        CliOutputFormat::Ndjson => println!(
+            "{}",
+            build_resume_summary_record(
+                session_path,
+                initial_message_count,
+                session.messages.len(),
+                commands.len(),
+            )
+        ),
+    }
+
+    Ok(())
+}
+
+fn restored_session_message(session_path: &Path, message_count: usize) -> String {
+    format!(
+        "Restored session from {} ({} messages).",
+        session_path.display(),
+        message_count
+    )
 }
 
 #[derive(Debug, Clone)]
 struct ResumeCommandOutcome {
     session: Session,
     message: Option<String>,
+}
+
+fn render_resume_read_only_message(
+    command: &SlashCommand,
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    match command {
+        SlashCommand::Help => Ok(Some(render_repl_help())),
+        SlashCommand::DumpManifests => Ok(Some(dump_manifests_report()?)),
+        SlashCommand::BootstrapPlan => Ok(Some(bootstrap_plan_report())),
+        SlashCommand::Config { section } => Ok(Some(render_config_report(section.as_deref())?)),
+        SlashCommand::SystemPrompt { args } => {
+            let (cwd, date) = parse_system_prompt_command_args(args.as_deref())?;
+            Ok(Some(system_prompt_report(cwd, date)?))
+        }
+        SlashCommand::Hooks { event } => Ok(Some(render_hooks_report(event.as_deref())?)),
+        SlashCommand::Mcp { server } => Ok(Some(render_mcp_report(server.as_deref())?)),
+        SlashCommand::Memory => Ok(Some(render_memory_report()?)),
+        SlashCommand::Agents { agent } => Ok(Some(render_agents_report(agent.as_deref())?)),
+        SlashCommand::Plugin { surface } => Ok(Some(render_plugin_report(surface.as_deref())?)),
+        SlashCommand::ReloadPlugins => Ok(Some(render_reload_plugins_report()?)),
+        SlashCommand::RemoteEnv => Ok(Some(render_remote_env_report()?)),
+        SlashCommand::RemoteSetup => Ok(Some(render_remote_setup_report()?)),
+        SlashCommand::Tools { tool } => Ok(Some(render_tools_report(tool.as_deref())?)),
+        SlashCommand::Doctor => Ok(Some(render_doctor_report()?)),
+        SlashCommand::Skills { skill } => Ok(Some(render_skills_report(skill.as_deref())?)),
+        SlashCommand::Tasks { task } => Ok(Some(render_tasks_report(task.as_deref())?)),
+        SlashCommand::Init => Ok(Some(init_simcoe_md()?)),
+        SlashCommand::Diff => Ok(Some(render_diff_report()?)),
+        SlashCommand::Version => Ok(Some(render_version_report())),
+        _ => Ok(None),
+    }
+}
+
+fn build_resume_json_payload(
+    session_path: &Path,
+    initial_message_count: usize,
+    commands: Vec<serde_json::Value>,
+    final_message_count: usize,
+) -> serde_json::Value {
+    json!({
+        "session_path": session_path.display().to_string(),
+        "restored_message": restored_session_message(session_path, initial_message_count),
+        "initial_message_count": initial_message_count,
+        "command_count": commands.len(),
+        "commands": commands,
+        "final_message_count": final_message_count,
+    })
+}
+
+fn build_resume_start_record(
+    session_path: &Path,
+    initial_message_count: usize,
+) -> serde_json::Value {
+    json!({
+        "type": "resume",
+        "session_path": session_path.display().to_string(),
+        "message": restored_session_message(session_path, initial_message_count),
+        "initial_message_count": initial_message_count,
+    })
+}
+
+fn build_resume_command_record(
+    index: usize,
+    command: &str,
+    message: Option<&str>,
+    message_count: usize,
+    changed_session: bool,
+) -> serde_json::Value {
+    json!({
+        "type": "resume_command",
+        "index": index,
+        "command": command,
+        "message": message,
+        "message_count": message_count,
+        "changed_session": changed_session,
+    })
+}
+
+fn build_resume_summary_record(
+    session_path: &Path,
+    initial_message_count: usize,
+    final_message_count: usize,
+    command_count: usize,
+) -> serde_json::Value {
+    json!({
+        "type": "resume_summary",
+        "session_path": session_path.display().to_string(),
+        "initial_message_count": initial_message_count,
+        "final_message_count": final_message_count,
+        "command_count": command_count,
+    })
 }
 
 fn parse_git_status_metadata(status: Option<&str>) -> (Option<PathBuf>, Option<String>) {
@@ -488,9 +1913,8 @@ fn parse_git_status_metadata(status: Option<&str>) -> (Option<PathBuf>, Option<S
 }
 
 fn find_git_root() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let output = std::process::Command::new("git")
+    let output = command_in_current_dir("git")?
         .args(["rev-parse", "--show-toplevel"])
-        .current_dir(env::current_dir()?)
         .output()?;
     if !output.status.success() {
         return Err("not a git repository".into());
@@ -575,85 +1999,6 @@ fn run_resume_command(
                 message: Some(format_cost_report(usage)),
             })
         }
-        SlashCommand::DumpManifests => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(dump_manifests_report()?),
-        }),
-        SlashCommand::BootstrapPlan => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(bootstrap_plan_report()),
-        }),
-        SlashCommand::Config { section } => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_config_report(section.as_deref())?),
-        }),
-        SlashCommand::SystemPrompt { args } => {
-            let (cwd, date) = parse_system_prompt_command_args(args.as_deref())?;
-            Ok(ResumeCommandOutcome {
-                session: session.clone(),
-                message: Some(system_prompt_report(cwd, date)?),
-            })
-        }
-        SlashCommand::Hooks { event } => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_hooks_report(event.as_deref())?),
-        }),
-        SlashCommand::Mcp { server } => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_mcp_report(server.as_deref())?),
-        }),
-        SlashCommand::Memory => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_memory_report()?),
-        }),
-        SlashCommand::Agents { agent } => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_agents_report(agent.as_deref())?),
-        }),
-        SlashCommand::Plugin { surface } => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_plugin_report(surface.as_deref())?),
-        }),
-        SlashCommand::ReloadPlugins => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_reload_plugins_report()?),
-        }),
-        SlashCommand::RemoteEnv => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_remote_env_report()?),
-        }),
-        SlashCommand::RemoteSetup => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_remote_setup_report()?),
-        }),
-        SlashCommand::Tools { tool } => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_tools_report(tool.as_deref())?),
-        }),
-        SlashCommand::Doctor => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_doctor_report()?),
-        }),
-        SlashCommand::Skills { skill } => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_skills_report(skill.as_deref())?),
-        }),
-        SlashCommand::Tasks { task } => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_tasks_report(task.as_deref())?),
-        }),
-        SlashCommand::Init => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(init_simcoe_md()?),
-        }),
-        SlashCommand::Diff => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_diff_report()?),
-        }),
-        SlashCommand::Version => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_version_report()),
-        }),
         SlashCommand::Export { path } => {
             let export_path = resolve_export_path(path.as_deref(), session)?;
             fs::write(&export_path, render_export_text(session))?;
@@ -666,22 +2011,16 @@ fn run_resume_command(
                 )),
             })
         }
-        SlashCommand::Bughunter { .. }
-        | SlashCommand::Review { .. }
-        | SlashCommand::Plan { .. }
-        | SlashCommand::Commit
-        | SlashCommand::Pr { .. }
-        | SlashCommand::Issue { .. }
-        | SlashCommand::Ultraplan { .. }
-        | SlashCommand::Teleport { .. }
-        | SlashCommand::DebugToolCall
-        | SlashCommand::Resume { .. }
-        | SlashCommand::Model { .. }
-        | SlashCommand::Permissions { .. }
-        | SlashCommand::Login
-        | SlashCommand::Logout
-        | SlashCommand::Session { .. }
-        | SlashCommand::Unknown(_) => Err("unsupported resumed slash command".into()),
+        command => {
+            if let Some(message) = render_resume_read_only_message(command)? {
+                Ok(ResumeCommandOutcome {
+                    session: session.clone(),
+                    message: Some(message),
+                })
+            } else {
+                Err("unsupported resumed slash command".into())
+            }
+        }
     }
 }
 
@@ -1706,17 +3045,17 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     writeln!(out, "      Start the interactive REPL")?;
     writeln!(
         out,
-        "  claw [--model MODEL] [--output-format text|json] prompt TEXT"
+        "  claw [--model MODEL] [--output-format text|json|ndjson] prompt TEXT"
     )?;
     writeln!(out, "      Send one prompt and exit")?;
     writeln!(
         out,
-        "  claw [--model MODEL] [--output-format text|json] TEXT"
+        "  claw [--model MODEL] [--output-format text|json|ndjson] TEXT"
     )?;
     writeln!(out, "      Shorthand non-interactive prompt mode")?;
     writeln!(
         out,
-        "  claw --resume SESSION.json [/status] [/compact] [...]"
+        "  claw [--output-format text|json|ndjson] --resume SESSION.json [/status] [/compact] [...]"
     )?;
     writeln!(
         out,
@@ -1725,8 +3064,26 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     writeln!(out, "  claw dump-manifests")?;
     writeln!(out, "  claw bootstrap-plan")?;
     writeln!(out, "  claw system-prompt [--cwd PATH] [--date YYYY-MM-DD]")?;
+    writeln!(out, "  claw config [env|hooks|model]")?;
+    writeln!(out, "  claw hooks [pre|post]")?;
+    writeln!(out, "  claw mcp [server]")?;
+    writeln!(out, "  claw memory")?;
+    writeln!(out, "  claw agents [name]")?;
+    writeln!(out, "  claw plugin [name]")?;
+    writeln!(out, "  claw reload-plugins")?;
+    writeln!(out, "  claw remote-env")?;
+    writeln!(out, "  claw remote-setup")?;
+    writeln!(out, "  claw tools [name]")?;
+    writeln!(out, "  claw doctor")?;
+    writeln!(out, "  claw skills [skill]")?;
+    writeln!(out, "  claw tasks [id]")?;
     writeln!(out, "  claw login")?;
+    writeln!(out, "      OAuth login; supports text and ndjson output")?;
     writeln!(out, "  claw logout")?;
+    writeln!(
+        out,
+        "      Clear saved OAuth credentials; supports text, json, and ndjson output"
+    )?;
     writeln!(out, "  claw init")?;
     writeln!(out)?;
     writeln!(out, "Flags:")?;
@@ -1736,7 +3093,7 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     )?;
     writeln!(
         out,
-        "  --output-format FORMAT     Non-interactive output format: text or json"
+        "  --output-format FORMAT     Non-interactive output format: text, json, or ndjson"
     )?;
     writeln!(
         out,
@@ -1772,12 +3129,27 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     )?;
     writeln!(
         out,
+        "  claw --output-format ndjson prompt \"trace the assistant turn\""
+    )?;
+    writeln!(
+        out,
         "  claw --allowedTools read,glob \"summarize Cargo.toml\""
     )?;
     writeln!(
         out,
         "  claw --resume session.json /status /diff /export notes.txt"
     )?;
+    writeln!(
+        out,
+        "  claw --output-format json --resume session.json /status /cost"
+    )?;
+    writeln!(out, "  claw --output-format json dump-manifests")?;
+    writeln!(out, "  claw --output-format json config hooks")?;
+    writeln!(out, "  claw --output-format ndjson mcp repo-server")?;
+    writeln!(out, "  claw --output-format json agents reviewer")?;
+    writeln!(out, "  claw --output-format json remote-env")?;
+    writeln!(out, "  claw --output-format ndjson login")?;
+    writeln!(out, "  claw --output-format json logout")?;
     writeln!(out, "  claw login")?;
     writeln!(out, "  claw init")?;
     Ok(())
@@ -1790,6 +3162,7 @@ fn print_help() {
 #[cfg(test)]
 mod tests {
     use crate::args::{normalize_permission_mode, resolve_model_alias, CliOutputFormat};
+    use crate::VERSION;
 
     use super::format::{
         format_compact_report, format_cost_report, format_model_report, format_model_switch_report,
@@ -1798,12 +3171,15 @@ mod tests {
         render_hooks_report, render_mcp_report, render_memory_report, render_plugin_report,
         render_reload_plugins_report, render_remote_env_report, render_remote_setup_report,
         render_repl_help, render_skills_report, render_tasks_report, render_tools_report,
-        status_context, StatusContext, StatusUsage,
+        render_version_report, status_context, StatusContext, StatusUsage,
     };
     use super::{
-        filter_tool_specs, format_tool_call_start, format_tool_result, oauth_config_for_login,
-        parse_args, parse_git_status_metadata, print_help_to, push_output_block,
-        response_to_events, resume_supported_slash_commands, CliAction, CliToolExecutor,
+        bootstrap_plan_payload, build_resume_command_record, build_resume_json_payload,
+        build_resume_start_record, build_resume_summary_record, filter_tool_specs,
+        format_tool_call_start, format_tool_result, inferred_error_metadata,
+        inferred_error_output_format, oauth_config_for_login, parse_args,
+        parse_git_status_metadata, print_help_to, push_output_block, response_to_events,
+        resume_supported_slash_commands, version_payload, CliAction, CliExitError, CliToolExecutor,
         SimcoeRuntimeClient, SlashCommand, DEFAULT_MODEL,
     };
     use api::{MessageResponse, OutputContentBlock, Usage};
@@ -1886,6 +3262,25 @@ mod tests {
     }
 
     #[test]
+    fn parses_bare_prompt_and_ndjson_output_flag() {
+        let args = vec![
+            "--output-format=ndjson".to_string(),
+            "trace".to_string(),
+            "this".to_string(),
+        ];
+        assert_eq!(
+            parse_args(&args).expect("args should parse"),
+            CliAction::Prompt {
+                prompt: "trace this".to_string(),
+                model: DEFAULT_MODEL.to_string(),
+                output_format: CliOutputFormat::Ndjson,
+                allowed_tools: None,
+                permission_mode: PermissionMode::DangerFullAccess,
+            }
+        );
+    }
+
+    #[test]
     fn resolves_model_aliases_in_args() {
         let args = vec![
             "--model".to_string(),
@@ -1920,11 +3315,22 @@ mod tests {
     fn parses_version_flags_without_initializing_prompt_mode() {
         assert_eq!(
             parse_args(&["--version".to_string()]).expect("args should parse"),
-            CliAction::Version
+            CliAction::Version {
+                output_format: CliOutputFormat::Text,
+            }
         );
         assert_eq!(
             parse_args(&["-V".to_string()]).expect("args should parse"),
-            CliAction::Version
+            CliAction::Version {
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&["--output-format=json".to_string(), "--version".to_string()])
+                .expect("args should parse"),
+            CliAction::Version {
+                output_format: CliOutputFormat::Json,
+            }
         );
     }
 
@@ -1984,24 +3390,370 @@ mod tests {
             CliAction::PrintSystemPrompt {
                 cwd: PathBuf::from("/tmp/project"),
                 date: "2026-04-01".to_string(),
+                output_format: CliOutputFormat::Text,
             }
         );
+    }
+
+    #[test]
+    fn parses_direct_inspection_subcommands() {
+        assert_eq!(
+            parse_args(&["config".to_string()]).expect("config should parse"),
+            CliAction::Config {
+                section: None,
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&[
+                "--output-format=json".to_string(),
+                "config".to_string(),
+                "hooks".to_string(),
+            ])
+            .expect("config section should parse"),
+            CliAction::Config {
+                section: Some("hooks".to_string()),
+                output_format: CliOutputFormat::Json,
+            }
+        );
+        assert_eq!(
+            parse_args(&["hooks".to_string(), "pre".to_string()]).expect("hooks should parse"),
+            CliAction::Hooks {
+                event: Some("pre".to_string()),
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&[
+                "--output-format=ndjson".to_string(),
+                "mcp".to_string(),
+                "repo-server".to_string(),
+            ])
+            .expect("mcp should parse"),
+            CliAction::Mcp {
+                server: Some("repo-server".to_string()),
+                output_format: CliOutputFormat::Ndjson,
+            }
+        );
+        assert_eq!(
+            parse_args(&["memory".to_string()]).expect("memory should parse"),
+            CliAction::Memory {
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&["agents".to_string(), "reviewer".to_string()])
+                .expect("agents should parse"),
+            CliAction::Agents {
+                agent: Some("reviewer".to_string()),
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&["--output-format=json".to_string(), "plugin".to_string()])
+                .expect("plugin should parse"),
+            CliAction::Plugin {
+                surface: None,
+                output_format: CliOutputFormat::Json,
+            }
+        );
+        assert_eq!(
+            parse_args(&["reload-plugins".to_string()]).expect("reload-plugins should parse"),
+            CliAction::ReloadPlugins {
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&["--output-format=json".to_string(), "remote-env".to_string()])
+                .expect("remote-env should parse"),
+            CliAction::RemoteEnv {
+                output_format: CliOutputFormat::Json,
+            }
+        );
+        assert_eq!(
+            parse_args(&["remote-setup".to_string()]).expect("remote-setup should parse"),
+            CliAction::RemoteSetup {
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&["tools".to_string(), "grep_search".to_string()])
+                .expect("tools should parse"),
+            CliAction::Tools {
+                tool: Some("grep_search".to_string()),
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&["--output-format=json".to_string(), "doctor".to_string()])
+                .expect("doctor should parse"),
+            CliAction::Doctor {
+                output_format: CliOutputFormat::Json,
+            }
+        );
+        assert_eq!(
+            parse_args(&["skills".to_string(), "review".to_string()]).expect("skills should parse"),
+            CliAction::Skills {
+                skill: Some("review".to_string()),
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&[
+                "--output-format=ndjson".to_string(),
+                "tasks".to_string(),
+                "7".to_string()
+            ])
+            .expect("tasks should parse"),
+            CliAction::Tasks {
+                task: Some("7".to_string()),
+                output_format: CliOutputFormat::Ndjson,
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_extra_direct_inspection_arguments() {
+        let memory_error = parse_args(&["memory".to_string(), "extra".to_string()])
+            .expect_err("memory extra args should fail");
+        assert!(memory_error.contains("memory does not accept positional arguments"));
+
+        let config_error =
+            parse_args(&["config".to_string(), "env".to_string(), "hooks".to_string()])
+                .expect_err("config extra args should fail");
+        assert!(config_error.contains("config accepts at most one argument"));
+
+        let remote_env_error = parse_args(&["remote-env".to_string(), "extra".to_string()])
+            .expect_err("remote-env extra args should fail");
+        assert!(remote_env_error.contains("remote-env does not accept positional arguments"));
+
+        let tasks_error = parse_args(&["tasks".to_string(), "1".to_string(), "2".to_string()])
+            .expect_err("tasks extra args should fail");
+        assert!(tasks_error.contains("tasks accepts at most one argument"));
     }
 
     #[test]
     fn parses_login_and_logout_subcommands() {
         assert_eq!(
             parse_args(&["login".to_string()]).expect("login should parse"),
-            CliAction::Login
+            CliAction::Login {
+                output_format: CliOutputFormat::Text,
+            }
         );
         assert_eq!(
             parse_args(&["logout".to_string()]).expect("logout should parse"),
-            CliAction::Logout
+            CliAction::Logout {
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&["--output-format=ndjson".to_string(), "login".to_string()])
+                .expect("ndjson login should parse"),
+            CliAction::Login {
+                output_format: CliOutputFormat::Ndjson,
+            }
+        );
+        assert_eq!(
+            parse_args(&["--output-format=json".to_string(), "logout".to_string()])
+                .expect("json logout should parse"),
+            CliAction::Logout {
+                output_format: CliOutputFormat::Json,
+            }
         );
         assert_eq!(
             parse_args(&["init".to_string()]).expect("init should parse"),
-            CliAction::Init
+            CliAction::Init {
+                output_format: CliOutputFormat::Text,
+            }
         );
+        assert_eq!(
+            parse_args(&[
+                "--output-format=json".to_string(),
+                "dump-manifests".to_string()
+            ])
+            .expect("dump-manifests should parse"),
+            CliAction::DumpManifests {
+                output_format: CliOutputFormat::Json,
+            }
+        );
+        assert_eq!(
+            parse_args(&[
+                "--output-format=ndjson".to_string(),
+                "bootstrap-plan".to_string()
+            ])
+            .expect("bootstrap-plan should parse"),
+            CliAction::BootstrapPlan {
+                output_format: CliOutputFormat::Ndjson,
+            }
+        );
+    }
+
+    #[test]
+    fn direct_command_structured_payloads_render_expected_shapes() {
+        let version = version_payload();
+        assert_eq!(version["type"], json!("version"));
+        assert_eq!(version["version"], json!(VERSION));
+        assert_eq!(version["content"], json!(render_version_report()));
+
+        let bootstrap = bootstrap_plan_payload();
+        assert_eq!(bootstrap["type"], json!("bootstrap_plan"));
+        assert!(bootstrap["phases"]
+            .as_array()
+            .is_some_and(|phases| !phases.is_empty()));
+
+        let logout = super::logout_payload();
+        assert_eq!(logout["type"], json!("logout"));
+        assert_eq!(logout["credentials_cleared"], json!(true));
+        assert_eq!(
+            logout["message"],
+            json!("Simcoe AI OAuth credentials cleared."),
+        );
+
+        let config = super::inspection_payload("config", Some("section"), Some("env"), "report");
+        assert_eq!(config["type"], json!("config"));
+        assert_eq!(config["section"], json!("env"));
+        assert_eq!(config["content"], json!("report"));
+
+        let memory = super::inspection_payload("memory", None, None, "report");
+        assert_eq!(memory["type"], json!("memory"));
+        assert_eq!(memory["content"], json!("report"));
+        assert!(memory
+            .as_object()
+            .is_some_and(|payload| !payload.contains_key("section")));
+    }
+
+    #[test]
+    fn login_ndjson_records_render_expected_shapes() {
+        assert_eq!(
+            super::login_start_record("http://127.0.0.1:4545/callback"),
+            json!({
+                "type": "login",
+                "event": "start",
+                "message": "Starting Simcoe AI OAuth login.",
+                "redirect_uri": "http://127.0.0.1:4545/callback",
+            })
+        );
+        assert_eq!(
+            super::login_browser_opened_record(),
+            json!({
+                "type": "login",
+                "event": "browser_opened",
+                "message": "Opened the authorization URL in a browser.",
+            })
+        );
+        assert_eq!(
+            super::login_browser_warning_record("xdg-open missing", "https://example.test/auth"),
+            json!({
+                "type": "login",
+                "event": "browser_warning",
+                "message": "failed to open browser automatically: xdg-open missing",
+                "authorize_url": "https://example.test/auth",
+            })
+        );
+        assert_eq!(
+            super::login_complete_record(
+                "http://127.0.0.1:4545/callback",
+                false,
+                Some("xdg-open missing"),
+            ),
+            json!({
+                "type": "login",
+                "event": "complete",
+                "message": "Simcoe AI OAuth login complete.",
+                "redirect_uri": "http://127.0.0.1:4545/callback",
+                "browser_opened": false,
+                "browser_open_error": "xdg-open missing",
+            })
+        );
+    }
+
+    #[test]
+    fn login_rejects_single_json_output_format() {
+        let args = vec!["--output-format=json".to_string(), "login".to_string()];
+        let error = super::with_cli_error_context(
+            super::run_login(CliOutputFormat::Json).expect_err("json login should fail"),
+            1,
+            Some("login"),
+            None,
+        );
+        let payload = super::cli_error_payload(&args, error.as_ref());
+
+        assert_eq!(payload["type"], json!("error"));
+        assert_eq!(payload["exit_code"], json!(2));
+        assert_eq!(payload["operation"], json!("login"));
+        assert!(payload["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("does not support --output-format json")));
+    }
+
+    #[test]
+    fn infers_structured_error_output_format_from_raw_args() {
+        assert_eq!(
+            inferred_error_output_format(&[
+                "--output-format=json".to_string(),
+                "prompt".to_string(),
+                "hello".to_string(),
+            ]),
+            CliOutputFormat::Json,
+        );
+        assert_eq!(
+            inferred_error_output_format(&[
+                "--output-format".to_string(),
+                "ndjson".to_string(),
+                "--resume".to_string(),
+                "session.json".to_string(),
+            ]),
+            CliOutputFormat::Ndjson,
+        );
+        assert_eq!(
+            inferred_error_output_format(&[
+                "--output-format=unsupported".to_string(),
+                "prompt".to_string(),
+            ]),
+            CliOutputFormat::Text,
+        );
+    }
+
+    #[test]
+    fn infers_structured_error_metadata_from_raw_args() {
+        assert_eq!(
+            inferred_error_metadata(&[
+                "--resume".to_string(),
+                "session.json".to_string(),
+                "/status".to_string(),
+            ]),
+            (Some("resume".to_string()), Some("/status".to_string())),
+        );
+        assert_eq!(
+            inferred_error_metadata(&["system-prompt".to_string()]),
+            (Some("system-prompt".to_string()), None),
+        );
+        assert_eq!(
+            inferred_error_metadata(&["hello".to_string()]),
+            (Some("prompt".to_string()), None),
+        );
+    }
+
+    #[test]
+    fn structured_error_payload_includes_exit_code_help_hint_and_metadata() {
+        let args = vec![
+            "--output-format".to_string(),
+            "json".to_string(),
+            "--resume".to_string(),
+            "session.json".to_string(),
+            "/status".to_string(),
+        ];
+        let error = CliExitError::new("resume failed", 2)
+            .with_operation("resume")
+            .with_command("/status");
+        let payload = super::cli_error_payload(&args, &error);
+
+        assert_eq!(payload["type"], json!("error"));
+        assert_eq!(payload["message"], json!("resume failed"));
+        assert_eq!(payload["exit_code"], json!(2));
+        assert_eq!(payload["help_hint"], json!("Run `claw --help` for usage."),);
+        assert_eq!(payload["operation"], json!("resume"));
+        assert_eq!(payload["command"], json!("/status"));
     }
 
     #[test]
@@ -2016,6 +3768,7 @@ mod tests {
             CliAction::ResumeSession {
                 session_path: PathBuf::from("session.json"),
                 commands: vec!["/compact".to_string()],
+                output_format: CliOutputFormat::Text,
             }
         );
     }
@@ -2038,7 +3791,83 @@ mod tests {
                     "/compact".to_string(),
                     "/cost".to_string(),
                 ],
+                output_format: CliOutputFormat::Text,
             }
+        );
+    }
+
+    #[test]
+    fn parses_resume_flag_with_json_output_format() {
+        let args = vec![
+            "--output-format=json".to_string(),
+            "--resume".to_string(),
+            "session.json".to_string(),
+            "/status".to_string(),
+        ];
+        assert_eq!(
+            parse_args(&args).expect("args should parse"),
+            CliAction::ResumeSession {
+                session_path: PathBuf::from("session.json"),
+                commands: vec!["/status".to_string()],
+                output_format: CliOutputFormat::Json,
+            }
+        );
+    }
+
+    #[test]
+    fn resume_structured_output_helpers_render_expected_shapes() {
+        let session_path = PathBuf::from("session.json");
+        let command = build_resume_command_record(0, "/compact", Some("Compacted"), 3, true);
+
+        assert_eq!(
+            build_resume_start_record(session_path.as_path(), 5),
+            json!({
+                "type": "resume",
+                "session_path": "session.json",
+                "message": "Restored session from session.json (5 messages).",
+                "initial_message_count": 5,
+            })
+        );
+        assert_eq!(
+            command,
+            json!({
+                "type": "resume_command",
+                "index": 0,
+                "command": "/compact",
+                "message": "Compacted",
+                "message_count": 3,
+                "changed_session": true,
+            })
+        );
+        assert_eq!(
+            build_resume_summary_record(session_path.as_path(), 5, 3, 1),
+            json!({
+                "type": "resume_summary",
+                "session_path": "session.json",
+                "initial_message_count": 5,
+                "final_message_count": 3,
+                "command_count": 1,
+            })
+        );
+        assert_eq!(
+            build_resume_json_payload(session_path.as_path(), 5, vec![command], 3),
+            json!({
+                "session_path": "session.json",
+                "restored_message": "Restored session from session.json (5 messages).",
+                "initial_message_count": 5,
+                "command_count": 1,
+                "commands": [
+                    {
+                        "type": "resume_command",
+                        "index": 0,
+                        "command": "/compact",
+                        "message": "Compacted",
+                        "message_count": 3,
+                        "changed_session": true,
+                    }
+                ],
+                "final_message_count": 3,
+            })
         );
     }
 
@@ -2275,24 +4104,33 @@ mod tests {
         )
         .expect("write settings");
 
-        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
-        let original_cwd = set_test_cwd(&nested_cwd);
-        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report = render_hooks_report(None).expect("hooks report should render");
-        assert!(report.contains("Hooks"));
-        assert!(report.contains("Pre-tool hooks    1"));
-        assert!(report.contains("Post-tool hooks   2"));
-        assert!(report.contains("PreToolUse"));
-        assert!(report.contains("PostToolUse"));
-        assert!(report.contains("python scripts/pre_hook.py"));
-        assert!(report.contains("./notify.sh"));
+            let report = render_hooks_report(None).expect("hooks report should render");
+            assert!(report.contains("Hooks"));
+            assert!(report.contains("Pre-tool hooks    1"));
+            assert!(report.contains("Post-tool hooks   2"));
+            assert!(report.contains("PreToolUse"));
+            assert!(report.contains("PostToolUse"));
+            assert!(report.contains("python scripts/pre_hook.py"));
+            assert!(report.contains("./notify.sh"));
 
-        match original_config_home {
-            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
-            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+            let payload = super::hooks_payload(None).expect("hooks payload should render");
+            assert_eq!(payload["type"], json!("hooks"));
+            assert_eq!(payload["pre_tool_use_count"], json!(1));
+            assert_eq!(payload["post_tool_use_count"], json!(2));
+            assert_eq!(
+                payload["pre_tool_use"],
+                json!(["python scripts/pre_hook.py"])
+            );
+            assert_eq!(
+                payload["post_tool_use"],
+                json!(["python scripts/post_hook.py", "./notify.sh"])
+            );
         }
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -2319,22 +4157,27 @@ mod tests {
         )
         .expect("write settings");
 
-        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
-        let original_cwd = set_test_cwd(&nested_cwd);
-        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report = render_hooks_report(Some("pre")).expect("selected hooks report should render");
-        assert!(report.contains("Hooks"));
-        assert!(report.contains("Event             PreToolUse"));
-        assert!(report.contains("Configured        1"));
-        assert!(report.contains("python scripts/pre_hook.py"));
-        assert!(report.contains("exit 2 denies, other non-zero exits warn"));
+            let report =
+                render_hooks_report(Some("pre")).expect("selected hooks report should render");
+            assert!(report.contains("Hooks"));
+            assert!(report.contains("Event             PreToolUse"));
+            assert!(report.contains("Configured        1"));
+            assert!(report.contains("python scripts/pre_hook.py"));
+            assert!(report.contains("exit 2 denies, other non-zero exits warn"));
 
-        match original_config_home {
-            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
-            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+            let payload =
+                super::hooks_payload(Some("pre".to_string())).expect("hooks payload should render");
+            assert_eq!(payload["type"], json!("hooks"));
+            assert_eq!(payload["event"], json!("pre"));
+            assert_eq!(payload["event_label"], json!("PreToolUse"));
+            assert_eq!(payload["configured_count"], json!(1));
+            assert_eq!(payload["commands"], json!(["python scripts/pre_hook.py"]));
         }
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -2343,18 +4186,58 @@ mod tests {
         LOCK.get_or_init(|| Mutex::new(()))
     }
 
+    struct ScopedEnvVar {
+        key: &'static str,
+        original: Option<std::ffi::OsString>,
+    }
+
+    impl ScopedEnvVar {
+        fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
+            let original = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, original }
+        }
+
+        fn remove(key: &'static str) -> Self {
+            let original = std::env::var_os(key);
+            std::env::remove_var(key);
+            Self { key, original }
+        }
+    }
+
+    impl Drop for ScopedEnvVar {
+        fn drop(&mut self) {
+            match &self.original {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    struct ScopedCurrentDir {
+        original: PathBuf,
+    }
+
+    impl ScopedCurrentDir {
+        fn change_to(path: &std::path::Path) -> Self {
+            let original = std::env::current_dir().expect("current dir");
+            std::env::set_current_dir(path).expect("set current dir");
+            Self { original }
+        }
+    }
+
+    impl Drop for ScopedCurrentDir {
+        fn drop(&mut self) {
+            std::env::set_current_dir(&self.original).expect("restore cwd");
+        }
+    }
+
     fn temp_path(name: &str) -> PathBuf {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("time should be monotonic")
             .as_nanos();
         std::env::temp_dir().join(format!("claw-cli-{name}-{nanos}"))
-    }
-
-    fn set_test_cwd(path: &std::path::Path) -> PathBuf {
-        let original = std::env::current_dir().expect("current dir");
-        std::env::set_current_dir(path).expect("set current dir");
-        original
     }
 
     fn spawn_http_server(response: String) -> String {
@@ -2440,6 +4323,31 @@ mod tests {
         print_help_to(&mut help).expect("help should render");
         let help = String::from_utf8(help).expect("help should be utf8");
         assert!(help.contains("claw init"));
+        assert!(help.contains("text, json, or ndjson"));
+        assert!(help.contains("claw config [env|hooks|model]"));
+        assert!(help.contains("claw hooks [pre|post]"));
+        assert!(help.contains("claw mcp [server]"));
+        assert!(help.contains("claw memory"));
+        assert!(help.contains("claw agents [name]"));
+        assert!(help.contains("claw plugin [name]"));
+        assert!(help.contains("claw reload-plugins"));
+        assert!(help.contains("claw remote-env"));
+        assert!(help.contains("claw remote-setup"));
+        assert!(help.contains("claw tools [name]"));
+        assert!(help.contains("claw doctor"));
+        assert!(help.contains("claw skills [skill]"));
+        assert!(help.contains("claw tasks [id]"));
+        assert!(help.contains("OAuth login; supports text and ndjson output"));
+        assert!(help.contains("supports text, json, and ndjson output"));
+        assert!(help.contains("claw --output-format ndjson prompt"));
+        assert!(help.contains("claw --output-format json --resume session.json /status /cost"));
+        assert!(help.contains("claw --output-format json dump-manifests"));
+        assert!(help.contains("claw --output-format json config hooks"));
+        assert!(help.contains("claw --output-format ndjson mcp repo-server"));
+        assert!(help.contains("claw --output-format json agents reviewer"));
+        assert!(help.contains("claw --output-format json remote-env"));
+        assert!(help.contains("claw --output-format ndjson login"));
+        assert!(help.contains("claw --output-format json logout"));
     }
 
     #[test]
@@ -2475,23 +4383,31 @@ mod tests {
         )
         .expect("write revit skill prompt");
 
-        let original_codex_home = std::env::var("CODEX_HOME").ok();
-        let original_cwd = set_test_cwd(&nested_cwd);
-        std::env::remove_var("CODEX_HOME");
+        {
+            let _codex_home_guard = ScopedEnvVar::remove("CODEX_HOME");
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report = render_skills_report(None).expect("skills report should render");
-        assert!(report.contains("Skills"));
-        assert!(report.contains("Available        2"));
-        assert!(report.contains("electrical-estimating"));
-        assert!(report.contains("Structure estimate answers around scope and uncertainty."));
-        assert!(report.contains("revit-family-reference"));
-        assert!(report.contains("Present Revit answers with exact family and type labels."));
+            let report = render_skills_report(None).expect("skills report should render");
+            assert!(report.contains("Skills"));
+            assert!(report.contains("Available        2"));
+            assert!(report.contains("electrical-estimating"));
+            assert!(report.contains("Structure estimate answers around scope and uncertainty."));
+            assert!(report.contains("revit-family-reference"));
+            assert!(report.contains("Present Revit answers with exact family and type labels."));
 
-        match original_codex_home {
-            Some(value) => std::env::set_var("CODEX_HOME", value),
-            None => std::env::remove_var("CODEX_HOME"),
+            let payload = super::skills_payload(None).expect("skills payload should render");
+            assert_eq!(payload["type"], json!("skills"));
+            assert_eq!(payload["available_count"], json!(2));
+            assert_eq!(payload["skills"].as_array().map(Vec::len), Some(2));
+            assert!(payload["skills"]
+                .as_array()
+                .is_some_and(|skills| skills.iter().any(|skill| {
+                    skill["name"] == json!("electrical-estimating")
+                        && skill["description"]
+                            == json!("Structure estimate answers around scope and uncertainty.")
+                })));
         }
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -2514,22 +4430,33 @@ mod tests {
         )
         .expect("write skill prompt");
 
-        let original_codex_home = std::env::var("CODEX_HOME").ok();
-        let original_cwd = set_test_cwd(&nested_cwd);
-        std::env::remove_var("CODEX_HOME");
+        {
+            let _codex_home_guard = ScopedEnvVar::remove("CODEX_HOME");
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report =
-            render_skills_report(Some("context-map")).expect("selected skill report should render");
-        assert!(report.contains("Skill"));
-        assert!(report.contains("Name             context-map"));
-        assert!(report.contains("Description      Map relevant files before editing."));
-        assert!(report.contains("Prompt text"));
+            let report = render_skills_report(Some("context-map"))
+                .expect("selected skill report should render");
+            assert!(report.contains("Skill"));
+            assert!(report.contains("Name             context-map"));
+            assert!(report.contains("Description      Map relevant files before editing."));
+            assert!(report.contains("Prompt text"));
 
-        match original_codex_home {
-            Some(value) => std::env::set_var("CODEX_HOME", value),
-            None => std::env::remove_var("CODEX_HOME"),
+            let payload = super::skills_payload(Some("context-map".to_string()))
+                .expect("selected skills payload should render");
+            assert_eq!(payload["type"], json!("skills"));
+            assert_eq!(payload["skill"]["skill"], json!("context-map"));
+            assert_eq!(
+                payload["skill"]["description"],
+                json!("Map relevant files before editing.")
+            );
+            assert!(payload["skill"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("skills/context-map.md")));
+            assert!(payload["skill"]["prompt"]
+                .as_str()
+                .is_some_and(|prompt| prompt.contains("Prompt text")));
         }
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -2590,25 +4517,34 @@ mod tests {
         )
         .expect("write verification manifest");
 
-        let original_agent_store = std::env::var("CLAWD_AGENT_STORE").ok();
-        let original_cwd = set_test_cwd(&nested_cwd);
-        std::env::set_var("CLAWD_AGENT_STORE", &agent_store);
+        {
+            let _agent_store_guard = ScopedEnvVar::set("CLAWD_AGENT_STORE", &agent_store);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report = render_agents_report(None).expect("agents report should render");
-        assert!(report.contains("Agents"));
-        assert!(report.contains("Available        6"));
-        assert!(report.contains("Persisted tasks  2"));
-        assert!(report.contains("Explore"));
-        assert!(report.contains("Read-heavy repo exploration and research sub-agent."));
-        assert!(report.contains("Verification"));
-        assert!(report.contains("Validation-oriented sub-agent with shell access."));
-        assert!(report.contains("1 recent"));
+            let report = render_agents_report(None).expect("agents report should render");
+            assert!(report.contains("Agents"));
+            assert!(report.contains("Available        6"));
+            assert!(report.contains("Persisted tasks  2"));
+            assert!(report.contains("Explore"));
+            assert!(report.contains("Read-heavy repo exploration and research sub-agent."));
+            assert!(report.contains("Verification"));
+            assert!(report.contains("Validation-oriented sub-agent with shell access."));
+            assert!(report.contains("1 recent"));
 
-        match original_agent_store {
-            Some(value) => std::env::set_var("CLAWD_AGENT_STORE", value),
-            None => std::env::remove_var("CLAWD_AGENT_STORE"),
+            let payload = super::agents_payload(None).expect("agents payload should render");
+            assert_eq!(payload["type"], json!("agents"));
+            assert_eq!(payload["available_count"], json!(6));
+            assert_eq!(payload["persisted_task_count"], json!(2));
+            assert_eq!(payload["profiles"].as_array().map(Vec::len), Some(6));
+            assert!(payload["profiles"]
+                .as_array()
+                .is_some_and(|profiles| profiles.iter().any(|profile| {
+                    profile["name"] == json!("Explore")
+                        && profile["tool_count"] == json!(8)
+                        && profile["recent_task_count"] == json!(1)
+                })));
         }
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -2669,28 +4605,40 @@ mod tests {
         )
         .expect("write running explore manifest");
 
-        let original_agent_store = std::env::var("CLAWD_AGENT_STORE").ok();
-        let original_cwd = set_test_cwd(&nested_cwd);
-        std::env::set_var("CLAWD_AGENT_STORE", &agent_store);
+        {
+            let _agent_store_guard = ScopedEnvVar::set("CLAWD_AGENT_STORE", &agent_store);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report =
-            render_agents_report(Some("explorer")).expect("selected agents report should render");
-        assert!(report.contains("Agent"));
-        assert!(report.contains("Name             Explore"));
-        assert!(report.contains("Aliases          explore, explorer, exploreagent"));
-        assert!(report.contains("Allowed tools    8"));
-        assert!(report.contains("Running          1"));
-        assert!(report.contains("Completed        1"));
-        assert!(report.contains("Failed           0"));
-        assert!(report.contains("read_file"));
-        assert!(report.contains("agent-123"));
-        assert!(report.contains("agent-999"));
+            let report = render_agents_report(Some("explorer"))
+                .expect("selected agents report should render");
+            assert!(report.contains("Agent"));
+            assert!(report.contains("Name             Explore"));
+            assert!(report.contains("Aliases          explore, explorer, exploreagent"));
+            assert!(report.contains("Allowed tools    8"));
+            assert!(report.contains("Running          1"));
+            assert!(report.contains("Completed        1"));
+            assert!(report.contains("Failed           0"));
+            assert!(report.contains("read_file"));
+            assert!(report.contains("agent-123"));
+            assert!(report.contains("agent-999"));
 
-        match original_agent_store {
-            Some(value) => std::env::set_var("CLAWD_AGENT_STORE", value),
-            None => std::env::remove_var("CLAWD_AGENT_STORE"),
+            let payload = super::agents_payload(Some("explorer".to_string()))
+                .expect("agent payload should render");
+            assert_eq!(payload["type"], json!("agents"));
+            assert_eq!(payload["profile"]["name"], json!("Explore"));
+            assert_eq!(
+                payload["profile"]["aliases"],
+                json!(["explore", "explorer", "exploreagent"])
+            );
+            assert_eq!(payload["task_counts"]["running"], json!(1));
+            assert_eq!(payload["task_counts"]["completed"], json!(1));
+            assert_eq!(payload["task_counts"]["failed"], json!(0));
+            assert_eq!(payload["recent_tasks"].as_array().map(Vec::len), Some(2));
+            assert!(payload["recent_tasks"].as_array().is_some_and(|tasks| tasks
+                .iter()
+                .any(|task| task["agentId"] == json!("agent-123"))));
         }
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -2704,17 +4652,41 @@ mod tests {
         fs::create_dir_all(&nested_cwd).expect("create nested cwd");
         write_plugin_snapshots(&repo_root);
 
-        let original_cwd = set_test_cwd(&nested_cwd);
+        {
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report = render_plugin_report(None).expect("plugin report should render");
-        assert!(report.contains("Plugin"));
-        assert!(report.contains("Archive           plugins"));
-        assert!(report.contains("Rust status       inspection only"));
-        assert!(report.contains("Archived commands 2"));
-        assert!(report.contains("plugins/builtinPlugins.ts"));
-        assert!(report.contains("reload-plugins"));
+            let report = render_plugin_report(None).expect("plugin report should render");
+            assert!(report.contains("Plugin"));
+            assert!(report.contains("Archive           plugins"));
+            assert!(report.contains("Rust status       inspection only"));
+            assert!(report.contains("Archived commands 2"));
+            assert!(report.contains("plugins/builtinPlugins.ts"));
+            assert!(report.contains("reload-plugins"));
 
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+            let payload = super::plugin_payload(None).expect("plugin payload should render");
+            assert_eq!(payload["type"], json!("plugin"));
+            assert_eq!(payload["snapshot"]["archive_name"], json!("plugins"));
+            assert_eq!(payload["snapshot"]["package_name"], json!("plugins"));
+            assert_eq!(payload["snapshot"]["module_count"], json!(2));
+            assert_eq!(payload["snapshot"]["command_count"], json!(2));
+            assert_eq!(payload["snapshot"]["module_surface_count"], json!(2));
+            assert_eq!(
+                payload["snapshot"]["commands"].as_array().map(Vec::len),
+                Some(2)
+            );
+            assert_eq!(
+                payload["snapshot"]["modules"].as_array().map(Vec::len),
+                Some(2)
+            );
+            assert!(payload["snapshot"]["commands"]
+                .as_array()
+                .is_some_and(|surfaces| surfaces.iter().any(|surface| {
+                    surface["name"] == json!("reload-plugins")
+                        && surface["kind"] == json!("command")
+                        && surface["archived_file_count"] == json!(2)
+                })));
+        }
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -2728,19 +4700,32 @@ mod tests {
         fs::create_dir_all(&nested_cwd).expect("create nested cwd");
         write_plugin_snapshots(&repo_root);
 
-        let original_cwd = set_test_cwd(&nested_cwd);
+        {
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report = render_plugin_report(Some("reload-plugins"))
-            .expect("selected plugin report should render");
-        assert!(report.contains("Plugin"));
-        assert!(report.contains("Name             reload-plugins"));
-        assert!(report.contains("Kind             command"));
-        assert!(report.contains("Rust status      inspection only"));
-        assert!(report.contains("Archived files   2"));
-        assert!(report.contains("commands/reload-plugins/index.ts"));
-        assert!(report.contains("commands/reload-plugins/reload-plugins.ts"));
+            let report = render_plugin_report(Some("reload-plugins"))
+                .expect("selected plugin report should render");
+            assert!(report.contains("Plugin"));
+            assert!(report.contains("Name             reload-plugins"));
+            assert!(report.contains("Kind             command"));
+            assert!(report.contains("Rust status      inspection only"));
+            assert!(report.contains("Archived files   2"));
+            assert!(report.contains("commands/reload-plugins/index.ts"));
+            assert!(report.contains("commands/reload-plugins/reload-plugins.ts"));
 
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+            let payload = super::plugin_payload(Some("reload-plugins".to_string()))
+                .expect("selected plugin payload should render");
+            assert_eq!(payload["type"], json!("plugin"));
+            assert_eq!(payload["surface"]["name"], json!("reload-plugins"));
+            assert_eq!(payload["surface"]["kind"], json!("command"));
+            assert_eq!(payload["surface"]["archived_file_count"], json!(2));
+            assert!(payload["surface"]["source_hints"]
+                .as_array()
+                .is_some_and(|hints| hints
+                    .iter()
+                    .any(|hint| { hint == &json!("commands/reload-plugins/reload-plugins.ts") })));
+        }
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -2754,20 +4739,39 @@ mod tests {
         fs::create_dir_all(&nested_cwd).expect("create nested cwd");
         write_plugin_snapshots(&repo_root);
 
-        let original_cwd = set_test_cwd(&nested_cwd);
+        {
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report = render_reload_plugins_report().expect("reload report should render");
-        assert!(report.contains("Reload plugins"));
-        assert!(report.contains("Rust status      inspection only"));
-        assert!(
-            report.contains("Runtime support  no plugin loader or live reload flow is implemented")
-        );
-        assert!(report.contains("Archived files   2"));
-        assert!(report.contains("Archived modules 2"));
-        assert!(report.contains("commands/reload-plugins/index.ts"));
-        assert!(report.contains("commands/reload-plugins/reload-plugins.ts"));
+            let report = render_reload_plugins_report().expect("reload report should render");
+            assert!(report.contains("Reload plugins"));
+            assert!(report.contains("Rust status      inspection only"));
+            assert!(report
+                .contains("Runtime support  no plugin loader or live reload flow is implemented"));
+            assert!(report.contains("Archived files   2"));
+            assert!(report.contains("Archived modules 2"));
+            assert!(report.contains("commands/reload-plugins/index.ts"));
+            assert!(report.contains("commands/reload-plugins/reload-plugins.ts"));
 
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+            let payload = super::reload_plugins_payload().expect("reload payload should render");
+            assert_eq!(payload["type"], json!("reload_plugins"));
+            assert_eq!(payload["runtime_support"], json!("inspection only"));
+            assert_eq!(payload["snapshot"]["archive_name"], json!("plugins"));
+            assert_eq!(payload["snapshot"]["module_count"], json!(2));
+            assert_eq!(
+                payload["snapshot"]["surface"]["name"],
+                json!("reload-plugins")
+            );
+            assert_eq!(
+                payload["snapshot"]["surface"]["archived_file_count"],
+                json!(2)
+            );
+            assert!(payload["snapshot"]["surface"]["source_hints"]
+                .as_array()
+                .is_some_and(|hints| hints
+                    .iter()
+                    .any(|hint| { hint == &json!("commands/reload-plugins/reload-plugins.ts") })));
+        }
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -2783,56 +4787,48 @@ mod tests {
         fs::write(&token_path, "secret-token\n").expect("write token");
         fs::write(&ca_bundle, "ca").expect("write ca bundle");
 
-        let original_remote = std::env::var("SIMCOE_AI_REMOTE").ok();
-        let original_session = std::env::var("SIMCOE_AI_REMOTE_SESSION_ID").ok();
-        let original_base = std::env::var("SIMCOE_AI_BASE_URL").ok();
-        let original_proxy = std::env::var("CCR_UPSTREAM_PROXY_ENABLED").ok();
-        let original_token_path = std::env::var("CCR_SESSION_TOKEN_PATH").ok();
-        let original_ca_bundle = std::env::var("CCR_CA_BUNDLE_PATH").ok();
+        {
+            let _remote_guard = ScopedEnvVar::set("SIMCOE_AI_REMOTE", "1");
+            let _session_guard = ScopedEnvVar::set("SIMCOE_AI_REMOTE_SESSION_ID", "session-123");
+            let _base_guard = ScopedEnvVar::set("SIMCOE_AI_BASE_URL", "https://remote.test");
+            let _proxy_guard = ScopedEnvVar::set("CCR_UPSTREAM_PROXY_ENABLED", "true");
+            let _token_path_guard = ScopedEnvVar::set("CCR_SESSION_TOKEN_PATH", &token_path);
+            let _ca_bundle_guard = ScopedEnvVar::set("CCR_CA_BUNDLE_PATH", &ca_bundle);
 
-        std::env::set_var("SIMCOE_AI_REMOTE", "1");
-        std::env::set_var("SIMCOE_AI_REMOTE_SESSION_ID", "session-123");
-        std::env::set_var("SIMCOE_AI_BASE_URL", "https://remote.test");
-        std::env::set_var("CCR_UPSTREAM_PROXY_ENABLED", "true");
-        std::env::set_var("CCR_SESSION_TOKEN_PATH", &token_path);
-        std::env::set_var("CCR_CA_BUNDLE_PATH", &ca_bundle);
+            let report = render_remote_env_report().expect("remote env report should render");
+            assert!(report.contains("Remote env"));
+            assert!(report.contains("Rust status      bootstrap foundation only"));
+            assert!(report.contains("Remote enabled   yes"));
+            assert!(report.contains("Session id       session-123"));
+            assert!(report.contains("Base URL         https://remote.test"));
+            assert!(report.contains("Upstream proxy   yes"));
+            assert!(report.contains("Proxy ready      yes"));
+            assert!(report.contains("Token present    yes"));
+            assert!(report.contains("WS target        wss://remote.test/v1/code/upstreamproxy/ws"));
+            assert!(report.contains("Missing          <none>"));
 
-        let report = render_remote_env_report().expect("remote env report should render");
-        assert!(report.contains("Remote env"));
-        assert!(report.contains("Rust status      bootstrap foundation only"));
-        assert!(report.contains("Remote enabled   yes"));
-        assert!(report.contains("Session id       session-123"));
-        assert!(report.contains("Base URL         https://remote.test"));
-        assert!(report.contains("Upstream proxy   yes"));
-        assert!(report.contains("Proxy ready      yes"));
-        assert!(report.contains("Token present    yes"));
-        assert!(report.contains("WS target        wss://remote.test/v1/code/upstreamproxy/ws"));
-        assert!(report.contains("Missing          <none>"));
+            let payload = super::remote_env_payload().expect("remote env payload should render");
+            assert_eq!(payload["type"], json!("remote_env"));
+            assert_eq!(payload["transport"]["kind"], json!("upstream-proxy"));
+            assert_eq!(
+                payload["transport"]["active_transport_kind"],
+                json!("api-stream")
+            );
+            assert_eq!(
+                payload["transport"]["capabilities"]["live_remote_transport"],
+                json!(false)
+            );
+            assert_eq!(payload["transport"]["bootstrap"]["ready"], json!(true));
+            assert_eq!(
+                payload["transport"]["bootstrap"]["token_present"],
+                json!(true)
+            );
+            assert_eq!(payload["transport"]["bootstrap"]["missing"], json!([]));
+            assert!(payload["content"]
+                .as_str()
+                .is_some_and(|content| content.contains("Remote env")));
+        }
 
-        match original_remote {
-            Some(value) => std::env::set_var("SIMCOE_AI_REMOTE", value),
-            None => std::env::remove_var("SIMCOE_AI_REMOTE"),
-        }
-        match original_session {
-            Some(value) => std::env::set_var("SIMCOE_AI_REMOTE_SESSION_ID", value),
-            None => std::env::remove_var("SIMCOE_AI_REMOTE_SESSION_ID"),
-        }
-        match original_base {
-            Some(value) => std::env::set_var("SIMCOE_AI_BASE_URL", value),
-            None => std::env::remove_var("SIMCOE_AI_BASE_URL"),
-        }
-        match original_proxy {
-            Some(value) => std::env::set_var("CCR_UPSTREAM_PROXY_ENABLED", value),
-            None => std::env::remove_var("CCR_UPSTREAM_PROXY_ENABLED"),
-        }
-        match original_token_path {
-            Some(value) => std::env::set_var("CCR_SESSION_TOKEN_PATH", value),
-            None => std::env::remove_var("CCR_SESSION_TOKEN_PATH"),
-        }
-        match original_ca_bundle {
-            Some(value) => std::env::set_var("CCR_CA_BUNDLE_PATH", value),
-            None => std::env::remove_var("CCR_CA_BUNDLE_PATH"),
-        }
         let _ = fs::remove_dir_all(root);
     }
 
@@ -2850,60 +4846,63 @@ mod tests {
         fs::write(&ca_bundle, "ca").expect("write ca bundle");
         write_remote_snapshots(&repo_root);
 
-        let original_cwd = set_test_cwd(&nested_cwd);
-        let original_remote = std::env::var("SIMCOE_AI_REMOTE").ok();
-        let original_session = std::env::var("SIMCOE_AI_REMOTE_SESSION_ID").ok();
-        let original_base = std::env::var("SIMCOE_AI_BASE_URL").ok();
-        let original_proxy = std::env::var("CCR_UPSTREAM_PROXY_ENABLED").ok();
-        let original_token_path = std::env::var("CCR_SESSION_TOKEN_PATH").ok();
-        let original_ca_bundle = std::env::var("CCR_CA_BUNDLE_PATH").ok();
+        {
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+            let _remote_guard = ScopedEnvVar::set("SIMCOE_AI_REMOTE", "1");
+            let _session_guard = ScopedEnvVar::set("SIMCOE_AI_REMOTE_SESSION_ID", "session-setup");
+            let _base_guard = ScopedEnvVar::set("SIMCOE_AI_BASE_URL", "https://remote.test");
+            let _proxy_guard = ScopedEnvVar::set("CCR_UPSTREAM_PROXY_ENABLED", "true");
+            let _token_path_guard = ScopedEnvVar::set("CCR_SESSION_TOKEN_PATH", &token_path);
+            let _ca_bundle_guard = ScopedEnvVar::set("CCR_CA_BUNDLE_PATH", &ca_bundle);
 
-        std::env::set_var("SIMCOE_AI_REMOTE", "1");
-        std::env::set_var("SIMCOE_AI_REMOTE_SESSION_ID", "session-setup");
-        std::env::set_var("SIMCOE_AI_BASE_URL", "https://remote.test");
-        std::env::set_var("CCR_UPSTREAM_PROXY_ENABLED", "true");
-        std::env::set_var("CCR_SESSION_TOKEN_PATH", &token_path);
-        std::env::set_var("CCR_CA_BUNDLE_PATH", &ca_bundle);
+            let report = render_remote_setup_report().expect("remote setup report should render");
+            assert!(report.contains("Remote setup"));
+            assert!(report.contains("Rust status       bootstrap foundation only"));
+            assert!(report.contains("Remote ready      yes"));
+            assert!(report.contains("Remote enabled    yes"));
+            assert!(report.contains("Session id        session-setup"));
+            assert!(report.contains("Archive           cli"));
+            assert!(report.contains("Archived files    3"));
+            assert!(report.contains("Transport files   5"));
+            assert!(report.contains("Summary           remote setup flow"));
+            assert!(report.contains("Missing           <none>"));
+            assert!(report.contains("commands/remote-setup/api.ts"));
+            assert!(report.contains("cli/structuredIO.ts"));
 
-        let report = render_remote_setup_report().expect("remote setup report should render");
-        assert!(report.contains("Remote setup"));
-        assert!(report.contains("Rust status       bootstrap foundation only"));
-        assert!(report.contains("Remote ready      yes"));
-        assert!(report.contains("Remote enabled    yes"));
-        assert!(report.contains("Session id        session-setup"));
-        assert!(report.contains("Archive           cli"));
-        assert!(report.contains("Archived files    3"));
-        assert!(report.contains("Transport files   5"));
-        assert!(report.contains("Summary           remote setup flow"));
-        assert!(report.contains("Missing           <none>"));
-        assert!(report.contains("commands/remote-setup/api.ts"));
-        assert!(report.contains("cli/structuredIO.ts"));
+            let payload =
+                super::remote_setup_payload().expect("remote setup payload should render");
+            assert_eq!(payload["type"], json!("remote_setup"));
+            assert_eq!(payload["transport"]["kind"], json!("upstream-proxy"));
+            assert_eq!(payload["snapshot"]["archive_name"], json!("cli"));
+            assert_eq!(payload["snapshot"]["package_name"], json!("cli"));
+            assert_eq!(payload["snapshot"]["module_count"], json!(6));
+            assert_eq!(
+                payload["snapshot"]["transport_files"],
+                json!([
+                    "cli/remoteIO.ts",
+                    "cli/structuredIO.ts",
+                    "cli/transports/HybridTransport.ts",
+                    "cli/transports/WebSocketTransport.ts",
+                    "cli/transports/transportUtils.ts",
+                ])
+            );
+            assert_eq!(
+                payload["snapshot"]["command"]["name"],
+                json!("remote-setup")
+            );
+            assert_eq!(
+                payload["snapshot"]["command"]["summary"],
+                json!("remote setup flow")
+            );
+            assert_eq!(
+                payload["snapshot"]["command"]["archived_file_count"],
+                json!(3)
+            );
+            assert!(payload["content"]
+                .as_str()
+                .is_some_and(|content| content.contains("Remote setup")));
+        }
 
-        match original_remote {
-            Some(value) => std::env::set_var("SIMCOE_AI_REMOTE", value),
-            None => std::env::remove_var("SIMCOE_AI_REMOTE"),
-        }
-        match original_session {
-            Some(value) => std::env::set_var("SIMCOE_AI_REMOTE_SESSION_ID", value),
-            None => std::env::remove_var("SIMCOE_AI_REMOTE_SESSION_ID"),
-        }
-        match original_base {
-            Some(value) => std::env::set_var("SIMCOE_AI_BASE_URL", value),
-            None => std::env::remove_var("SIMCOE_AI_BASE_URL"),
-        }
-        match original_proxy {
-            Some(value) => std::env::set_var("CCR_UPSTREAM_PROXY_ENABLED", value),
-            None => std::env::remove_var("CCR_UPSTREAM_PROXY_ENABLED"),
-        }
-        match original_token_path {
-            Some(value) => std::env::set_var("CCR_SESSION_TOKEN_PATH", value),
-            None => std::env::remove_var("CCR_SESSION_TOKEN_PATH"),
-        }
-        match original_ca_bundle {
-            Some(value) => std::env::set_var("CCR_CA_BUNDLE_PATH", value),
-            None => std::env::remove_var("CCR_CA_BUNDLE_PATH"),
-        }
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -2917,18 +4916,44 @@ mod tests {
         fs::create_dir_all(&nested_cwd).expect("create nested cwd");
         write_tools_snapshot(&repo_root);
 
-        let original_cwd = set_test_cwd(&nested_cwd);
+        {
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report = render_tools_report(None).expect("tools report should render");
-        assert!(report.contains("Tools"));
-        assert!(report.contains(&format!("Rust tools         {}", mvp_tool_specs().len())));
-        assert!(report.contains("Archived families  2"));
-        assert!(report.contains("Archived files     4"));
-        assert!(report.contains("Rust registry"));
-        assert!(report.contains("bash"));
-        assert!(report.contains("ToolSearchTool"));
+            let report = render_tools_report(None).expect("tools report should render");
+            assert!(report.contains("Tools"));
+            assert!(report.contains(&format!("Rust tools         {}", mvp_tool_specs().len())));
+            assert!(report.contains("Archived families  2"));
+            assert!(report.contains("Archived files     4"));
+            assert!(report.contains("Rust registry"));
+            assert!(report.contains("bash"));
+            assert!(report.contains("ToolSearchTool"));
 
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+            let payload = super::tools_payload(None).expect("tools payload should render");
+            assert_eq!(payload["type"], json!("tools"));
+            assert_eq!(
+                payload["rust_registry"]["tool_count"],
+                json!(mvp_tool_specs().len())
+            );
+            assert_eq!(payload["archived_snapshot"]["available"], json!(true));
+            assert_eq!(payload["archived_snapshot"]["family_count"], json!(2));
+            assert_eq!(
+                payload["archived_snapshot"]["archived_file_count"],
+                json!(4)
+            );
+            assert_eq!(
+                payload["archived_snapshot"]["families"]
+                    .as_array()
+                    .map(Vec::len),
+                Some(2)
+            );
+            assert!(payload["rust_registry"]["tools"]
+                .as_array()
+                .is_some_and(|tools| tools.iter().any(|tool| {
+                    tool["name"] == json!("bash")
+                        && tool["required_permission"] == json!("danger-full-access")
+                })));
+        }
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -2942,21 +4967,39 @@ mod tests {
         fs::create_dir_all(&nested_cwd).expect("create nested cwd");
         write_tools_snapshot(&repo_root);
 
-        let original_cwd = set_test_cwd(&nested_cwd);
+        {
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report =
-            render_tools_report(Some("bash")).expect("selected tools report should render");
-        assert!(report.contains("Tool"));
-        assert!(report.contains("Name             bash"));
-        assert!(report.contains("Source           rust tool registry"));
-        assert!(report.contains("Required mode    danger-full-access"));
-        assert!(report.contains("dangerouslyDisableSandbox"));
-        assert!(report.contains("Archived TS family"));
-        assert!(report.contains("Name             BashTool"));
-        assert!(report.contains("Archived files   2"));
-        assert!(report.contains("tools/BashTool/BashTool.tsx"));
+            let report =
+                render_tools_report(Some("bash")).expect("selected tools report should render");
+            assert!(report.contains("Tool"));
+            assert!(report.contains("Name             bash"));
+            assert!(report.contains("Source           rust tool registry"));
+            assert!(report.contains("Required mode    danger-full-access"));
+            assert!(report.contains("dangerouslyDisableSandbox"));
+            assert!(report.contains("Archived TS family"));
+            assert!(report.contains("Name             BashTool"));
+            assert!(report.contains("Archived files   2"));
+            assert!(report.contains("tools/BashTool/BashTool.tsx"));
 
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+            let payload = super::tools_payload(Some("bash".to_string()))
+                .expect("selected tools payload should render");
+            assert_eq!(payload["type"], json!("tools"));
+            assert_eq!(payload["requested"], json!("bash"));
+            assert_eq!(payload["rust_tool"]["name"], json!("bash"));
+            assert_eq!(
+                payload["rust_tool"]["required_permission"],
+                json!("danger-full-access")
+            );
+            assert_eq!(payload["archived_family"]["name"], json!("BashTool"));
+            assert_eq!(payload["archived_family"]["archived_file_count"], json!(2));
+            assert!(payload["archived_family"]["source_hints"]
+                .as_array()
+                .is_some_and(|hints| hints
+                    .iter()
+                    .any(|hint| hint == &json!("tools/BashTool/BashTool.tsx"))));
+        }
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -2986,29 +5029,49 @@ mod tests {
         )
         .expect("write oauth credentials");
 
-        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
-        let original_cwd = set_test_cwd(&nested_cwd);
-        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report = render_doctor_report().expect("doctor report should render");
-        assert!(report.contains("Doctor"));
-        assert!(report.contains("Status            ok"));
-        assert!(report.contains("Permission mode   workspace-write"));
-        assert!(report.contains("OAuth config      yes"));
-        assert!(report.contains("Stored creds      yes"));
-        assert!(report.contains("Refresh token     yes"));
-        assert!(report.contains("MCP servers       2"));
-        assert!(report.contains("MCP transports    stdio=1, ws=1"));
-        assert!(report.contains("Pre hooks         1"));
-        assert!(report.contains("Post hooks        1"));
-        assert!(report.contains("Filesystem mode   workspace-only"));
-        assert!(report.contains("no instruction files discovered"));
+            let report = render_doctor_report().expect("doctor report should render");
+            assert!(report.contains("Doctor"));
+            assert!(report.contains("Status            ok"));
+            assert!(report.contains("Permission mode   workspace-write"));
+            assert!(report.contains("OAuth config      yes"));
+            assert!(report.contains("Stored creds      yes"));
+            assert!(report.contains("Refresh token     yes"));
+            assert!(report.contains("MCP servers       2"));
+            assert!(report.contains("MCP transports    stdio=1, ws=1"));
+            assert!(report.contains("Pre hooks         1"));
+            assert!(report.contains("Post hooks        1"));
+            assert!(report.contains("Filesystem mode   workspace-only"));
+            assert!(report.contains("no instruction files discovered"));
 
-        match original_config_home {
-            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
-            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+            let payload = super::doctor_payload().expect("doctor payload should render");
+            assert_eq!(payload["type"], json!("doctor"));
+            assert_eq!(payload["config"]["status"], json!("ok"));
+            assert_eq!(
+                payload["config"]["permission_mode"],
+                json!("workspace-write")
+            );
+            assert_eq!(payload["auth"]["oauth_configured"], json!(true));
+            assert_eq!(payload["auth"]["stored_credentials_status"], json!("yes"));
+            assert_eq!(payload["auth"]["refresh_token_present"], json!(true));
+            assert_eq!(payload["auth"]["scopes"], json!(["openid", "profile"]));
+            assert_eq!(payload["hooks"]["pre_count"], json!(1));
+            assert_eq!(payload["hooks"]["post_count"], json!(1));
+            assert_eq!(payload["mcp"]["server_count"], json!(2));
+            assert_eq!(payload["mcp"]["transport_counts"]["stdio"], json!(1));
+            assert_eq!(payload["mcp"]["transport_counts"]["ws"], json!(1));
+            assert_eq!(
+                payload["config"]["sandbox"]["filesystem_mode"],
+                json!("workspace-only")
+            );
+            assert!(payload["issues"].as_array().is_some_and(|issues| issues
+                .iter()
+                .any(|issue| issue == &json!("no instruction files discovered"))));
         }
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -3027,21 +5090,30 @@ mod tests {
         fs::create_dir_all(&config_home).expect("create config home");
         fs::write(config_home.join("settings.json"), "[]\n").expect("write invalid settings");
 
-        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
-        let original_cwd = set_test_cwd(&nested_cwd);
-        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report = render_doctor_report().expect("doctor report should still render");
-        assert!(report.contains("Doctor"));
-        assert!(report.contains("Status            error"));
-        assert!(report.contains("config load failed"));
-        assert!(report.contains("Stored creds      no"));
+            let report = render_doctor_report().expect("doctor report should still render");
+            assert!(report.contains("Doctor"));
+            assert!(report.contains("Status            error"));
+            assert!(report.contains("config load failed"));
+            assert!(report.contains("Stored creds      no"));
 
-        match original_config_home {
-            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
-            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+            let payload = super::doctor_payload().expect("doctor payload should render");
+            assert_eq!(payload["type"], json!("doctor"));
+            assert_eq!(payload["config"]["status"], json!("error"));
+            assert_eq!(payload["config"]["loaded_file_count"], json!(0));
+            assert_eq!(payload["auth"]["stored_credentials_status"], json!("no"));
+            assert!(payload["issues"]
+                .as_array()
+                .is_some_and(|issues| issues.iter().any(|issue| {
+                    issue
+                        .as_str()
+                        .is_some_and(|text| text.contains("config load failed"))
+                })));
         }
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -3114,25 +5186,32 @@ mod tests {
         )
         .expect("write running manifest");
 
-        let original_agent_store = std::env::var("CLAWD_AGENT_STORE").ok();
-        let original_cwd = set_test_cwd(&nested_cwd);
-        std::env::set_var("CLAWD_AGENT_STORE", &agent_store);
+        {
+            let _agent_store_guard = ScopedEnvVar::set("CLAWD_AGENT_STORE", &agent_store);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report = render_tasks_report(None).expect("tasks report should render");
-        assert!(report.contains("Tasks"));
-        assert!(report.contains("Persisted tasks   2"));
-        assert!(report.contains("Running          1"));
-        assert!(report.contains("Completed        1"));
-        assert!(report.contains("audit-repo"));
-        assert!(report.contains("verify-release"));
-        assert!(report.contains("agent-123"));
-        assert!(report.contains("agent-456"));
+            let report = render_tasks_report(None).expect("tasks report should render");
+            assert!(report.contains("Tasks"));
+            assert!(report.contains("Persisted tasks   2"));
+            assert!(report.contains("Running          1"));
+            assert!(report.contains("Completed        1"));
+            assert!(report.contains("audit-repo"));
+            assert!(report.contains("verify-release"));
+            assert!(report.contains("agent-123"));
+            assert!(report.contains("agent-456"));
 
-        match original_agent_store {
-            Some(value) => std::env::set_var("CLAWD_AGENT_STORE", value),
-            None => std::env::remove_var("CLAWD_AGENT_STORE"),
+            let payload = super::tasks_payload(None).expect("tasks payload should render");
+            assert_eq!(payload["type"], json!("tasks"));
+            assert_eq!(payload["task_counts"]["persisted"], json!(2));
+            assert_eq!(payload["task_counts"]["running"], json!(1));
+            assert_eq!(payload["task_counts"]["completed"], json!(1));
+            assert_eq!(payload["task_counts"]["failed"], json!(0));
+            assert_eq!(payload["tasks"].as_array().map(Vec::len), Some(2));
+            assert!(payload["tasks"].as_array().is_some_and(|tasks| tasks
+                .iter()
+                .any(|task| task["agentId"] == json!("agent-123"))));
         }
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -3179,26 +5258,33 @@ mod tests {
         )
         .expect("write task manifest");
 
-        let original_agent_store = std::env::var("CLAWD_AGENT_STORE").ok();
-        let original_cwd = set_test_cwd(&nested_cwd);
-        std::env::set_var("CLAWD_AGENT_STORE", &agent_store);
+        {
+            let _agent_store_guard = ScopedEnvVar::set("CLAWD_AGENT_STORE", &agent_store);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report =
-            render_tasks_report(Some("agent-789")).expect("selected task report should render");
-        assert!(report.contains("Task"));
-        assert!(report.contains("Id               agent-789"));
-        assert!(report.contains("Name             ship-audit"));
-        assert!(report.contains("Status           failed"));
-        assert!(report.contains("Type             Explore"));
-        assert!(report.contains("Error            network timeout"));
-        assert!(report.contains("# Agent Task"));
-        assert!(report.contains("network timeout"));
+            let report =
+                render_tasks_report(Some("agent-789")).expect("selected task report should render");
+            assert!(report.contains("Task"));
+            assert!(report.contains("Id               agent-789"));
+            assert!(report.contains("Name             ship-audit"));
+            assert!(report.contains("Status           failed"));
+            assert!(report.contains("Type             Explore"));
+            assert!(report.contains("Error            network timeout"));
+            assert!(report.contains("# Agent Task"));
+            assert!(report.contains("network timeout"));
 
-        match original_agent_store {
-            Some(value) => std::env::set_var("CLAWD_AGENT_STORE", value),
-            None => std::env::remove_var("CLAWD_AGENT_STORE"),
+            let payload = super::tasks_payload(Some("agent-789".to_string()))
+                .expect("task payload should render");
+            assert_eq!(payload["type"], json!("tasks"));
+            assert_eq!(payload["task"]["agentId"], json!("agent-789"));
+            assert_eq!(payload["task"]["status"], json!("failed"));
+            assert_eq!(payload["task"]["subagentType"], json!("Explore"));
+            assert_eq!(payload["task"]["error"], json!("network timeout"));
+            assert!(payload["output"]
+                .as_str()
+                .is_some_and(|output| output.contains("network timeout")));
         }
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -3232,22 +5318,36 @@ mod tests {
         )
         .expect("write settings");
 
-        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
-        let original_cwd = set_test_cwd(&nested_cwd);
-        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report = render_mcp_report(None).expect("mcp report should render");
-        assert!(report.contains("MCP"));
-        assert!(report.contains("Configured servers 2"));
-        assert!(report.contains("stdio-server"));
-        assert!(report.contains("remote-server"));
-        assert!(report.contains("https://example.test/mcp"));
+            let report = render_mcp_report(None).expect("mcp report should render");
+            assert!(report.contains("MCP"));
+            assert!(report.contains("Configured servers 2"));
+            assert!(report.contains("stdio-server"));
+            assert!(report.contains("remote-server"));
+            assert!(report.contains("https://example.test/mcp"));
 
-        match original_config_home {
-            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
-            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+            let payload = super::mcp_payload(None).expect("mcp payload should render");
+            let servers = payload["servers"]
+                .as_array()
+                .expect("servers should be an array");
+            assert_eq!(payload["type"], json!("mcp"));
+            assert_eq!(payload["configured_server_count"], json!(2));
+            assert_eq!(servers.len(), 2);
+            assert!(servers.iter().any(|server| {
+                server["name"] == json!("stdio-server")
+                    && server["transport"] == json!("stdio")
+                    && server["details"]["command"] == json!("uvx")
+            }));
+            assert!(servers.iter().any(|server| {
+                server["name"] == json!("remote-server")
+                    && server["transport"] == json!("http")
+                    && server["target"] == json!("https://example.test/mcp")
+            }));
         }
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -3280,25 +5380,37 @@ mod tests {
         )
         .expect("write settings");
 
-        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
-        let original_cwd = set_test_cwd(&nested_cwd);
-        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-        let report =
-            render_mcp_report(Some("remote-server")).expect("selected mcp report should render");
-        assert!(report.contains("MCP server"));
-        assert!(report.contains("Name              remote-server"));
-        assert!(report.contains("Transport         http"));
-        assert!(report.contains("Target            https://example.test/mcp"));
-        assert!(report.contains("Auth              oauth"));
-        assert!(report.contains("Headers           1"));
-        assert!(report.contains("Headers helper    helper.sh"));
+            let report = render_mcp_report(Some("remote-server"))
+                .expect("selected mcp report should render");
+            assert!(report.contains("MCP server"));
+            assert!(report.contains("Name              remote-server"));
+            assert!(report.contains("Transport         http"));
+            assert!(report.contains("Target            https://example.test/mcp"));
+            assert!(report.contains("Auth              oauth"));
+            assert!(report.contains("Headers           1"));
+            assert!(report.contains("Headers helper    helper.sh"));
 
-        match original_config_home {
-            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
-            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+            let payload = super::mcp_payload(Some("remote-server".to_string()))
+                .expect("selected mcp payload should render");
+            assert_eq!(payload["type"], json!("mcp"));
+            assert_eq!(payload["server"]["name"], json!("remote-server"));
+            assert_eq!(payload["server"]["transport"], json!("http"));
+            assert_eq!(
+                payload["server"]["details"]["target"],
+                json!("https://example.test/mcp")
+            );
+            assert_eq!(payload["server"]["details"]["auth"], json!("oauth"));
+            assert_eq!(payload["server"]["details"]["headers_count"], json!(1));
+            assert_eq!(
+                payload["server"]["details"]["headers_helper"],
+                json!("helper.sh")
+            );
         }
-        std::env::set_current_dir(original_cwd).expect("restore cwd");
+
         let _ = fs::remove_dir_all(repo_root);
     }
 
@@ -3328,49 +5440,35 @@ mod tests {
         );
         let base_url = spawn_http_server(http_response("200 OK", "text/event-stream", sse));
 
-        let original_base_url = std::env::var("SIMCOE_AI_BASE_URL").ok();
-        let original_api_key = std::env::var("SIMCOE_AI_API_KEY").ok();
-        let original_auth_token = std::env::var("SIMCOE_AI_AUTH_TOKEN").ok();
-        std::env::set_var("SIMCOE_AI_BASE_URL", &base_url);
-        std::env::set_var("SIMCOE_AI_API_KEY", "test-key");
-        std::env::remove_var("SIMCOE_AI_AUTH_TOKEN");
+        {
+            let _base_url_guard = ScopedEnvVar::set("SIMCOE_AI_BASE_URL", &base_url);
+            let _api_key_guard = ScopedEnvVar::set("SIMCOE_AI_API_KEY", "test-key");
+            let _auth_token_guard = ScopedEnvVar::remove("SIMCOE_AI_AUTH_TOKEN");
 
-        let mut client =
-            SimcoeRuntimeClient::new(DEFAULT_MODEL.to_string(), true, false, None, None)
-                .expect("runtime client");
-        let mut out = Vec::new();
-        let events = client
-            .stream_with_writer(
-                ApiRequest {
-                    system_prompt: Vec::new(),
-                    messages: vec![ConversationMessage::user_text("Inspect Cargo.toml")],
-                },
-                &mut out,
-            )
-            .expect("stream request should succeed");
+            let mut client =
+                SimcoeRuntimeClient::new(DEFAULT_MODEL.to_string(), true, false, None, None)
+                    .expect("runtime client");
+            let mut out = Vec::new();
+            let events = client
+                .stream_with_writer(
+                    ApiRequest {
+                        system_prompt: Vec::new(),
+                        messages: vec![ConversationMessage::user_text("Inspect Cargo.toml")],
+                    },
+                    &mut out,
+                )
+                .expect("stream request should succeed");
 
-        assert!(out.is_empty());
-        assert!(events.iter().any(|event| matches!(
-            event,
-            AssistantEvent::TextDelta(text) if text == "Checking repo-local skills"
-        )));
-        assert!(events.iter().any(|event| matches!(
-            event,
-            AssistantEvent::ToolUse { name, input, .. }
-                if name == "read_file" && input == "{\"path\":\"Cargo.toml\"}"
-        )));
-
-        match original_base_url {
-            Some(value) => std::env::set_var("SIMCOE_AI_BASE_URL", value),
-            None => std::env::remove_var("SIMCOE_AI_BASE_URL"),
-        }
-        match original_api_key {
-            Some(value) => std::env::set_var("SIMCOE_AI_API_KEY", value),
-            None => std::env::remove_var("SIMCOE_AI_API_KEY"),
-        }
-        match original_auth_token {
-            Some(value) => std::env::set_var("SIMCOE_AI_AUTH_TOKEN", value),
-            None => std::env::remove_var("SIMCOE_AI_AUTH_TOKEN"),
+            assert!(out.is_empty());
+            assert!(events.iter().any(|event| matches!(
+                event,
+                AssistantEvent::TextDelta(text) if text == "Checking repo-local skills"
+            )));
+            assert!(events.iter().any(|event| matches!(
+                event,
+                AssistantEvent::ToolUse { name, input, .. }
+                    if name == "read_file" && input == "{\"path\":\"Cargo.toml\"}"
+            )));
         }
     }
 
@@ -3444,25 +5542,82 @@ mod tests {
 
     #[test]
     fn config_report_supports_section_views() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let report = render_config_report(Some("env")).expect("config report should render");
         assert!(report.contains("Merged section: env"));
+
+        let payload =
+            super::config_payload(Some("env".to_string())).expect("config payload should render");
+        assert_eq!(payload["type"], json!("config"));
+        assert_eq!(payload["section"], json!("env"));
+        assert_eq!(payload["section_supported"], json!(true));
+        assert_eq!(
+            payload["supported_sections"],
+            json!(["env", "hooks", "model"])
+        );
+        assert!(payload["content"]
+            .as_str()
+            .is_some_and(|content| content.contains("Merged section: env")));
     }
 
     #[test]
     fn memory_report_uses_sectioned_layout() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let report = render_memory_report().expect("memory report should render");
         assert!(report.contains("Memory"));
         assert!(report.contains("Working directory"));
         assert!(report.contains("Instruction files"));
         assert!(report.contains("Discovered files"));
+
+        let payload = super::memory_payload().expect("memory payload should render");
+        let instruction_files = payload["instruction_files"]
+            .as_array()
+            .expect("instruction files should be an array");
+        assert_eq!(payload["type"], json!("memory"));
+        assert_eq!(
+            payload["working_directory"],
+            json!(std::env::current_dir()
+                .expect("cwd should resolve")
+                .display()
+                .to_string())
+        );
+        assert_eq!(
+            payload["instruction_file_count"],
+            json!(instruction_files.len())
+        );
+        assert!(payload["content"]
+            .as_str()
+            .is_some_and(|content| content.contains("Memory")));
     }
 
     #[test]
     fn config_report_uses_sectioned_layout() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let report = render_config_report(None).expect("config report should render");
         assert!(report.contains("Config"));
         assert!(report.contains("Discovered files"));
         assert!(report.contains("Merged JSON"));
+
+        let payload = super::config_payload(None).expect("config payload should render");
+        let discovered_files = payload["discovered_files"]
+            .as_array()
+            .expect("discovered files should be an array");
+        assert_eq!(payload["type"], json!("config"));
+        assert_eq!(
+            payload["working_directory"],
+            json!(std::env::current_dir()
+                .expect("cwd should resolve")
+                .display()
+                .to_string())
+        );
+        assert_eq!(payload["merged_json"].is_object(), true);
+        assert!(!discovered_files.is_empty());
     }
 
     #[test]
