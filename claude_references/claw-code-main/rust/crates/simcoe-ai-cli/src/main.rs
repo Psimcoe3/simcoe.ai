@@ -1087,17 +1087,26 @@ fn run_repl(
     Ok(())
 }
 
+pub(crate) fn current_working_directory() -> io::Result<PathBuf> {
+    env::current_dir()
+}
+
+pub(crate) fn config_loader_in_current_dir() -> io::Result<(PathBuf, ConfigLoader)> {
+    let cwd = current_working_directory()?;
+    Ok((cwd.clone(), ConfigLoader::default_for(&cwd)))
+}
+
 fn init_simcoe_md_at(cwd: &Path) -> Result<String, Box<dyn std::error::Error>> {
     Ok(initialize_repo(cwd)?.render())
 }
 
 fn init_simcoe_md() -> Result<String, Box<dyn std::error::Error>> {
-    let cwd = env::current_dir()?;
+    let cwd = current_working_directory()?;
     init_simcoe_md_at(&cwd)
 }
 
 fn init_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    let cwd = env::current_dir()?;
+    let cwd = current_working_directory()?;
     let mut payload = content_payload_map("init", init_simcoe_md_at(&cwd)?);
     payload.insert("cwd".to_string(), json!(cwd.display().to_string()));
     Ok(serde_json::Value::Object(payload))
@@ -1109,7 +1118,7 @@ fn run_init(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::Er
 
 pub(crate) fn command_in_current_dir(program: &str) -> io::Result<Command> {
     let mut command = Command::new(program);
-    command.current_dir(env::current_dir()?);
+    command.current_dir(current_working_directory()?);
     Ok(command)
 }
 
@@ -1389,8 +1398,8 @@ fn run_login(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::E
         )));
     }
 
-    let cwd = env::current_dir()?;
-    let config = ConfigLoader::default_for(&cwd).load()?;
+    let (_, loader) = config_loader_in_current_dir()?;
+    let config = loader.load()?;
     let oauth = oauth_config_for_login(config.oauth())?;
     let callback_port = oauth.callback_port.unwrap_or(DEFAULT_OAUTH_CALLBACK_PORT);
     let redirect_uri = runtime::loopback_redirect_uri(callback_port);
@@ -1538,7 +1547,7 @@ fn wait_for_oauth_callback(
 fn parse_system_prompt_command_args(
     args: Option<&str>,
 ) -> Result<(PathBuf, String), Box<dyn std::error::Error>> {
-    let mut cwd = env::current_dir()?;
+    let mut cwd = current_working_directory()?;
     let mut date = DEFAULT_DATE.to_string();
     let tokens = args
         .map(str::trim)
@@ -2148,7 +2157,7 @@ fn resolve_export_path(
     requested_path: Option<&str>,
     session: &Session,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let cwd = env::current_dir()?;
+    let cwd = current_working_directory()?;
     let file_name =
         requested_path.map_or_else(|| default_export_filename(session), ToOwned::to_owned);
     let final_name = if Path::new(&file_name)
@@ -2164,7 +2173,7 @@ fn resolve_export_path(
 
 fn build_system_prompt() -> Result<Vec<String>, Box<dyn std::error::Error>> {
     Ok(load_system_prompt(
-        env::current_dir()?,
+        current_working_directory()?,
         DEFAULT_DATE,
         env::consts::OS,
         "unknown",
@@ -2173,11 +2182,8 @@ fn build_system_prompt() -> Result<Vec<String>, Box<dyn std::error::Error>> {
 
 fn build_runtime_feature_config(
 ) -> Result<runtime::RuntimeFeatureConfig, Box<dyn std::error::Error>> {
-    let cwd = env::current_dir()?;
-    Ok(ConfigLoader::default_for(cwd)
-        .load()?
-        .feature_config()
-        .clone())
+    let (_, loader) = config_loader_in_current_dir()?;
+    Ok(loader.load()?.feature_config().clone())
 }
 
 fn build_runtime(
@@ -2434,8 +2440,8 @@ impl SimcoeRuntimeClient {
 
 fn resolve_cli_auth_source() -> Result<AuthSource, Box<dyn std::error::Error>> {
     Ok(resolve_startup_auth_source(|| {
-        let cwd = env::current_dir().map_err(api::ApiError::from)?;
-        let config = ConfigLoader::default_for(&cwd).load().map_err(|error| {
+        let (_, loader) = config_loader_in_current_dir().map_err(api::ApiError::from)?;
+        let config = loader.load().map_err(|error| {
             api::ApiError::Auth(format!("failed to load runtime OAuth config: {error}"))
         })?;
         Ok(config.oauth().cloned())

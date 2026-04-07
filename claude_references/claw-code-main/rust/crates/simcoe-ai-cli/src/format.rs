@@ -14,10 +14,10 @@ use compat_harness::{
     RemoteCatalog, RemoteCommandSummary, ToolCatalog,
 };
 use runtime::{
-    credentials_path, inherited_upstream_proxy_env, load_oauth_credentials, ConfigLoader,
-    ConfigSource, ContentBlock, McpClientAuth, McpClientBootstrap, McpClientTransport,
-    McpTransport, ProjectContext, RemoteSessionContext, ResolvedPermissionMode, Session,
-    TokenUsage, UpstreamProxyBootstrap,
+    credentials_path, inherited_upstream_proxy_env, load_oauth_credentials, ConfigSource,
+    ContentBlock, McpClientAuth, McpClientBootstrap, McpClientTransport, McpTransport,
+    ProjectContext, RemoteSessionContext, ResolvedPermissionMode, Session, TokenUsage,
+    UpstreamProxyBootstrap,
 };
 use tools::{
     list_agent_profiles, list_agent_tasks, list_skills, load_agent_profile, load_agent_task,
@@ -422,11 +422,18 @@ pub(crate) fn render_repl_help() -> String {
     .join("\n")
 }
 
+fn trimmed_non_empty(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|value| !value.is_empty())
+}
+
+fn not_found_io_error(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> io::Error {
+    io::Error::new(io::ErrorKind::NotFound, error)
+}
+
 pub(crate) fn status_context(
     session_path: Option<&Path>,
 ) -> Result<StatusContext, Box<dyn std::error::Error>> {
-    let cwd = env::current_dir()?;
-    let loader = ConfigLoader::default_for(&cwd);
+    let (cwd, loader) = crate::config_loader_in_current_dir()?;
     let discovered_config_files = loader.discover().len();
     let runtime_config = loader.load()?;
     let project_context = ProjectContext::discover_with_git(&cwd, crate::DEFAULT_DATE)?;
@@ -502,8 +509,7 @@ pub(crate) fn format_status_report(
 pub(crate) fn config_report_snapshot(
     section: Option<&str>,
 ) -> Result<ConfigReportSnapshot, Box<dyn std::error::Error>> {
-    let cwd = env::current_dir()?;
-    let loader = ConfigLoader::default_for(&cwd);
+    let (cwd, loader) = crate::config_loader_in_current_dir()?;
     let discovered = loader.discover();
     let runtime_config = loader.load()?;
 
@@ -524,10 +530,7 @@ pub(crate) fn config_report_snapshot(
             path: entry.path.display().to_string(),
         })
         .collect::<Vec<_>>();
-    let requested_section = section
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
+    let requested_section = trimmed_non_empty(section).map(str::to_string);
     let include_merged_json = requested_section.is_none();
     let mut section_supported = false;
     let mut section_has_value = false;
@@ -629,31 +632,30 @@ pub(crate) fn render_config_report(
 pub(crate) fn hooks_report_snapshot(
     event: Option<&str>,
 ) -> Result<HooksReportSnapshot, Box<dyn std::error::Error>> {
-    let cwd = env::current_dir()?;
-    let runtime_config = ConfigLoader::default_for(&cwd).load()?;
+    let (_, loader) = crate::config_loader_in_current_dir()?;
+    let runtime_config = loader.load()?;
     let hooks = runtime_config.hooks();
     let pre_commands = hooks.pre_tool_use().to_vec();
     let post_commands = hooks.post_tool_use().to_vec();
-    let selected_event =
-        if let Some(requested) = event.map(str::trim).filter(|value| !value.is_empty()) {
-            let selection = parse_hook_selection(requested).ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("unsupported hooks selector '{requested}'. Use pre or post."),
-                )
-            })?;
-            let (label, commands) = match selection {
-                HookSelection::Pre => ("PreToolUse", pre_commands.clone()),
-                HookSelection::Post => ("PostToolUse", post_commands.clone()),
-            };
-            Some(HookEventSnapshot {
-                requested: requested.to_string(),
-                label,
-                commands,
-            })
-        } else {
-            None
+    let selected_event = if let Some(requested) = trimmed_non_empty(event) {
+        let selection = parse_hook_selection(requested).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("unsupported hooks selector '{requested}'. Use pre or post."),
+            )
+        })?;
+        let (label, commands) = match selection {
+            HookSelection::Pre => ("PreToolUse", pre_commands.clone()),
+            HookSelection::Post => ("PostToolUse", post_commands.clone()),
         };
+        Some(HookEventSnapshot {
+            requested: requested.to_string(),
+            label,
+            commands,
+        })
+    } else {
+        None
+    };
 
     Ok(HooksReportSnapshot {
         selected_event,
@@ -708,7 +710,7 @@ pub(crate) fn render_hooks_report(
 }
 
 pub(crate) fn memory_report_snapshot() -> Result<MemoryReportSnapshot, Box<dyn std::error::Error>> {
-    let cwd = env::current_dir()?;
+    let cwd = crate::current_working_directory()?;
     let project_context = ProjectContext::discover(&cwd, crate::DEFAULT_DATE)?;
 
     Ok(MemoryReportSnapshot {
@@ -769,21 +771,16 @@ pub(crate) fn render_memory_report() -> Result<String, Box<dyn std::error::Error
 pub(crate) fn mcp_report_snapshot(
     server: Option<&str>,
 ) -> Result<McpReportSnapshot, Box<dyn std::error::Error>> {
-    let cwd = env::current_dir()?;
-    let runtime_config = ConfigLoader::default_for(&cwd).load()?;
+    let (_, loader) = crate::config_loader_in_current_dir()?;
+    let runtime_config = loader.load()?;
     let servers = runtime_config.mcp().servers();
-    let requested = server.map(str::trim).filter(|value| !value.is_empty());
+    let requested = trimmed_non_empty(server);
 
     if let Some(requested) = requested {
         let (name, config) = servers
             .iter()
             .find(|(name, _)| name.eq_ignore_ascii_case(requested))
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::NotFound,
-                    format!("unknown MCP server: {requested}"),
-                )
-            })?;
+            .ok_or_else(|| not_found_io_error(format!("unknown MCP server: {requested}")))?;
         let bootstrap = McpClientBootstrap::from_scoped_config(name, config);
         return Ok(McpReportSnapshot {
             selected_server: Some(mcp_server_snapshot(name, config.scope, &bootstrap)),
@@ -866,12 +863,11 @@ fn task_status_counts(tasks: &[AgentTaskSummary]) -> TaskStatusCountsSnapshot {
 pub(crate) fn agents_report_snapshot(
     agent: Option<&str>,
 ) -> Result<AgentsReportSnapshot, Box<dyn std::error::Error>> {
-    let requested = agent.map(str::trim).filter(|value| !value.is_empty());
+    let requested = trimmed_non_empty(agent);
     let tasks = list_agent_tasks().map_err(io::Error::other)?;
 
     if let Some(requested) = requested {
-        let profile = load_agent_profile(requested)
-            .map_err(|error| io::Error::new(io::ErrorKind::NotFound, error))?;
+        let profile = load_agent_profile(requested).map_err(not_found_io_error)?;
         let matching_tasks = tasks
             .into_iter()
             .filter(|task| task.subagent_type.as_deref() == Some(profile.name.as_str()))
@@ -1001,8 +997,7 @@ pub(crate) fn render_agents_report(
 }
 
 pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Error>> {
-    let cwd = env::current_dir()?;
-    let loader = ConfigLoader::default_for(&cwd);
+    let (cwd, loader) = crate::config_loader_in_current_dir()?;
     let discovered = loader.discover();
     let project_context = ProjectContext::discover_with_git(&cwd, crate::DEFAULT_DATE)?;
     let (project_root, git_branch) =
@@ -1320,10 +1315,7 @@ pub(crate) fn render_doctor_report() -> Result<String, Box<dyn std::error::Error
 pub(crate) fn tools_report_snapshot(
     tool: Option<&str>,
 ) -> Result<ToolsReportSnapshot, Box<dyn std::error::Error>> {
-    let requested = tool
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned);
+    let requested = trimmed_non_empty(tool).map(str::to_owned);
     let rust_tools = mvp_tool_specs();
 
     if let Some(requested) = requested.as_deref() {
@@ -1458,11 +1450,10 @@ pub(crate) fn render_tools_report(
 pub(crate) fn plugin_report_snapshot(
     surface: Option<&str>,
 ) -> Result<PluginReportSnapshot, Box<dyn std::error::Error>> {
-    let requested = surface.map(str::trim).filter(|value| !value.is_empty());
+    let requested = trimmed_non_empty(surface);
 
     if let Some(requested) = requested {
-        let surface = load_plugin_surface_from_cwd(requested)
-            .map_err(|error| io::Error::new(io::ErrorKind::NotFound, error))?;
+        let surface = load_plugin_surface_from_cwd(requested).map_err(not_found_io_error)?;
         return Ok(PluginReportSnapshot {
             selected_surface: Some(surface),
             catalog: None,
@@ -1559,8 +1550,7 @@ pub(crate) fn render_plugin_report(
 pub(crate) fn reload_plugins_report_snapshot(
 ) -> Result<ReloadPluginsReportSnapshot, Box<dyn std::error::Error>> {
     let catalog = load_plugin_catalog_from_cwd()?;
-    let surface = load_plugin_surface_from_cwd("reload-plugins")
-        .map_err(|error| io::Error::new(io::ErrorKind::NotFound, error))?;
+    let surface = load_plugin_surface_from_cwd("reload-plugins").map_err(not_found_io_error)?;
 
     Ok(ReloadPluginsReportSnapshot { catalog, surface })
 }
@@ -1656,8 +1646,7 @@ pub(crate) fn remote_setup_report_snapshot(
 ) -> Result<RemoteSetupReportSnapshot, Box<dyn std::error::Error>> {
     let env_map = env::vars().collect::<BTreeMap<String, String>>();
     let catalog = load_remote_catalog_from_cwd()?;
-    let command = load_remote_command_from_cwd("remote-setup")
-        .map_err(|error| io::Error::new(io::ErrorKind::NotFound, error))?;
+    let command = load_remote_command_from_cwd("remote-setup").map_err(not_found_io_error)?;
     Ok(RemoteSetupReportSnapshot {
         env: remote_env_snapshot_from_env_map(&env_map),
         catalog,
@@ -1854,11 +1843,10 @@ fn canonical_token(value: &str) -> String {
 pub(crate) fn skills_report_snapshot(
     skill: Option<&str>,
 ) -> Result<SkillsReportSnapshot, Box<dyn std::error::Error>> {
-    let requested = skill.map(str::trim).filter(|value| !value.is_empty());
+    let requested = trimmed_non_empty(skill);
 
     if let Some(requested) = requested {
-        let loaded = load_skill(requested, None)
-            .map_err(|error| io::Error::new(io::ErrorKind::NotFound, error))?;
+        let loaded = load_skill(requested, None).map_err(not_found_io_error)?;
         return Ok(SkillsReportSnapshot {
             selected_skill: Some(loaded),
             skills: Vec::new(),
@@ -1949,11 +1937,10 @@ pub(crate) fn render_skills_report(
 pub(crate) fn tasks_report_snapshot(
     task: Option<&str>,
 ) -> Result<TasksReportSnapshot, Box<dyn std::error::Error>> {
-    let requested = task.map(str::trim).filter(|value| !value.is_empty());
+    let requested = trimmed_non_empty(task);
 
     if let Some(requested) = requested {
-        let loaded = load_agent_task(requested)
-            .map_err(|error| io::Error::new(io::ErrorKind::NotFound, error))?;
+        let loaded = load_agent_task(requested).map_err(not_found_io_error)?;
         return Ok(TasksReportSnapshot {
             selected_task: Some(loaded),
             task_counts: None,
@@ -2058,7 +2045,7 @@ pub(crate) fn render_diff_report() -> Result<String, Box<dyn std::error::Error>>
 }
 
 pub(crate) fn render_teleport_report(target: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let cwd = env::current_dir()?;
+    let cwd = crate::current_working_directory()?;
 
     let file_list = Command::new("rg")
         .args(["--files"])
