@@ -430,6 +430,125 @@ impl McpServerManager {
         Ok(discovered_tools)
     }
 
+    pub async fn list_tools_for_server(
+        &mut self,
+        server_name: &str,
+        cursor: Option<String>,
+    ) -> Result<JsonRpcResponse<McpListToolsResult>, McpServerManagerError> {
+        self.ensure_server_ready(server_name).await?;
+        let request_id = self.take_request_id();
+        let response =
+            {
+                let server = self.server_mut(server_name)?;
+                let process = server.process.as_mut().ok_or_else(|| {
+                    McpServerManagerError::InvalidResponse {
+                        server_name: server_name.to_string(),
+                        method: "tools/list",
+                        details: "server process missing after initialization".to_string(),
+                    }
+                })?;
+                process
+                    .list_tools(
+                        request_id,
+                        cursor.map(|cursor| McpListToolsParams {
+                            cursor: Some(cursor),
+                        }),
+                    )
+                    .await?
+            };
+        Ok(response)
+    }
+
+    pub async fn call_named_tool(
+        &mut self,
+        server_name: &str,
+        tool_name: &str,
+        arguments: Option<JsonValue>,
+    ) -> Result<JsonRpcResponse<McpToolCallResult>, McpServerManagerError> {
+        self.ensure_server_ready(server_name).await?;
+        let request_id = self.take_request_id();
+        let response =
+            {
+                let server = self.server_mut(server_name)?;
+                let process = server.process.as_mut().ok_or_else(|| {
+                    McpServerManagerError::InvalidResponse {
+                        server_name: server_name.to_string(),
+                        method: "tools/call",
+                        details: "server process missing after initialization".to_string(),
+                    }
+                })?;
+                process
+                    .call_tool(
+                        request_id,
+                        McpToolCallParams {
+                            name: tool_name.to_string(),
+                            arguments,
+                            meta: None,
+                        },
+                    )
+                    .await?
+            };
+        Ok(response)
+    }
+
+    pub async fn list_resources(
+        &mut self,
+        server_name: &str,
+        cursor: Option<String>,
+    ) -> Result<JsonRpcResponse<McpListResourcesResult>, McpServerManagerError> {
+        self.ensure_server_ready(server_name).await?;
+        let request_id = self.take_request_id();
+        let response =
+            {
+                let server = self.server_mut(server_name)?;
+                let process = server.process.as_mut().ok_or_else(|| {
+                    McpServerManagerError::InvalidResponse {
+                        server_name: server_name.to_string(),
+                        method: "resources/list",
+                        details: "server process missing after initialization".to_string(),
+                    }
+                })?;
+                process
+                    .list_resources(
+                        request_id,
+                        cursor.map(|cursor| McpListResourcesParams {
+                            cursor: Some(cursor),
+                        }),
+                    )
+                    .await?
+            };
+        Ok(response)
+    }
+
+    pub async fn read_resource(
+        &mut self,
+        server_name: &str,
+        uri: &str,
+    ) -> Result<JsonRpcResponse<McpReadResourceResult>, McpServerManagerError> {
+        self.ensure_server_ready(server_name).await?;
+        let request_id = self.take_request_id();
+        let response =
+            {
+                let server = self.server_mut(server_name)?;
+                let process = server.process.as_mut().ok_or_else(|| {
+                    McpServerManagerError::InvalidResponse {
+                        server_name: server_name.to_string(),
+                        method: "resources/read",
+                        details: "server process missing after initialization".to_string(),
+                    }
+                })?;
+                process
+                    .read_resource(
+                        request_id,
+                        McpReadResourceParams {
+                            uri: uri.to_string(),
+                        },
+                    )
+                    .await?
+            };
+        Ok(response)
+    }
+
     pub async fn call_tool(
         &mut self,
         qualified_tool_name: &str,
@@ -443,30 +562,8 @@ impl McpServerManager {
                 qualified_name: qualified_tool_name.to_string(),
             })?;
 
-        self.ensure_server_ready(&route.server_name).await?;
-        let request_id = self.take_request_id();
-        let response =
-            {
-                let server = self.server_mut(&route.server_name)?;
-                let process = server.process.as_mut().ok_or_else(|| {
-                    McpServerManagerError::InvalidResponse {
-                        server_name: route.server_name.clone(),
-                        method: "tools/call",
-                        details: "server process missing after initialization".to_string(),
-                    }
-                })?;
-                process
-                    .call_tool(
-                        request_id,
-                        McpToolCallParams {
-                            name: route.raw_name,
-                            arguments,
-                            meta: None,
-                        },
-                    )
-                    .await?
-            };
-        Ok(response)
+        self.call_named_tool(&route.server_name, &route.raw_name, arguments)
+            .await
     }
 
     pub async fn shutdown(&mut self) -> Result<(), McpServerManagerError> {
@@ -1543,6 +1640,124 @@ mod tests {
                     .and_then(|result| result.structured_content.as_ref())
                     .and_then(|value| value.get("server")),
                 Some(&json!("beta"))
+            );
+
+            manager.shutdown().await.expect("shutdown");
+            cleanup_script(&script_path);
+        });
+    }
+
+    #[test]
+    fn manager_lists_tools_without_full_discovery() {
+        let runtime = Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        runtime.block_on(async {
+            let script_path = write_manager_mcp_server_script();
+            let root = script_path.parent().expect("script parent");
+            let log_path = root.join("alpha.log");
+            let servers = BTreeMap::from([(
+                "alpha".to_string(),
+                manager_server_config(&script_path, "alpha", &log_path),
+            )]);
+            let mut manager = McpServerManager::from_servers(&servers);
+
+            let listed = manager
+                .list_tools_for_server("alpha", None)
+                .await
+                .expect("list tools for server");
+            let result = listed.result.expect("tools result");
+            assert_eq!(result.tools.len(), 1);
+            assert_eq!(result.tools[0].name, "echo");
+
+            manager.shutdown().await.expect("shutdown");
+            cleanup_script(&script_path);
+        });
+    }
+
+    #[test]
+    fn manager_can_call_named_tool_without_discovery() {
+        let runtime = Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        runtime.block_on(async {
+            let script_path = write_manager_mcp_server_script();
+            let root = script_path.parent().expect("script parent");
+            let log_path = root.join("alpha.log");
+            let servers = BTreeMap::from([(
+                "alpha".to_string(),
+                manager_server_config(&script_path, "alpha", &log_path),
+            )]);
+            let mut manager = McpServerManager::from_servers(&servers);
+
+            let response = manager
+                .call_named_tool("alpha", "echo", Some(json!({"text": "named"})))
+                .await
+                .expect("call named tool");
+
+            assert_eq!(
+                response
+                    .result
+                    .as_ref()
+                    .and_then(|result| result.structured_content.as_ref())
+                    .and_then(|value| value.get("server")),
+                Some(&json!("alpha"))
+            );
+            assert_eq!(
+                response
+                    .result
+                    .as_ref()
+                    .and_then(|result| result.structured_content.as_ref())
+                    .and_then(|value| value.get("echoed")),
+                Some(&json!("named"))
+            );
+
+            manager.shutdown().await.expect("shutdown");
+            cleanup_script(&script_path);
+        });
+    }
+
+    #[test]
+    fn manager_lists_and_reads_resources_for_server() {
+        let runtime = Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        runtime.block_on(async {
+            let script_path = write_mcp_server_script();
+            let servers = BTreeMap::from([(
+                "alpha".to_string(),
+                ScopedMcpServerConfig {
+                    scope: ConfigSource::Local,
+                    config: McpServerConfig::Stdio(McpStdioServerConfig {
+                        command: "python3".to_string(),
+                        args: vec![script_path.to_string_lossy().into_owned()],
+                        env: BTreeMap::new(),
+                    }),
+                },
+            )]);
+            let mut manager = McpServerManager::from_servers(&servers);
+
+            let listed = manager
+                .list_resources("alpha", None)
+                .await
+                .expect("list resources");
+            let resources = listed.result.expect("resources result");
+            assert_eq!(resources.resources.len(), 1);
+            assert_eq!(resources.resources[0].uri, "file://guide.txt");
+
+            let read = manager
+                .read_resource("alpha", "file://guide.txt")
+                .await
+                .expect("read resource");
+            let contents = read.result.expect("read result");
+            assert_eq!(contents.contents.len(), 1);
+            assert_eq!(contents.contents[0].uri, "file://guide.txt");
+            assert_eq!(
+                contents.contents[0].text.as_deref(),
+                Some("contents for file://guide.txt")
             );
 
             manager.shutdown().await.expect("shutdown");

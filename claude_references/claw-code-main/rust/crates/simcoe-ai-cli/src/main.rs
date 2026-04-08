@@ -5222,7 +5222,7 @@ mod tests {
                 .as_array()
                 .is_some_and(|profiles| profiles.iter().any(|profile| {
                     profile["name"] == json!("Explore")
-                        && profile["tool_count"] == json!(8)
+                        && profile["tool_count"] == json!(11)
                         && profile["recent_task_count"] == json!(1)
                 })));
         }
@@ -5296,7 +5296,7 @@ mod tests {
             assert!(report.contains("Agent"));
             assert!(report.contains("Name             Explore"));
             assert!(report.contains("Aliases          explore, explorer, exploreagent"));
-            assert!(report.contains("Allowed tools    8"));
+            assert!(report.contains("Allowed tools    11"));
             assert!(report.contains("Running          1"));
             assert!(report.contains("Completed        1"));
             assert!(report.contains("Failed           0"));

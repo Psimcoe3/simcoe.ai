@@ -11,9 +11,10 @@ use api::{
 use reqwest::blocking::Client;
 use runtime::{
     edit_file, execute_bash, glob_search, grep_search, load_system_prompt, read_file, write_file,
-    ApiClient, ApiRequest, AssistantEvent, BashCommandInput, ContentBlock, ConversationMessage,
-    ConversationRuntime, GrepSearchInput, MessageRole, PermissionMode, PermissionPolicy,
-    RuntimeError, Session, TokenUsage, ToolError, ToolExecutor,
+    ApiClient, ApiRequest, AssistantEvent, BashCommandInput, ConfigLoader, ContentBlock,
+    ConversationMessage, ConversationRuntime, GrepSearchInput, McpClientAuth, McpClientTransport,
+    McpServerManager, MessageRole, PermissionMode, PermissionPolicy, RuntimeConfig, RuntimeError,
+    Session, TokenUsage, ToolError, ToolExecutor,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -280,6 +281,65 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
             required_permission: PermissionMode::ReadOnly,
         },
         ToolSpec {
+            name: "ListMcpResourcesTool",
+            description: "List resources exposed by a configured stdio MCP server.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "server": { "type": "string" },
+                    "cursor": { "type": "string" }
+                },
+                "required": ["server"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
+            name: "ReadMcpResourceTool",
+            description: "Read a resource from a configured stdio MCP server.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "server": { "type": "string" },
+                    "uri": { "type": "string" }
+                },
+                "required": ["server", "uri"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
+            name: "MCPTool",
+            description: "List tools from or call a tool on a configured stdio MCP server.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "server": { "type": "string" },
+                    "tool": { "type": "string" },
+                    "arguments": {
+                        "type": "object",
+                        "additionalProperties": true
+                    },
+                    "cursor": { "type": "string" }
+                },
+                "required": ["server"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::DangerFullAccess,
+        },
+        ToolSpec {
+            name: "McpAuthTool",
+            description: "Inspect configured MCP server auth requirements and execution support.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "server": { "type": "string" }
+                },
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
             name: "WebFetch",
             description:
                 "Fetch a URL, convert it into readable text, and answer a prompt about it.",
@@ -506,6 +566,14 @@ pub fn execute_tool(name: &str, input: &Value) -> Result<String, String> {
         "edit_file" => from_value::<EditFileInput>(input).and_then(run_edit_file),
         "glob_search" => from_value::<GlobSearchInputValue>(input).and_then(run_glob_search),
         "grep_search" => from_value::<GrepSearchInput>(input).and_then(run_grep_search),
+        "ListMcpResourcesTool" => {
+            from_value::<ListMcpResourcesInput>(input).and_then(run_list_mcp_resources)
+        }
+        "ReadMcpResourceTool" => {
+            from_value::<ReadMcpResourceInput>(input).and_then(run_read_mcp_resource)
+        }
+        "MCPTool" => from_value::<McpToolInput>(input).and_then(run_mcp_tool),
+        "McpAuthTool" => from_value::<McpAuthInput>(input).and_then(run_mcp_auth),
         "WebFetch" => from_value::<WebFetchInput>(input).and_then(run_web_fetch),
         "WebSearch" => from_value::<WebSearchInput>(input).and_then(run_web_search),
         "TodoWrite" => from_value::<TodoWriteInput>(input).and_then(run_todo_write),
@@ -565,6 +633,22 @@ fn run_glob_search(input: GlobSearchInputValue) -> Result<String, String> {
 #[allow(clippy::needless_pass_by_value)]
 fn run_grep_search(input: GrepSearchInput) -> Result<String, String> {
     to_pretty_json(grep_search(&input).map_err(io_to_string)?)
+}
+
+fn run_list_mcp_resources(input: ListMcpResourcesInput) -> Result<String, String> {
+    to_pretty_json(execute_list_mcp_resources(input)?)
+}
+
+fn run_read_mcp_resource(input: ReadMcpResourceInput) -> Result<String, String> {
+    to_pretty_json(execute_read_mcp_resource(input)?)
+}
+
+fn run_mcp_tool(input: McpToolInput) -> Result<String, String> {
+    to_pretty_json(execute_mcp_tool(input)?)
+}
+
+fn run_mcp_auth(input: McpAuthInput) -> Result<String, String> {
+    to_pretty_json(execute_mcp_auth(input)?)
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -655,6 +739,31 @@ struct EditFileInput {
 struct GlobSearchInputValue {
     pattern: String,
     path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ListMcpResourcesInput {
+    server: String,
+    cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ReadMcpResourceInput {
+    server: String,
+    uri: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct McpToolInput {
+    server: String,
+    tool: Option<String>,
+    arguments: Option<Value>,
+    cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct McpAuthInput {
+    server: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -949,6 +1058,529 @@ enum WebSearchResultItem {
 struct SearchHit {
     title: String,
     url: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ListMcpResourcesOutput {
+    server: String,
+    transport: String,
+    #[serde(rename = "resourceCount")]
+    resource_count: usize,
+    resources: Vec<runtime::McpResource>,
+    #[serde(rename = "nextCursor", skip_serializing_if = "Option::is_none")]
+    next_cursor: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct ReadMcpResourceOutput {
+    server: String,
+    transport: String,
+    uri: String,
+    #[serde(rename = "contentCount")]
+    content_count: usize,
+    contents: Vec<runtime::McpResourceContents>,
+}
+
+#[derive(Debug, Serialize)]
+struct McpToolCatalogOutput {
+    server: String,
+    transport: String,
+    action: String,
+    #[serde(rename = "toolCount")]
+    tool_count: usize,
+    tools: Vec<runtime::McpTool>,
+    #[serde(rename = "nextCursor", skip_serializing_if = "Option::is_none")]
+    next_cursor: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct McpToolCallOutput {
+    server: String,
+    transport: String,
+    action: String,
+    tool: String,
+    #[serde(rename = "qualifiedToolName")]
+    qualified_tool_name: String,
+    content: Vec<runtime::McpToolCallContent>,
+    #[serde(rename = "structuredContent", skip_serializing_if = "Option::is_none")]
+    structured_content: Option<Value>,
+    #[serde(rename = "isError", skip_serializing_if = "Option::is_none")]
+    is_error: Option<bool>,
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    meta: Option<Value>,
+}
+
+#[derive(Debug, Serialize)]
+struct McpAuthOutput {
+    #[serde(rename = "serverCount")]
+    server_count: usize,
+    servers: Vec<McpServerAuthStatus>,
+}
+
+#[derive(Debug, Serialize)]
+struct McpServerAuthStatus {
+    server: String,
+    scope: String,
+    transport: String,
+    #[serde(rename = "authKind")]
+    auth_kind: String,
+    #[serde(rename = "requiresUserAuth")]
+    requires_user_auth: bool,
+    #[serde(rename = "supportedExecution")]
+    supported_execution: bool,
+    #[serde(rename = "interactiveSupported")]
+    interactive_supported: bool,
+    status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<String>,
+    #[serde(rename = "clientId", skip_serializing_if = "Option::is_none")]
+    client_id: Option<String>,
+    #[serde(rename = "callbackPort", skip_serializing_if = "Option::is_none")]
+    callback_port: Option<u16>,
+    #[serde(
+        rename = "authServerMetadataUrl",
+        skip_serializing_if = "Option::is_none"
+    )]
+    auth_server_metadata_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    xaa: Option<bool>,
+}
+
+fn load_runtime_config_for_tools() -> Result<RuntimeConfig, String> {
+    let cwd = std::env::current_dir().map_err(|error| error.to_string())?;
+    ConfigLoader::default_for(cwd)
+        .load()
+        .map_err(|error| error.to_string())
+}
+
+fn configured_mcp_server_names(config: &RuntimeConfig) -> Vec<String> {
+    config.mcp().servers().keys().cloned().collect()
+}
+
+fn resolve_mcp_server_name(config: &RuntimeConfig, requested: &str) -> Result<String, String> {
+    let requested = requested.trim();
+    if requested.is_empty() {
+        return Err(String::from("MCP server name must not be empty"));
+    }
+
+    let exact = config
+        .mcp()
+        .servers()
+        .keys()
+        .filter(|name| name.eq_ignore_ascii_case(requested))
+        .cloned()
+        .collect::<Vec<_>>();
+    if let [matched] = exact.as_slice() {
+        return Ok(matched.clone());
+    }
+    if exact.len() > 1 {
+        return Err(format!(
+            "multiple MCP servers matched `{requested}`; use an exact server name"
+        ));
+    }
+
+    let normalized = runtime::normalize_name_for_mcp(requested);
+    let fuzzy = config
+        .mcp()
+        .servers()
+        .keys()
+        .filter(|name| runtime::normalize_name_for_mcp(name) == normalized)
+        .cloned()
+        .collect::<Vec<_>>();
+    match fuzzy.as_slice() {
+        [matched] => Ok(matched.clone()),
+        [] => {
+            let configured = configured_mcp_server_names(config);
+            if configured.is_empty() {
+                Err(String::from("no MCP servers are configured"))
+            } else {
+                Err(format!(
+                    "unknown MCP server `{requested}`; configured servers: {}",
+                    configured.join(", ")
+                ))
+            }
+        }
+        _ => Err(format!(
+            "multiple MCP servers matched `{requested}`; use an exact server name"
+        )),
+    }
+}
+
+fn require_stdio_mcp_server(config: &RuntimeConfig, requested: &str) -> Result<String, String> {
+    let server_name = resolve_mcp_server_name(config, requested)?;
+    let server_config = config
+        .mcp()
+        .get(&server_name)
+        .ok_or_else(|| format!("unknown MCP server `{server_name}`"))?;
+    if server_config.transport() != runtime::McpTransport::Stdio {
+        return Err(format!(
+            "MCP server `{server_name}` uses {} transport; live MCP tool execution currently supports only stdio servers",
+            mcp_transport_label(server_config)
+        ));
+    }
+    Ok(server_name)
+}
+
+fn mcp_transport_name(transport: runtime::McpTransport) -> &'static str {
+    match transport {
+        runtime::McpTransport::Stdio => "stdio",
+        runtime::McpTransport::Sse => "sse",
+        runtime::McpTransport::Http => "http",
+        runtime::McpTransport::Ws => "ws",
+        runtime::McpTransport::Sdk => "sdk",
+        runtime::McpTransport::SimcoeAiProxy => "simcoeai-proxy",
+    }
+}
+
+fn mcp_transport_label(config: &runtime::ScopedMcpServerConfig) -> &'static str {
+    mcp_transport_name(config.transport())
+}
+
+fn mcp_client_transport_label(transport: &McpClientTransport) -> &'static str {
+    match transport {
+        McpClientTransport::Stdio(_) => "stdio",
+        McpClientTransport::Sse(_) => "sse",
+        McpClientTransport::Http(_) => "http",
+        McpClientTransport::WebSocket(_) => "ws",
+        McpClientTransport::Sdk(_) => "sdk",
+        McpClientTransport::SimcoeAiProxy(_) => "simcoeai-proxy",
+    }
+}
+
+fn config_source_label(source: runtime::ConfigSource) -> &'static str {
+    match source {
+        runtime::ConfigSource::User => "user",
+        runtime::ConfigSource::Project => "project",
+        runtime::ConfigSource::Local => "local",
+    }
+}
+
+fn build_tool_async_runtime() -> Result<tokio::runtime::Runtime, String> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| error.to_string())
+}
+
+fn run_mcp_manager<T>(
+    config: &RuntimeConfig,
+    operation: impl FnOnce(&mut McpServerManager, &tokio::runtime::Runtime) -> Result<T, String>,
+) -> Result<T, String> {
+    let mut manager = McpServerManager::from_runtime_config(config);
+    let async_runtime = build_tool_async_runtime()?;
+    let result = operation(&mut manager, &async_runtime);
+    let shutdown = async_runtime
+        .block_on(async { manager.shutdown().await.map_err(|error| error.to_string()) });
+    match (result, shutdown) {
+        (Ok(value), Ok(())) => Ok(value),
+        (Err(error), Ok(())) | (Err(error), Err(_)) => Err(error),
+        (Ok(_), Err(error)) => Err(error),
+    }
+}
+
+fn run_mcp_jsonrpc_operation<TResult>(
+    config: &RuntimeConfig,
+    server_name: &str,
+    method: &'static str,
+    operation: impl FnOnce(
+        &mut McpServerManager,
+        &tokio::runtime::Runtime,
+    ) -> Result<runtime::JsonRpcResponse<TResult>, String>,
+) -> Result<TResult, String> {
+    let response = run_mcp_manager(config, operation)?;
+    if let Some(error) = response.error {
+        return Err(format!(
+            "MCP server `{server_name}` returned JSON-RPC error for {method}: {} ({})",
+            error.message, error.code
+        ));
+    }
+    response
+        .result
+        .ok_or_else(|| format!("MCP server `{server_name}` returned no result for {method}"))
+}
+
+fn execute_list_mcp_resources(
+    input: ListMcpResourcesInput,
+) -> Result<ListMcpResourcesOutput, String> {
+    let config = load_runtime_config_for_tools()?;
+    let server_name = require_stdio_mcp_server(&config, &input.server)?;
+    let transport = mcp_transport_label(
+        config
+            .mcp()
+            .get(&server_name)
+            .expect("resolved MCP server must exist"),
+    )
+    .to_string();
+    let request_server = server_name.clone();
+    let result = run_mcp_jsonrpc_operation(
+        &config,
+        &server_name,
+        "resources/list",
+        move |manager, async_runtime| {
+            async_runtime.block_on(async {
+                manager
+                    .list_resources(&request_server, input.cursor.clone())
+                    .await
+                    .map_err(|error| error.to_string())
+            })
+        },
+    )?;
+    let resource_count = result.resources.len();
+    Ok(ListMcpResourcesOutput {
+        server: server_name,
+        transport,
+        resource_count,
+        resources: result.resources,
+        next_cursor: result.next_cursor,
+    })
+}
+
+fn execute_read_mcp_resource(input: ReadMcpResourceInput) -> Result<ReadMcpResourceOutput, String> {
+    let config = load_runtime_config_for_tools()?;
+    let server_name = require_stdio_mcp_server(&config, &input.server)?;
+    let transport = mcp_transport_label(
+        config
+            .mcp()
+            .get(&server_name)
+            .expect("resolved MCP server must exist"),
+    )
+    .to_string();
+    let request_server = server_name.clone();
+    let request_uri = input.uri.clone();
+    let result = run_mcp_jsonrpc_operation(
+        &config,
+        &server_name,
+        "resources/read",
+        move |manager, async_runtime| {
+            async_runtime.block_on(async {
+                manager
+                    .read_resource(&request_server, &request_uri)
+                    .await
+                    .map_err(|error| error.to_string())
+            })
+        },
+    )?;
+    let content_count = result.contents.len();
+    Ok(ReadMcpResourceOutput {
+        server: server_name,
+        transport,
+        uri: input.uri,
+        content_count,
+        contents: result.contents,
+    })
+}
+
+fn execute_mcp_tool(input: McpToolInput) -> Result<Value, String> {
+    if input.tool.is_none() && input.arguments.is_some() {
+        return Err(String::from("MCPTool arguments require a tool name"));
+    }
+    if input.tool.is_some() && input.cursor.is_some() {
+        return Err(String::from(
+            "MCPTool cursor is only valid when listing tools",
+        ));
+    }
+
+    let config = load_runtime_config_for_tools()?;
+    let server_name = require_stdio_mcp_server(&config, &input.server)?;
+    let transport = mcp_transport_label(
+        config
+            .mcp()
+            .get(&server_name)
+            .expect("resolved MCP server must exist"),
+    )
+    .to_string();
+
+    match input.tool {
+        Some(tool_name) => {
+            let tool_name = tool_name.trim().to_string();
+            if tool_name.is_empty() {
+                return Err(String::from("MCPTool tool name must not be empty"));
+            }
+            let request_server = server_name.clone();
+            let request_tool = tool_name.clone();
+            let result = run_mcp_jsonrpc_operation(
+                &config,
+                &server_name,
+                "tools/call",
+                move |manager, async_runtime| {
+                    async_runtime.block_on(async {
+                        manager
+                            .call_named_tool(
+                                &request_server,
+                                &request_tool,
+                                input.arguments.clone(),
+                            )
+                            .await
+                            .map_err(|error| error.to_string())
+                    })
+                },
+            )?;
+            serde_json::to_value(McpToolCallOutput {
+                server: server_name.clone(),
+                transport,
+                action: String::from("call_tool"),
+                tool: tool_name.clone(),
+                qualified_tool_name: runtime::mcp_tool_name(&server_name, &tool_name),
+                content: result.content,
+                structured_content: result.structured_content,
+                is_error: result.is_error,
+                meta: result.meta,
+            })
+            .map_err(|error| error.to_string())
+        }
+        None => {
+            let request_server = server_name.clone();
+            let result = run_mcp_jsonrpc_operation(
+                &config,
+                &server_name,
+                "tools/list",
+                move |manager, async_runtime| {
+                    async_runtime.block_on(async {
+                        manager
+                            .list_tools_for_server(&request_server, input.cursor.clone())
+                            .await
+                            .map_err(|error| error.to_string())
+                    })
+                },
+            )?;
+            let tool_count = result.tools.len();
+            serde_json::to_value(McpToolCatalogOutput {
+                server: server_name,
+                transport,
+                action: String::from("list_tools"),
+                tool_count,
+                tools: result.tools,
+                next_cursor: result.next_cursor,
+            })
+            .map_err(|error| error.to_string())
+        }
+    }
+}
+
+fn mcp_auth_details(
+    auth: &McpClientAuth,
+) -> (
+    String,
+    bool,
+    Option<String>,
+    Option<u16>,
+    Option<String>,
+    Option<bool>,
+) {
+    match auth {
+        McpClientAuth::None => (String::from("none"), false, None, None, None, None),
+        McpClientAuth::OAuth(oauth) => (
+            String::from("oauth"),
+            true,
+            oauth.client_id.clone(),
+            oauth.callback_port,
+            oauth.auth_server_metadata_url.clone(),
+            oauth.xaa,
+        ),
+    }
+}
+
+fn execute_mcp_auth(input: McpAuthInput) -> Result<McpAuthOutput, String> {
+    let config = load_runtime_config_for_tools()?;
+    let server_names = match input.server {
+        Some(server) => vec![resolve_mcp_server_name(&config, &server)?],
+        None => configured_mcp_server_names(&config),
+    };
+    let servers = server_names
+        .iter()
+        .map(|server_name| {
+            let server_config = config
+                .mcp()
+                .get(server_name)
+                .expect("resolved MCP server must exist");
+            let transport = McpClientTransport::from_config(&server_config.config);
+            let transport_name = mcp_client_transport_label(&transport).to_string();
+            let scope = config_source_label(server_config.scope).to_string();
+
+            match &transport {
+                McpClientTransport::Stdio(_) => McpServerAuthStatus {
+                    server: server_name.clone(),
+                    scope,
+                    transport: transport_name,
+                    auth_kind: String::from("none"),
+                    requires_user_auth: false,
+                    supported_execution: true,
+                    interactive_supported: false,
+                    status: String::from("ready"),
+                    detail: None,
+                    client_id: None,
+                    callback_port: None,
+                    auth_server_metadata_url: None,
+                    xaa: None,
+                },
+                McpClientTransport::Sse(remote) | McpClientTransport::Http(remote) => {
+                    let (
+                        auth_kind,
+                        requires_user_auth,
+                        client_id,
+                        callback_port,
+                        auth_server_metadata_url,
+                        xaa,
+                    ) = mcp_auth_details(&remote.auth);
+                    let detail = if requires_user_auth {
+                        Some(format!(
+                            "{} transport is not executed by the Rust MCP manager yet, and per-server MCP OAuth login is not implemented",
+                            transport_name
+                        ))
+                    } else {
+                        Some(format!(
+                            "{} transport is not executed by the Rust MCP manager yet",
+                            transport_name
+                        ))
+                    };
+                    McpServerAuthStatus {
+                        server: server_name.clone(),
+                        scope,
+                        transport: transport_name,
+                        auth_kind,
+                        requires_user_auth,
+                        supported_execution: false,
+                        interactive_supported: false,
+                        status: if requires_user_auth {
+                            String::from("user-auth-required")
+                        } else {
+                            String::from("unsupported-transport")
+                        },
+                        detail,
+                        client_id,
+                        callback_port,
+                        auth_server_metadata_url,
+                        xaa,
+                    }
+                }
+                McpClientTransport::WebSocket(_)
+                | McpClientTransport::Sdk(_)
+                | McpClientTransport::SimcoeAiProxy(_) => McpServerAuthStatus {
+                    server: server_name.clone(),
+                    scope,
+                    transport: transport_name.clone(),
+                    auth_kind: String::from("none"),
+                    requires_user_auth: false,
+                    supported_execution: false,
+                    interactive_supported: false,
+                    status: String::from("unsupported-transport"),
+                    detail: Some(format!(
+                        "{} transport is not executed by the Rust MCP manager yet",
+                        transport_name
+                    )),
+                    client_id: None,
+                    callback_port: None,
+                    auth_server_metadata_url: None,
+                    xaa: None,
+                },
+            }
+        })
+        .collect::<Vec<_>>();
+
+    Ok(McpAuthOutput {
+        server_count: servers.len(),
+        servers,
+    })
 }
 
 fn execute_web_fetch(input: &WebFetchInput) -> Result<WebFetchOutput, String> {
@@ -2020,6 +2652,9 @@ fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String> {
             "read_file",
             "glob_search",
             "grep_search",
+            "ListMcpResourcesTool",
+            "ReadMcpResourceTool",
+            "McpAuthTool",
             "WebFetch",
             "WebSearch",
             "ToolSearch",
@@ -2030,6 +2665,9 @@ fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String> {
             "read_file",
             "glob_search",
             "grep_search",
+            "ListMcpResourcesTool",
+            "ReadMcpResourceTool",
+            "McpAuthTool",
             "WebFetch",
             "WebSearch",
             "ToolSearch",
@@ -2043,6 +2681,10 @@ fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String> {
             "read_file",
             "glob_search",
             "grep_search",
+            "ListMcpResourcesTool",
+            "ReadMcpResourceTool",
+            "MCPTool",
+            "McpAuthTool",
             "WebFetch",
             "WebSearch",
             "ToolSearch",
@@ -2078,6 +2720,10 @@ fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String> {
             "edit_file",
             "glob_search",
             "grep_search",
+            "ListMcpResourcesTool",
+            "ReadMcpResourceTool",
+            "MCPTool",
+            "McpAuthTool",
             "WebFetch",
             "WebSearch",
             "TodoWrite",
@@ -3448,6 +4094,121 @@ mod tests {
         original
     }
 
+    fn write_tools_mcp_server_script() -> PathBuf {
+        let root = temp_path("mcp-server-script");
+        fs::create_dir_all(&root).expect("create mcp server root");
+        let script_path = root.join("tools-mcp-server.py");
+        let script = [
+            "#!/usr/bin/env python3",
+            "import json, sys",
+            "",
+            "def read_message():",
+            "    header = b''",
+            r"    while not header.endswith(b'\r\n\r\n'):",
+            "        chunk = sys.stdin.buffer.read(1)",
+            "        if not chunk:",
+            "            return None",
+            "        header += chunk",
+            "    length = 0",
+            r"    for line in header.decode().split('\r\n'):",
+            r"        if line.lower().startswith('content-length:'):",
+            r"            length = int(line.split(':', 1)[1].strip())",
+            "    payload = sys.stdin.buffer.read(length)",
+            "    return json.loads(payload.decode())",
+            "",
+            "def send_message(message):",
+            "    payload = json.dumps(message).encode()",
+            r"    sys.stdout.buffer.write(f'Content-Length: {len(payload)}\r\n\r\n'.encode() + payload)",
+            "    sys.stdout.buffer.flush()",
+            "",
+            "while True:",
+            "    request = read_message()",
+            "    if request is None:",
+            "        break",
+            "    method = request['method']",
+            "    if method == 'initialize':",
+            "        send_message({",
+            "            'jsonrpc': '2.0',",
+            "            'id': request['id'],",
+            "            'result': {",
+            "                'protocolVersion': request['params']['protocolVersion'],",
+            "                'capabilities': {'tools': {}, 'resources': {}},",
+            "                'serverInfo': {'name': 'alpha', 'version': '1.0.0'}",
+            "            }",
+            "        })",
+            "    elif method == 'tools/list':",
+            "        send_message({",
+            "            'jsonrpc': '2.0',",
+            "            'id': request['id'],",
+            "            'result': {",
+            "                'tools': [",
+            "                    {",
+            "                        'name': 'echo',",
+            "                        'description': 'Echoes back the provided text',",
+            "                        'inputSchema': {",
+            "                            'type': 'object',",
+            "                            'properties': {'text': {'type': 'string'}},",
+            "                            'required': ['text']",
+            "                        }",
+            "                    }",
+            "                ]",
+            "            }",
+            "        })",
+            "    elif method == 'tools/call':",
+            "        args = request['params'].get('arguments') or {}",
+            "        text = args.get('text', '')",
+            "        send_message({",
+            "            'jsonrpc': '2.0',",
+            "            'id': request['id'],",
+            "            'result': {",
+            "                'content': [{'type': 'text', 'text': f'echo:{text}'}],",
+            "                'structuredContent': {'echoed': text, 'server': 'alpha'},",
+            "                'isError': False",
+            "            }",
+            "        })",
+            "    elif method == 'resources/list':",
+            "        send_message({",
+            "            'jsonrpc': '2.0',",
+            "            'id': request['id'],",
+            "            'result': {",
+            "                'resources': [",
+            "                    {",
+            "                        'uri': 'file://guide.txt',",
+            "                        'name': 'guide',",
+            "                        'description': 'Guide file',",
+            "                        'mimeType': 'text/plain'",
+            "                    }",
+            "                ]",
+            "            }",
+            "        })",
+            "    elif method == 'resources/read':",
+            "        uri = request['params']['uri']",
+            "        send_message({",
+            "            'jsonrpc': '2.0',",
+            "            'id': request['id'],",
+            "            'result': {",
+            "                'contents': [",
+            "                    {",
+            "                        'uri': uri,",
+            "                        'mimeType': 'text/plain',",
+            "                        'text': f'contents for {uri}'",
+            "                    }",
+            "                ]",
+            "            }",
+            "        })",
+            "    else:",
+            "        send_message({",
+            "            'jsonrpc': '2.0',",
+            "            'id': request['id'],",
+            "            'error': {'code': -32601, 'message': f'unknown method: {method}'},",
+            "        })",
+            "",
+        ]
+        .join("\n");
+        fs::write(&script_path, script).expect("write mcp server script");
+        script_path
+    }
+
     #[test]
     fn exposes_mvp_tools() {
         let names = mvp_tool_specs()
@@ -3458,6 +4219,10 @@ mod tests {
         assert!(names.contains(&"read_file"));
         assert!(names.contains(&"WebFetch"));
         assert!(names.contains(&"WebSearch"));
+        assert!(names.contains(&"ListMcpResourcesTool"));
+        assert!(names.contains(&"ReadMcpResourceTool"));
+        assert!(names.contains(&"MCPTool"));
+        assert!(names.contains(&"McpAuthTool"));
         assert!(names.contains(&"TodoWrite"));
         assert!(names.contains(&"Skill"));
         assert!(names.contains(&"Agent"));
@@ -3475,6 +4240,146 @@ mod tests {
     fn rejects_unknown_tool_names() {
         let error = execute_tool("nope", &json!({})).expect_err("tool should be rejected");
         assert!(error.contains("unsupported tool"));
+    }
+
+    #[test]
+    fn mcp_tool_family_operates_on_configured_servers() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cwd = temp_path("mcp-tools-cwd");
+        let config_home = temp_path("mcp-tools-home");
+        let script_path = write_tools_mcp_server_script();
+        fs::create_dir_all(&cwd).expect("create cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+        fs::write(
+            cwd.join(".simcoe.json"),
+            serde_json::to_string_pretty(&json!({
+                "mcpServers": {
+                    "alpha": {
+                        "type": "stdio",
+                        "command": "python3",
+                        "args": [script_path.to_string_lossy().into_owned()]
+                    },
+                    "remote": {
+                        "type": "http",
+                        "url": "https://vendor.example/mcp",
+                        "oauth": {
+                            "clientId": "client-id",
+                            "callbackPort": 7777,
+                            "authServerMetadataUrl": "https://issuer.example/.well-known/oauth-authorization-server",
+                            "xaa": true
+                        }
+                    }
+                }
+            }))
+            .expect("serialize settings"),
+        )
+        .expect("write project settings");
+
+        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
+        let original_cwd = set_test_cwd(&cwd);
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+
+        let listed_resources = execute_tool(
+            "ListMcpResourcesTool",
+            &json!({
+                "server": "alpha"
+            }),
+        )
+        .expect("list MCP resources");
+        let listed_resources: serde_json::Value =
+            serde_json::from_str(&listed_resources).expect("valid resource list json");
+        assert_eq!(listed_resources["server"], json!("alpha"));
+        assert_eq!(listed_resources["transport"], json!("stdio"));
+        assert_eq!(listed_resources["resourceCount"], json!(1));
+        assert_eq!(
+            listed_resources["resources"][0]["uri"],
+            json!("file://guide.txt")
+        );
+
+        let read_resource = execute_tool(
+            "ReadMcpResourceTool",
+            &json!({
+                "server": "alpha",
+                "uri": "file://guide.txt"
+            }),
+        )
+        .expect("read MCP resource");
+        let read_resource: serde_json::Value =
+            serde_json::from_str(&read_resource).expect("valid resource read json");
+        assert_eq!(read_resource["contentCount"], json!(1));
+        assert_eq!(
+            read_resource["contents"][0]["text"],
+            json!("contents for file://guide.txt")
+        );
+
+        let listed_tools = execute_tool(
+            "MCPTool",
+            &json!({
+                "server": "alpha"
+            }),
+        )
+        .expect("list MCP tools");
+        let listed_tools: serde_json::Value =
+            serde_json::from_str(&listed_tools).expect("valid MCP tool list json");
+        assert_eq!(listed_tools["action"], json!("list_tools"));
+        assert_eq!(listed_tools["toolCount"], json!(1));
+        assert_eq!(listed_tools["tools"][0]["name"], json!("echo"));
+
+        let called_tool = execute_tool(
+            "MCPTool",
+            &json!({
+                "server": "alpha",
+                "tool": "echo",
+                "arguments": {
+                    "text": "hello"
+                }
+            }),
+        )
+        .expect("call MCP tool");
+        let called_tool: serde_json::Value =
+            serde_json::from_str(&called_tool).expect("valid MCP tool call json");
+        assert_eq!(called_tool["action"], json!("call_tool"));
+        assert_eq!(called_tool["tool"], json!("echo"));
+        assert_eq!(called_tool["qualifiedToolName"], json!("mcp__alpha__echo"));
+        assert_eq!(called_tool["structuredContent"]["server"], json!("alpha"));
+        assert_eq!(called_tool["structuredContent"]["echoed"], json!("hello"));
+
+        let auth = execute_tool("McpAuthTool", &json!({})).expect("inspect MCP auth");
+        let auth: serde_json::Value = serde_json::from_str(&auth).expect("valid MCP auth json");
+        assert_eq!(auth["serverCount"], json!(2));
+        let servers = auth["servers"].as_array().expect("auth server list");
+        assert!(servers.iter().any(|server| {
+            server["server"] == json!("alpha")
+                && server["status"] == json!("ready")
+                && server["supportedExecution"] == json!(true)
+        }));
+        assert!(servers.iter().any(|server| {
+            server["server"] == json!("remote")
+                && server["status"] == json!("user-auth-required")
+                && server["supportedExecution"] == json!(false)
+                && server["authKind"] == json!("oauth")
+        }));
+
+        let unsupported = execute_tool(
+            "MCPTool",
+            &json!({
+                "server": "remote",
+                "tool": "echo"
+            }),
+        )
+        .expect_err("remote transport should be rejected honestly");
+        assert!(unsupported.contains("supports only stdio servers"));
+
+        match original_config_home {
+            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
+            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(&cwd);
+        let _ = fs::remove_dir_all(&config_home);
+        let _ = fs::remove_dir_all(script_path.parent().expect("script parent"));
     }
 
     #[test]
@@ -4225,21 +5130,25 @@ mod tests {
         let general = allowed_tools_for_subagent("general-purpose");
         assert!(general.contains("bash"));
         assert!(general.contains("write_file"));
+        assert!(general.contains("MCPTool"));
         assert!(!general.contains("Agent"));
 
         let explore = allowed_tools_for_subagent("Explore");
         assert!(explore.contains("read_file"));
         assert!(explore.contains("grep_search"));
+        assert!(explore.contains("ListMcpResourcesTool"));
         assert!(!explore.contains("bash"));
 
         let plan = allowed_tools_for_subagent("Plan");
         assert!(plan.contains("TodoWrite"));
         assert!(plan.contains("StructuredOutput"));
+        assert!(plan.contains("McpAuthTool"));
         assert!(!plan.contains("Agent"));
 
         let verification = allowed_tools_for_subagent("Verification");
         assert!(verification.contains("bash"));
         assert!(verification.contains("PowerShell"));
+        assert!(verification.contains("MCPTool"));
         assert!(!verification.contains("write_file"));
     }
 
