@@ -689,6 +689,8 @@ fn mcp_server_payload(server: &McpServerSnapshot) -> serde_json::Value {
         "normalized_name": server.normalized_name.as_str(),
         "tool_prefix": server.tool_prefix.as_str(),
         "signature": server.signature.as_deref(),
+        "supported_execution": server.supported_execution,
+        "execution_detail": server.execution_detail.as_deref(),
         "details": mcp_transport_payload(&server.detail),
     })
 }
@@ -710,6 +712,22 @@ fn mcp_payload(server: Option<String>) -> Result<serde_json::Value, Box<dyn std:
         .collect::<Vec<_>>();
 
     payload.insert("configured_server_count".to_string(), json!(entries.len()));
+    payload.insert(
+        "supported_execution_count".to_string(),
+        json!(snapshot
+            .servers
+            .iter()
+            .filter(|server| server.supported_execution)
+            .count()),
+    );
+    payload.insert(
+        "unsupported_execution_count".to_string(),
+        json!(snapshot
+            .servers
+            .iter()
+            .filter(|server| !server.supported_execution)
+            .count()),
+    );
     payload.insert("servers".to_string(), json!(entries));
     Ok(serde_json::Value::Object(payload))
 }
@@ -5989,6 +6007,11 @@ mod tests {
                                 "remote-server": {
                                     "type": "http",
                                     "url": "https://example.test/mcp"
+                                },
+                                "proxy-server": {
+                                    "type": "simcoeai-proxy",
+                                    "url": "https://api.anthropic.com/v2/ccr-sessions/1?mcp_url=wss%3A%2F%2Fvendor.example%2Fmcp",
+                                    "id": "proxy-123"
                                 }
                             }
                         }"#,
@@ -6001,9 +6024,12 @@ mod tests {
 
             let report = render_mcp_report(None).expect("mcp report should render");
             assert!(report.contains("MCP"));
-            assert!(report.contains("Configured servers 2"));
+            assert!(report.contains("Configured servers 3"));
+            assert!(report.contains("Executable now    2"));
+            assert!(report.contains("Blocked now       1"));
             assert!(report.contains("stdio-server"));
             assert!(report.contains("remote-server"));
+            assert!(report.contains("proxy-server"));
             assert!(report.contains("https://example.test/mcp"));
 
             let payload = super::mcp_payload(None).expect("mcp payload should render");
@@ -6011,17 +6037,29 @@ mod tests {
                 .as_array()
                 .expect("servers should be an array");
             assert_eq!(payload["type"], json!("mcp"));
-            assert_eq!(payload["configured_server_count"], json!(2));
-            assert_eq!(servers.len(), 2);
+            assert_eq!(payload["configured_server_count"], json!(3));
+            assert_eq!(payload["supported_execution_count"], json!(2));
+            assert_eq!(payload["unsupported_execution_count"], json!(1));
+            assert_eq!(servers.len(), 3);
             assert!(servers.iter().any(|server| {
                 server["name"] == json!("stdio-server")
                     && server["transport"] == json!("stdio")
+                    && server["supported_execution"] == json!(true)
                     && server["details"]["command"] == json!("uvx")
             }));
             assert!(servers.iter().any(|server| {
                 server["name"] == json!("remote-server")
                     && server["transport"] == json!("http")
+                    && server["supported_execution"] == json!(true)
                     && server["target"] == json!("https://example.test/mcp")
+            }));
+            assert!(servers.iter().any(|server| {
+                server["name"] == json!("proxy-server")
+                    && server["transport"] == json!("simcoe-ai-proxy")
+                    && server["supported_execution"] == json!(false)
+                    && server["execution_detail"].as_str().is_some_and(|detail| {
+                        detail.contains("proxy `proxy-123` targets `wss://vendor.example/mcp`")
+                    })
             }));
         }
 
@@ -6066,6 +6104,10 @@ mod tests {
             assert!(report.contains("MCP server"));
             assert!(report.contains("Name              remote-server"));
             assert!(report.contains("Transport         http"));
+            assert!(report.contains("Executable        no"));
+            assert!(report.contains(
+                "http transport with headersHelper is not executed by the Rust MCP runtime yet"
+            ));
             assert!(report.contains("Target            https://example.test/mcp"));
             assert!(report.contains("Auth              oauth"));
             assert!(report.contains("Headers           1"));
@@ -6076,6 +6118,13 @@ mod tests {
             assert_eq!(payload["type"], json!("mcp"));
             assert_eq!(payload["server"]["name"], json!("remote-server"));
             assert_eq!(payload["server"]["transport"], json!("http"));
+            assert_eq!(payload["server"]["supported_execution"], json!(false));
+            assert_eq!(
+                payload["server"]["execution_detail"],
+                json!(
+                    "http transport with headersHelper is not executed by the Rust MCP runtime yet"
+                )
+            );
             assert_eq!(
                 payload["server"]["details"]["target"],
                 json!("https://example.test/mcp")
@@ -6086,6 +6135,58 @@ mod tests {
                 payload["server"]["details"]["headers_helper"],
                 json!("helper.sh")
             );
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn mcp_report_renders_proxy_execution_blocker_details() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("mcp-proxy-selected");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+        fs::write(
+            config_home.join("settings.json"),
+            r#"{
+                            "mcpServers": {
+                                "proxy-server": {
+                                    "type": "simcoeai-proxy",
+                                    "url": "https://api.anthropic.com/v2/ccr-sessions/1?mcp_url=wss%3A%2F%2Fvendor.example%2Fmcp",
+                                    "id": "proxy-123"
+                                }
+                            }
+                        }"#,
+        )
+        .expect("write settings");
+
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report = render_mcp_report(Some("proxy-server"))
+                .expect("selected proxy mcp report should render");
+            assert!(report.contains("Transport         simcoe-ai-proxy"));
+            assert!(report.contains("Executable        no"));
+            assert!(report.contains("Proxy id          proxy-123"));
+            assert!(report.contains("proxy `proxy-123` targets `wss://vendor.example/mcp`"));
+            assert!(report.contains("SessionsWebSocket.ts"));
+
+            let payload = super::mcp_payload(Some("proxy-server".to_string()))
+                .expect("selected proxy mcp payload should render");
+            assert_eq!(payload["server"]["transport"], json!("simcoe-ai-proxy"));
+            assert_eq!(payload["server"]["supported_execution"], json!(false));
+            assert_eq!(payload["server"]["details"]["proxy_id"], json!("proxy-123"));
+            assert!(payload["server"]["execution_detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("sdkMessageAdapter.ts")));
         }
 
         let _ = fs::remove_dir_all(repo_root);

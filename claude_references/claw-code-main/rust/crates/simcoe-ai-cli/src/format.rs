@@ -14,10 +14,10 @@ use compat_harness::{
     RemoteCatalog, RemoteCommandSummary, ToolCatalog,
 };
 use runtime::{
-    credentials_path, inherited_upstream_proxy_env, load_oauth_credentials, ConfigSource,
-    ContentBlock, McpClientAuth, McpClientBootstrap, McpClientTransport, McpTransport,
-    ProjectContext, RemoteSessionContext, ResolvedPermissionMode, Session, TokenUsage,
-    UpstreamProxyBootstrap,
+    credentials_path, inherited_upstream_proxy_env, load_oauth_credentials, unwrap_ccr_proxy_url,
+    ConfigSource, ContentBlock, McpClientAuth, McpClientBootstrap, McpClientTransport,
+    McpTransport, ProjectContext, RemoteSessionContext, ResolvedPermissionMode, Session,
+    TokenUsage, UpstreamProxyBootstrap,
 };
 use tools::{
     list_agent_profiles, list_agent_tasks, list_skills, load_agent_profile, load_agent_task,
@@ -162,6 +162,8 @@ pub(crate) struct McpServerSnapshot {
     pub(crate) normalized_name: String,
     pub(crate) tool_prefix: String,
     pub(crate) signature: Option<String>,
+    pub(crate) supported_execution: bool,
+    pub(crate) execution_detail: Option<String>,
     pub(crate) detail: McpServerDetailSnapshot,
 }
 
@@ -839,20 +841,29 @@ pub(crate) fn render_mcp_report_from_snapshot(snapshot: &McpReportSnapshot) -> S
         .iter()
         .map(|server| {
             format!(
-                "  {name:<name_width$}{scope:<8}{transport:<14}{target}",
+                "  {name:<name_width$}{scope:<8}{transport:<14}{executable:<6}{target}",
                 name = server.name,
                 name_width = name_width,
                 scope = server.scope,
                 transport = server.transport,
+                executable = yes_no(server.supported_execution),
                 target = server.target,
             )
         })
         .collect::<Vec<_>>()
         .join("\n");
 
+    let supported_count = snapshot
+        .servers
+        .iter()
+        .filter(|server| server.supported_execution)
+        .count();
+
     format!(
-        "MCP\n  Configured servers {}\n  Usage             /mcp <server>\n\nServers\n{}",
+        "MCP\n  Configured servers {}\n  Executable now    {}\n  Blocked now       {}\n  Usage             /mcp <server>\n\nServers\n{}",
         snapshot.servers.len(),
+        supported_count,
+        snapshot.servers.len().saturating_sub(supported_count),
         entries,
     )
 }
@@ -2225,11 +2236,57 @@ fn transport_target_summary(transport: &McpClientTransport) -> String {
     }
 }
 
+fn remote_runtime_execution_support(
+    transport: &str,
+    headers_helper: Option<&str>,
+) -> (bool, Option<String>) {
+    match headers_helper {
+        Some(_) => (
+            false,
+            Some(format!(
+                "{transport} transport with headersHelper is not executed by the Rust MCP runtime yet"
+            )),
+        ),
+        None => (true, None),
+    }
+}
+
+fn runtime_execution_support(transport: &McpClientTransport) -> (bool, Option<String>) {
+    match transport {
+        McpClientTransport::Stdio(_) => (true, None),
+        McpClientTransport::Sse(config) => {
+            remote_runtime_execution_support("sse", config.headers_helper.as_deref())
+        }
+        McpClientTransport::Http(config) => {
+            remote_runtime_execution_support("http", config.headers_helper.as_deref())
+        }
+        McpClientTransport::WebSocket(config) => {
+            remote_runtime_execution_support("ws", config.headers_helper.as_deref())
+        }
+        McpClientTransport::Sdk(config) => (
+            false,
+            Some(format!(
+                "sdk transport is not executed by the Rust MCP runtime yet; SDK server `{}` needs the upstream SDK adapter path, which is not present in the Rust port",
+                config.name
+            )),
+        ),
+        McpClientTransport::SimcoeAiProxy(config) => (
+            false,
+            Some(format!(
+                "simcoe-ai-proxy transport is not executed by the Rust MCP runtime yet; proxy `{}` targets `{}`, but the upstream proxy websocket/session adapter path (`remote/SessionsWebSocket.ts` / `remote/sdkMessageAdapter.ts`) is not ported in Rust",
+                config.id,
+                unwrap_ccr_proxy_url(&config.url)
+            )),
+        ),
+    }
+}
+
 fn mcp_server_snapshot(
     name: &str,
     scope: ConfigSource,
     bootstrap: &McpClientBootstrap,
 ) -> McpServerSnapshot {
+    let (supported_execution, execution_detail) = runtime_execution_support(&bootstrap.transport);
     let detail = match &bootstrap.transport {
         McpClientTransport::Stdio(config) => McpServerDetailSnapshot::Stdio {
             command: config.command.clone(),
@@ -2261,6 +2318,8 @@ fn mcp_server_snapshot(
         normalized_name: bootstrap.normalized_name.clone(),
         tool_prefix: bootstrap.tool_prefix.clone(),
         signature: bootstrap.signature.clone(),
+        supported_execution,
+        execution_detail,
         detail,
     }
 }
@@ -2275,6 +2334,13 @@ fn render_mcp_server_detail(server: &McpServerSnapshot) -> String {
         tool_prefix = server.tool_prefix,
         signature = server.signature.as_deref().unwrap_or("<none>"),
     )];
+
+    lines.push(String::from(""));
+    lines.push(format!(
+        "Runtime\n  Executable        {}\n  Detail            {}",
+        yes_no(server.supported_execution),
+        server.execution_detail.as_deref().unwrap_or("<none>"),
+    ));
 
     match &server.detail {
         McpServerDetailSnapshot::Stdio {
