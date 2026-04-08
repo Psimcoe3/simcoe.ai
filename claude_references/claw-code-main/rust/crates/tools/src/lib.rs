@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -14,13 +15,15 @@ use runtime::{
     load_mcp_oauth_credentials, load_system_prompt, read_file, save_mcp_oauth_credentials,
     write_file, ApiClient, ApiRequest, AssistantEvent, BashCommandInput, ConfigLoader,
     ContentBlock, ConversationMessage, ConversationRuntime, GrepSearchInput, McpClientAuth,
-    McpClientTransport, McpRemoteServerConfig, McpServerConfig, McpServerManager, MessageRole,
-    OAuthRefreshRequest, OAuthTokenSet, PermissionMode, PermissionPolicy, RuntimeConfig,
-    RuntimeError, Session, TokenUsage, ToolError, ToolExecutor,
+    McpClientTransport, McpRemoteServerConfig, McpServerConfig, McpServerManager,
+    McpWebSocketServerConfig, MessageRole, OAuthRefreshRequest, OAuthTokenSet, PermissionMode,
+    PermissionPolicy, RuntimeConfig, RuntimeError, Session, TokenUsage, ToolError, ToolExecutor,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
 use serde_yaml::{Mapping as YamlMapping, Value as YamlValue};
+use tungstenite::client::IntoClientRequest;
+use tungstenite::{connect as connect_websocket, Message as WebSocketMessage};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolManifestEntry {
@@ -1247,6 +1250,98 @@ struct OAuthServerMetadata {
     token_endpoint: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SseFrame {
+    event: Option<String>,
+    data: String,
+}
+
+#[derive(Debug, Default)]
+struct SseFrameParser {
+    buffer: Vec<u8>,
+}
+
+impl SseFrameParser {
+    fn push(&mut self, chunk: &[u8]) -> Result<Vec<SseFrame>, String> {
+        self.buffer.extend_from_slice(chunk);
+        let mut frames = Vec::new();
+        while let Some(frame) = self.next_frame() {
+            if let Some(frame) = parse_sse_frame(&frame)? {
+                frames.push(frame);
+            }
+        }
+        Ok(frames)
+    }
+
+    fn finish(&mut self) -> Result<Vec<SseFrame>, String> {
+        if self.buffer.is_empty() {
+            return Ok(Vec::new());
+        }
+        let trailing = std::mem::take(&mut self.buffer);
+        match parse_sse_frame(&String::from_utf8_lossy(&trailing))? {
+            Some(frame) => Ok(vec![frame]),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    fn next_frame(&mut self) -> Option<String> {
+        let separator = self
+            .buffer
+            .windows(2)
+            .position(|window| window == b"\n\n")
+            .map(|position| (position, 2))
+            .or_else(|| {
+                self.buffer
+                    .windows(4)
+                    .position(|window| window == b"\r\n\r\n")
+                    .map(|position| (position, 4))
+            })?;
+
+        let (position, separator_len) = separator;
+        let frame = self
+            .buffer
+            .drain(..position + separator_len)
+            .collect::<Vec<_>>();
+        let frame_len = frame.len().saturating_sub(separator_len);
+        Some(String::from_utf8_lossy(&frame[..frame_len]).into_owned())
+    }
+}
+
+fn parse_sse_frame(frame: &str) -> Result<Option<SseFrame>, String> {
+    let trimmed = frame.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let mut event_name = None;
+    let mut data_lines = Vec::new();
+    for line in trimmed.lines() {
+        if line.starts_with(':') {
+            continue;
+        }
+        if let Some(name) = line.strip_prefix("event:") {
+            event_name = Some(name.trim().to_string());
+            continue;
+        }
+        if let Some(data) = line.strip_prefix("data:") {
+            data_lines.push(data.trim_start().to_string());
+        }
+    }
+
+    if data_lines.is_empty() {
+        return Ok(None);
+    }
+    let data = data_lines.join("\n");
+    if data == "[DONE]" {
+        return Ok(None);
+    }
+
+    Ok(Some(SseFrame {
+        event: event_name,
+        data,
+    }))
+}
+
 fn current_unix_timestamp() -> Option<u64> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1290,17 +1385,24 @@ fn unsupported_live_mcp_execution_reason(
                 "http transport with headersHelper is not executed by the Rust MCP runtime yet",
             )
         }),
-        McpServerConfig::Sse(_) => Some(String::from(
-            "sse transport is not executed by the Rust MCP runtime yet",
+        McpServerConfig::Sse(remote) => remote.headers_helper.as_ref().map(|_| {
+            String::from(
+                "sse transport with headersHelper is not executed by the Rust MCP runtime yet",
+            )
+        }),
+        McpServerConfig::Ws(remote) => remote.headers_helper.as_ref().map(|_| {
+            String::from(
+                "ws transport with headersHelper is not executed by the Rust MCP runtime yet",
+            )
+        }),
+        McpServerConfig::Sdk(sdk) => Some(format!(
+            "sdk transport is not executed by the Rust MCP runtime yet; SDK server `{}` needs the upstream SDK adapter path, which is not present in the Rust port",
+            sdk.name
         )),
-        McpServerConfig::Ws(_) => Some(String::from(
-            "ws transport is not executed by the Rust MCP runtime yet",
-        )),
-        McpServerConfig::Sdk(_) => Some(String::from(
-            "sdk transport is not executed by the Rust MCP runtime yet",
-        )),
-        McpServerConfig::SimcoeAiProxy(_) => Some(String::from(
-            "simcoeai-proxy transport is not executed by the Rust MCP runtime yet",
+        McpServerConfig::SimcoeAiProxy(proxy) => Some(format!(
+            "simcoeai-proxy transport is not executed by the Rust MCP runtime yet; proxy `{}` targets `{}`, but the upstream proxy websocket/session adapter path (`remote/SessionsWebSocket.ts` / `remote/sdkMessageAdapter.ts`) is not ported in Rust",
+            proxy.id,
+            runtime::unwrap_ccr_proxy_url(&proxy.url)
         )),
     }
 }
@@ -1417,6 +1519,235 @@ fn trim_remote_mcp_response_body(body: &str) -> String {
     let mut snippet = trimmed.chars().take(240).collect::<String>();
     snippet.push_str("...");
     snippet
+}
+
+fn apply_remote_mcp_request_headers(
+    mut request: reqwest::blocking::RequestBuilder,
+    headers: &BTreeMap<String, String>,
+    bearer_token: Option<&str>,
+    accept: &str,
+) -> reqwest::blocking::RequestBuilder {
+    request = request.header(reqwest::header::ACCEPT, accept);
+    for (name, value) in headers {
+        request = request.header(name, value);
+    }
+    if let Some(token) = bearer_token {
+        request = request.bearer_auth(token);
+    }
+    request
+}
+
+fn response_is_sse(response: &reqwest::blocking::Response) -> bool {
+    response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.to_ascii_lowercase().starts_with("text/event-stream"))
+}
+
+fn extract_matching_jsonrpc_response_from_value<TResult: DeserializeOwned>(
+    server_name: &str,
+    method: &'static str,
+    value: Value,
+    expected_id: &runtime::JsonRpcId,
+) -> Result<Option<runtime::JsonRpcResponse<TResult>>, String> {
+    match value {
+        Value::Array(items) => {
+            for item in items {
+                if let Some(response) = extract_matching_jsonrpc_response_from_value(
+                    server_name,
+                    method,
+                    item,
+                    expected_id,
+                )? {
+                    return Ok(Some(response));
+                }
+            }
+            Ok(None)
+        }
+        Value::Object(object) => {
+            let is_response = object.contains_key("result") || object.contains_key("error");
+            if !is_response {
+                return Ok(None);
+            }
+            let Some(id_value) = object.get("id") else {
+                return Ok(None);
+            };
+            let parsed_id = serde_json::from_value::<runtime::JsonRpcId>(id_value.clone())
+                .map_err(|error| {
+                    format!(
+                        "invalid JSON-RPC id from MCP server `{server_name}` for {method}: {error}"
+                    )
+                })?;
+            if parsed_id != *expected_id {
+                return Ok(None);
+            }
+            serde_json::from_value::<runtime::JsonRpcResponse<TResult>>(Value::Object(object))
+                .map(Some)
+                .map_err(|error| {
+                    format!(
+                        "invalid JSON-RPC response from MCP server `{server_name}` for {method}: {error}"
+                    )
+                })
+        }
+        _ => Ok(None),
+    }
+}
+
+fn resolve_remote_jsonrpc_response<TResult>(
+    server_name: &str,
+    method: &'static str,
+    response: runtime::JsonRpcResponse<TResult>,
+) -> Result<TResult, String> {
+    if let Some(error) = response.error {
+        return Err(format!(
+            "MCP server `{server_name}` returned JSON-RPC error for {method}: {} ({})",
+            error.message, error.code
+        ));
+    }
+    response
+        .result
+        .ok_or_else(|| format!("MCP server `{server_name}` returned no result for {method}"))
+}
+
+fn parse_http_jsonrpc_response_body<TResult: DeserializeOwned>(
+    server_name: &str,
+    method: &'static str,
+    body: &str,
+    expected_id: &runtime::JsonRpcId,
+) -> Result<TResult, String> {
+    let value: Value = serde_json::from_str(body).map_err(|error| {
+        format!("invalid JSON-RPC response from MCP server `{server_name}` for {method}: {error}")
+    })?;
+    let response =
+        extract_matching_jsonrpc_response_from_value(server_name, method, value, expected_id)?
+            .ok_or_else(|| {
+                format!(
+            "MCP server `{server_name}` returned no matching JSON-RPC response for {method}"
+        )
+            })?;
+    resolve_remote_jsonrpc_response(server_name, method, response)
+}
+
+fn resolve_sse_endpoint_url(base_url: &str, endpoint: &str) -> Result<String, String> {
+    let trimmed = endpoint.trim();
+    let base_url = reqwest::Url::parse(base_url).map_err(|error| error.to_string())?;
+    if let Ok(absolute) = reqwest::Url::parse(trimmed) {
+        return Ok(absolute.to_string());
+    }
+    base_url
+        .join(trimmed)
+        .map(|url| url.to_string())
+        .map_err(|error| error.to_string())
+}
+
+fn maybe_extract_jsonrpc_response_from_sse_frame<TResult: DeserializeOwned>(
+    server_name: &str,
+    method: &'static str,
+    frame: SseFrame,
+    expected_id: &runtime::JsonRpcId,
+) -> Result<Option<TResult>, String> {
+    let Ok(value) = serde_json::from_str::<Value>(&frame.data) else {
+        return Ok(None);
+    };
+    let Some(response) =
+        extract_matching_jsonrpc_response_from_value(server_name, method, value, expected_id)?
+    else {
+        return Ok(None);
+    };
+    resolve_remote_jsonrpc_response(server_name, method, response).map(Some)
+}
+
+fn maybe_extract_jsonrpc_response_from_websocket_payload<TResult: DeserializeOwned>(
+    server_name: &str,
+    method: &'static str,
+    payload: &str,
+    expected_id: &runtime::JsonRpcId,
+) -> Result<Option<TResult>, String> {
+    let Ok(value) = serde_json::from_str::<Value>(payload) else {
+        return Ok(None);
+    };
+    let Some(response) =
+        extract_matching_jsonrpc_response_from_value(server_name, method, value, expected_id)?
+    else {
+        return Ok(None);
+    };
+    resolve_remote_jsonrpc_response(server_name, method, response).map(Some)
+}
+
+fn read_matching_jsonrpc_response_from_sse_stream<TResult: DeserializeOwned>(
+    server_name: &str,
+    method: &'static str,
+    expected_id: &runtime::JsonRpcId,
+    mut response: reqwest::blocking::Response,
+) -> Result<TResult, String> {
+    let mut parser = SseFrameParser::default();
+    let mut buffer = [0_u8; 4096];
+
+    loop {
+        let read = response.read(&mut buffer).map_err(|error| {
+            format!(
+                "failed to read SSE response from MCP server `{server_name}` for {method}: {error}"
+            )
+        })?;
+        if read == 0 {
+            break;
+        }
+        for frame in parser.push(&buffer[..read])? {
+            if let Some(result) = maybe_extract_jsonrpc_response_from_sse_frame(
+                server_name,
+                method,
+                frame,
+                expected_id,
+            )? {
+                return Ok(result);
+            }
+        }
+    }
+
+    for frame in parser.finish()? {
+        if let Some(result) =
+            maybe_extract_jsonrpc_response_from_sse_frame(server_name, method, frame, expected_id)?
+        {
+            return Ok(result);
+        }
+    }
+
+    Err(format!(
+        "MCP server `{server_name}` returned no matching JSON-RPC response for {method} on SSE stream"
+    ))
+}
+
+fn read_legacy_sse_endpoint(
+    server_name: &str,
+    sse_url: &str,
+    mut response: reqwest::blocking::Response,
+) -> Result<(String, reqwest::blocking::Response), String> {
+    let mut parser = SseFrameParser::default();
+    let mut buffer = [0_u8; 4096];
+
+    loop {
+        let read = response.read(&mut buffer).map_err(|error| {
+            format!(
+                "failed to read SSE endpoint bootstrap from MCP server `{server_name}`: {error}"
+            )
+        })?;
+        if read == 0 {
+            break;
+        }
+        for frame in parser.push(&buffer[..read])? {
+            if frame.event.as_deref() == Some("endpoint") {
+                let endpoint = resolve_sse_endpoint_url(sse_url, &frame.data).map_err(|error| {
+                    format!("invalid SSE endpoint from MCP server `{server_name}`: {error}")
+                })?;
+                return Ok((endpoint, response));
+            }
+        }
+    }
+
+    Err(format!(
+        "MCP server `{server_name}` did not provide an SSE endpoint event"
+    ))
 }
 
 fn fetch_mcp_oauth_metadata(
@@ -1551,48 +1882,220 @@ fn run_remote_mcp_jsonrpc_operation<TResult: DeserializeOwned>(
 ) -> Result<TResult, String> {
     ensure_live_mcp_execution_supported(server_name, server_config)?;
     let client = build_http_client()?;
-    let mut request = client.post(&remote.url);
-    for (name, value) in &remote.headers {
-        request = request.header(name, value);
-    }
-    if let Some(token) = resolve_remote_mcp_bearer_token(server_name, server_config, remote)? {
-        request = request.bearer_auth(token);
-    }
-    let payload = runtime::JsonRpcRequest::new(
-        runtime::JsonRpcId::String(format!("mcp:{method}")),
-        method,
-        params,
-    );
-    let response = request
-        .json(&payload)
-        .send()
-        .map_err(|error| format!("MCP server `{server_name}` {method} request failed: {error}"))?;
+    let bearer_token = resolve_remote_mcp_bearer_token(server_name, server_config, remote)?;
+    let request_id = runtime::JsonRpcId::String(format!("mcp:{method}"));
+    let payload = runtime::JsonRpcRequest::new(request_id.clone(), method, params);
+    let response = apply_remote_mcp_request_headers(
+        client.post(&remote.url),
+        &remote.headers,
+        bearer_token.as_deref(),
+        "application/json, text/event-stream",
+    )
+    .json(&payload)
+    .send()
+    .map_err(|error| format!("MCP server `{server_name}` {method} request failed: {error}"))?;
     let status = response.status();
-    let body = response.text().map_err(|error| {
-        format!("failed to read {method} response from MCP server `{server_name}`: {error}")
-    })?;
     if !status.is_success() {
+        let body = response.text().map_err(|error| {
+            format!("failed to read {method} response from MCP server `{server_name}`: {error}")
+        })?;
         return Err(format!(
             "MCP server `{server_name}` returned HTTP {} for {method}: {}",
             status.as_u16(),
             trim_remote_mcp_response_body(&body)
         ));
     }
-    let response: runtime::JsonRpcResponse<TResult> =
-        serde_json::from_str(&body).map_err(|error| {
+
+    if response_is_sse(&response) {
+        return read_matching_jsonrpc_response_from_sse_stream(
+            server_name,
+            method,
+            &request_id,
+            response,
+        );
+    }
+
+    let body = response.text().map_err(|error| {
+        format!("failed to read {method} response from MCP server `{server_name}`: {error}")
+    })?;
+    parse_http_jsonrpc_response_body(server_name, method, &body, &request_id)
+}
+
+fn run_websocket_mcp_jsonrpc_operation<TResult: DeserializeOwned>(
+    server_name: &str,
+    server_config: &runtime::ScopedMcpServerConfig,
+    remote: &McpWebSocketServerConfig,
+    method: &'static str,
+    params: Option<Value>,
+) -> Result<TResult, String> {
+    ensure_live_mcp_execution_supported(server_name, server_config)?;
+    let mut request = remote.url.clone().into_client_request().map_err(|error| {
+        format!("failed to build websocket request for MCP server `{server_name}`: {error}")
+    })?;
+    for (name, value) in &remote.headers {
+        let header_name =
+            tungstenite::http::HeaderName::try_from(name.as_str()).map_err(|error| {
+                format!("invalid websocket header name for MCP server `{server_name}`: {error}")
+            })?;
+        let header_value = tungstenite::http::HeaderValue::from_str(value).map_err(|error| {
+            format!("invalid websocket header value for MCP server `{server_name}`: {error}")
+        })?;
+        request.headers_mut().insert(header_name, header_value);
+    }
+    let (mut websocket, _) = connect_websocket(request).map_err(|error| {
+        format!("failed to connect to MCP server `{server_name}` over websocket: {error}")
+    })?;
+
+    let request_id = runtime::JsonRpcId::String(format!("mcp:{method}"));
+    let payload = runtime::JsonRpcRequest::new(request_id.clone(), method, params);
+    let payload = serde_json::to_string(&payload).map_err(|error| {
+        format!("failed to encode JSON-RPC payload for MCP server `{server_name}`: {error}")
+    })?;
+    websocket
+        .send(WebSocketMessage::Text(payload.into()))
+        .map_err(|error| {
             format!(
-                "invalid JSON-RPC response from MCP server `{server_name}` for {method}: {error}"
+                "failed to send {method} websocket request to MCP server `{server_name}`: {error}"
             )
         })?;
-    if let Some(error) = response.error {
+
+    loop {
+        let message = websocket.read().map_err(|error| {
+            format!(
+                "failed to read {method} websocket response from MCP server `{server_name}`: {error}"
+            )
+        })?;
+        match message {
+            WebSocketMessage::Text(text) => {
+                if let Some(result) = maybe_extract_jsonrpc_response_from_websocket_payload(
+                    server_name,
+                    method,
+                    text.as_ref(),
+                    &request_id,
+                )? {
+                    return Ok(result);
+                }
+            }
+            WebSocketMessage::Binary(data) => {
+                let Ok(payload) = String::from_utf8(data.to_vec()) else {
+                    continue;
+                };
+                if let Some(result) = maybe_extract_jsonrpc_response_from_websocket_payload(
+                    server_name,
+                    method,
+                    &payload,
+                    &request_id,
+                )? {
+                    return Ok(result);
+                }
+            }
+            WebSocketMessage::Ping(payload) => {
+                websocket.send(WebSocketMessage::Pong(payload)).map_err(|error| {
+                    format!(
+                        "failed to respond to websocket ping from MCP server `{server_name}`: {error}"
+                    )
+                })?;
+            }
+            WebSocketMessage::Pong(_) => {}
+            WebSocketMessage::Close(_) => break,
+            _ => {}
+        }
+    }
+
+    Err(format!(
+        "MCP server `{server_name}` returned no matching JSON-RPC response for {method} on websocket transport"
+    ))
+}
+
+fn run_legacy_sse_mcp_jsonrpc_operation<TResult: DeserializeOwned>(
+    server_name: &str,
+    server_config: &runtime::ScopedMcpServerConfig,
+    remote: &McpRemoteServerConfig,
+    method: &'static str,
+    params: Option<Value>,
+) -> Result<TResult, String> {
+    ensure_live_mcp_execution_supported(server_name, server_config)?;
+    let client = build_http_client()?;
+    let bearer_token = resolve_remote_mcp_bearer_token(server_name, server_config, remote)?;
+    let sse_response = apply_remote_mcp_request_headers(
+        client.get(&remote.url),
+        &remote.headers,
+        bearer_token.as_deref(),
+        "text/event-stream",
+    )
+    .send()
+    .map_err(|error| {
+        format!("failed to open SSE stream for MCP server `{server_name}`: {error}")
+    })?;
+    let status = sse_response.status();
+    if !status.is_success() {
+        let body = sse_response.text().map_err(|error| {
+            format!("failed to read SSE bootstrap error from MCP server `{server_name}`: {error}")
+        })?;
         return Err(format!(
-            "MCP server `{server_name}` returned JSON-RPC error for {method}: {} ({})",
-            error.message, error.code
+            "MCP server `{server_name}` returned HTTP {} while opening SSE stream: {}",
+            status.as_u16(),
+            trim_remote_mcp_response_body(&body)
         ));
     }
-    response
-        .result
-        .ok_or_else(|| format!("MCP server `{server_name}` returned no result for {method}"))
+    if !response_is_sse(&sse_response) {
+        return Err(format!(
+            "MCP server `{server_name}` did not return an SSE stream for the configured sse transport"
+        ));
+    }
+
+    let (endpoint_url, sse_response) =
+        read_legacy_sse_endpoint(server_name, &remote.url, sse_response)?;
+    let request_id = runtime::JsonRpcId::String(format!("mcp:{method}"));
+    let payload = runtime::JsonRpcRequest::new(request_id.clone(), method, params);
+    let post_response = apply_remote_mcp_request_headers(
+        client.post(endpoint_url),
+        &remote.headers,
+        bearer_token.as_deref(),
+        "application/json, text/event-stream",
+    )
+    .json(&payload)
+    .send()
+    .map_err(|error| {
+        format!(
+            "MCP server `{server_name}` {method} POST request failed over SSE transport: {error}"
+        )
+    })?;
+    let post_status = post_response.status();
+    if !post_status.is_success() {
+        let body = post_response.text().map_err(|error| {
+            format!(
+                "failed to read {method} POST response from MCP server `{server_name}`: {error}"
+            )
+        })?;
+        return Err(format!(
+            "MCP server `{server_name}` returned HTTP {} for {method} over SSE transport: {}",
+            post_status.as_u16(),
+            trim_remote_mcp_response_body(&body)
+        ));
+    }
+
+    if response_is_sse(&post_response) {
+        return read_matching_jsonrpc_response_from_sse_stream(
+            server_name,
+            method,
+            &request_id,
+            post_response,
+        );
+    }
+
+    let body = post_response.text().map_err(|error| {
+        format!("failed to read {method} POST response from MCP server `{server_name}`: {error}")
+    })?;
+    if !body.trim().is_empty() {
+        if let Ok(result) =
+            parse_http_jsonrpc_response_body(server_name, method, &body, &request_id)
+        {
+            return Ok(result);
+        }
+    }
+
+    read_matching_jsonrpc_response_from_sse_stream(server_name, method, &request_id, sse_response)
 }
 
 fn list_mcp_tools_for_server(
@@ -1627,6 +2130,28 @@ fn list_mcp_tools_for_server(
         McpServerConfig::Http(remote) => {
             let params = cursor.map(|cursor| json!({ "cursor": cursor }));
             let result = run_remote_mcp_jsonrpc_operation(
+                server_name,
+                server_config,
+                remote,
+                "tools/list",
+                params,
+            )?;
+            Ok((transport, result))
+        }
+        McpServerConfig::Sse(remote) => {
+            let params = cursor.map(|cursor| json!({ "cursor": cursor }));
+            let result = run_legacy_sse_mcp_jsonrpc_operation(
+                server_name,
+                server_config,
+                remote,
+                "tools/list",
+                params,
+            )?;
+            Ok((transport, result))
+        }
+        McpServerConfig::Ws(remote) => {
+            let params = cursor.map(|cursor| json!({ "cursor": cursor }));
+            let result = run_websocket_mcp_jsonrpc_operation(
                 server_name,
                 server_config,
                 remote,
@@ -1693,6 +2218,38 @@ fn call_mcp_tool_for_server(
             )?;
             Ok((transport, result))
         }
+        McpServerConfig::Sse(remote) => {
+            let params = serde_json::to_value(runtime::McpToolCallParams {
+                name: tool_name.to_string(),
+                arguments,
+                meta: None,
+            })
+            .map_err(|error| error.to_string())?;
+            let result = run_legacy_sse_mcp_jsonrpc_operation(
+                server_name,
+                server_config,
+                remote,
+                "tools/call",
+                Some(params),
+            )?;
+            Ok((transport, result))
+        }
+        McpServerConfig::Ws(remote) => {
+            let params = serde_json::to_value(runtime::McpToolCallParams {
+                name: tool_name.to_string(),
+                arguments,
+                meta: None,
+            })
+            .map_err(|error| error.to_string())?;
+            let result = run_websocket_mcp_jsonrpc_operation(
+                server_name,
+                server_config,
+                remote,
+                "tools/call",
+                Some(params),
+            )?;
+            Ok((transport, result))
+        }
         _ => {
             ensure_live_mcp_execution_supported(server_name, server_config)?;
             unreachable!("unsupported transport was not rejected")
@@ -1732,6 +2289,28 @@ fn list_mcp_resources_for_server(
         McpServerConfig::Http(remote) => {
             let params = cursor.map(|cursor| json!({ "cursor": cursor }));
             let result = run_remote_mcp_jsonrpc_operation(
+                server_name,
+                server_config,
+                remote,
+                "resources/list",
+                params,
+            )?;
+            Ok((transport, result))
+        }
+        McpServerConfig::Sse(remote) => {
+            let params = cursor.map(|cursor| json!({ "cursor": cursor }));
+            let result = run_legacy_sse_mcp_jsonrpc_operation(
+                server_name,
+                server_config,
+                remote,
+                "resources/list",
+                params,
+            )?;
+            Ok((transport, result))
+        }
+        McpServerConfig::Ws(remote) => {
+            let params = cursor.map(|cursor| json!({ "cursor": cursor }));
+            let result = run_websocket_mcp_jsonrpc_operation(
                 server_name,
                 server_config,
                 remote,
@@ -1782,6 +2361,34 @@ fn read_mcp_resource_for_server(
             })
             .map_err(|error| error.to_string())?;
             let result = run_remote_mcp_jsonrpc_operation(
+                server_name,
+                server_config,
+                remote,
+                "resources/read",
+                Some(params),
+            )?;
+            Ok((transport, result))
+        }
+        McpServerConfig::Sse(remote) => {
+            let params = serde_json::to_value(runtime::McpReadResourceParams {
+                uri: uri.to_string(),
+            })
+            .map_err(|error| error.to_string())?;
+            let result = run_legacy_sse_mcp_jsonrpc_operation(
+                server_name,
+                server_config,
+                remote,
+                "resources/read",
+                Some(params),
+            )?;
+            Ok((transport, result))
+        }
+        McpServerConfig::Ws(remote) => {
+            let params = serde_json::to_value(runtime::McpReadResourceParams {
+                uri: uri.to_string(),
+            })
+            .map_err(|error| error.to_string())?;
+            let result = run_websocket_mcp_jsonrpc_operation(
                 server_name,
                 server_config,
                 remote,
@@ -2035,7 +2642,9 @@ fn mcp_status_for_server(
             auth_server_metadata_url: None,
             xaa: None,
         }),
-        McpClientTransport::Sse(remote) | McpClientTransport::Http(remote) => {
+        McpClientTransport::Sse(remote)
+        | McpClientTransport::Http(remote)
+        | McpClientTransport::WebSocket(remote) => {
             let (
                 auth_kind,
                 requires_user_auth,
@@ -2105,30 +2714,32 @@ fn mcp_status_for_server(
                 xaa,
             })
         }
-        McpClientTransport::WebSocket(_)
-        | McpClientTransport::Sdk(_)
-        | McpClientTransport::SimcoeAiProxy(_) => Ok(McpServerAuthStatus {
-            server: server_name.to_string(),
-            scope,
-            transport: transport_name.clone(),
-            auth_kind: String::from("none"),
-            requires_user_auth: false,
-            supported_execution: false,
-            interactive_supported: false,
-            status: String::from("unsupported-transport"),
-            stored_credentials: false,
-            refresh_token_present: false,
-            expires_at: None,
-            scopes: Vec::new(),
-            detail: Some(format!(
-                "{} transport is not executed by the Rust MCP runtime yet",
-                transport_name
-            )),
-            client_id: None,
-            callback_port: None,
-            auth_server_metadata_url: None,
-            xaa: None,
-        }),
+        McpClientTransport::Sdk(_) | McpClientTransport::SimcoeAiProxy(_) => {
+            Ok(McpServerAuthStatus {
+                server: server_name.to_string(),
+                scope,
+                transport: transport_name.clone(),
+                auth_kind: String::from("none"),
+                requires_user_auth: false,
+                supported_execution: false,
+                interactive_supported: false,
+                status: String::from("unsupported-transport"),
+                stored_credentials: false,
+                refresh_token_present: false,
+                expires_at: None,
+                scopes: Vec::new(),
+                detail: execution_reason.or_else(|| {
+                    Some(format!(
+                        "{} transport is not executed by the Rust MCP runtime yet",
+                        transport_name
+                    ))
+                }),
+                client_id: None,
+                callback_port: None,
+                auth_server_metadata_url: None,
+                xaa: None,
+            })
+        }
     }
 }
 
@@ -4841,7 +5452,7 @@ fn parse_skill_description(contents: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeSet, VecDeque};
     use std::fs;
     use std::io::{Read, Write};
     use std::net::{SocketAddr, TcpListener};
@@ -4859,6 +5470,7 @@ mod tests {
     };
     use runtime::{ApiRequest, AssistantEvent, ConversationRuntime, RuntimeError, Session};
     use serde_json::json;
+    use tungstenite::{accept_hdr, Message as WebSocketMessage};
 
     fn env_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -5168,6 +5780,80 @@ mod tests {
     }
 
     #[test]
+    fn mcp_auth_reports_specific_details_for_sdk_and_proxy_transports() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cwd = temp_path("mcp-unsupported-cwd");
+        let config_home = temp_path("mcp-unsupported-home");
+        fs::create_dir_all(&cwd).expect("create cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+
+        fs::write(
+            cwd.join(".simcoe.json"),
+            serde_json::to_string_pretty(&json!({
+                "mcpServers": {
+                    "sdk-server": {
+                        "type": "sdk",
+                        "name": "sdk-adapter"
+                    },
+                    "proxy-server": {
+                        "type": "simcoeai-proxy",
+                        "url": "https://api.anthropic.com/v2/ccr-sessions/1?mcp_url=wss%3A%2F%2Fvendor.example%2Fmcp",
+                        "id": "proxy-123"
+                    }
+                }
+            }))
+            .expect("serialize settings"),
+        )
+        .expect("write project settings");
+
+        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
+        let original_cwd = set_test_cwd(&cwd);
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+
+        let status =
+            execute_tool("McpAuthTool", &json!({})).expect("inspect unsupported transports");
+        let status: serde_json::Value = serde_json::from_str(&status).expect("valid status json");
+        assert_eq!(status["serverCount"], json!(2));
+
+        let servers = status["servers"].as_array().expect("server status array");
+        let sdk = servers
+            .iter()
+            .find(|server| server["server"] == json!("sdk-server"))
+            .expect("sdk server present");
+        assert_eq!(sdk["status"], json!("unsupported-transport"));
+        assert_eq!(sdk["supportedExecution"], json!(false));
+        assert!(sdk["detail"]
+            .as_str()
+            .expect("sdk detail")
+            .contains("SDK server `sdk-adapter` needs the upstream SDK adapter path"));
+
+        let proxy = servers
+            .iter()
+            .find(|server| server["server"] == json!("proxy-server"))
+            .expect("proxy server present");
+        assert_eq!(proxy["status"], json!("unsupported-transport"));
+        assert_eq!(proxy["supportedExecution"], json!(false));
+        let proxy_detail = proxy["detail"].as_str().expect("proxy detail");
+        assert!(proxy_detail.contains("proxy `proxy-123` targets `wss://vendor.example/mcp`"));
+        assert!(proxy_detail.contains("SessionsWebSocket.ts"));
+        assert!(proxy_detail.contains("sdkMessageAdapter.ts"));
+
+        let proxy_error = execute_tool("MCPTool", &json!({ "server": "proxy-server" }))
+            .expect_err("proxy transport should still be rejected honestly");
+        assert!(proxy_error.contains("proxy `proxy-123` targets `wss://vendor.example/mcp`"));
+
+        match original_config_home {
+            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
+            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(&cwd);
+        let _ = fs::remove_dir_all(&config_home);
+    }
+
+    #[test]
     fn dynamic_http_mcp_tools_execute_with_saved_oauth_and_refresh() {
         let _guard = env_lock()
             .lock()
@@ -5297,7 +5983,7 @@ mod tests {
                             }
                             other => panic!("unexpected MCP method: {other}"),
                         };
-                        HttpResponse::json(200, "OK", &response.to_string())
+                        HttpResponse::event_stream(200, "OK", &response.to_string())
                     }
                     other => panic!("unexpected request path: {other}"),
                 }
@@ -5421,6 +6107,251 @@ mod tests {
             .filter(|request| request.path == "/mcp")
             .all(|request| request.headers.get("authorization")
                 == Some(&String::from("Bearer refreshed-token"))));
+
+        match original_config_home {
+            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
+            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(&cwd);
+        let _ = fs::remove_dir_all(&config_home);
+    }
+
+    #[test]
+    fn legacy_sse_mcp_tools_execute_with_saved_oauth_and_refresh() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cwd = temp_path("legacy-sse-mcp-cwd");
+        let config_home = temp_path("legacy-sse-mcp-home");
+        fs::create_dir_all(&cwd).expect("create cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+
+        let server = LegacySseTestServer::spawn();
+
+        fs::write(
+            cwd.join(".simcoe.json"),
+            serde_json::to_string_pretty(&json!({
+                "mcpServers": {
+                    "vendor-sse": {
+                        "type": "sse",
+                        "url": format!("http://{}/sse", server.addr()),
+                        "oauth": {
+                            "clientId": "client-id",
+                            "authServerMetadataUrl": format!("http://{}/oauth-metadata", server.addr())
+                        }
+                    }
+                }
+            }))
+            .expect("serialize settings"),
+        )
+        .expect("write project settings");
+
+        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
+        let original_cwd = set_test_cwd(&cwd);
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+
+        let initial_status = execute_tool("McpAuthTool", &json!({ "server": "vendor-sse" }))
+            .expect("inspect vendor-sse auth before save");
+        let initial_status: serde_json::Value =
+            serde_json::from_str(&initial_status).expect("valid initial status json");
+        assert_eq!(
+            initial_status["servers"][0]["status"],
+            json!("user-auth-required")
+        );
+        assert_eq!(
+            initial_status["servers"][0]["supportedExecution"],
+            json!(true)
+        );
+
+        let saved = execute_tool(
+            "McpAuthTool",
+            &json!({
+                "server": "vendor-sse",
+                "action": "save",
+                "accessToken": "expired-token",
+                "refreshToken": "refresh-token",
+                "expiresAt": 1,
+                "scopes": ["scope:a"]
+            }),
+        )
+        .expect("save vendor-sse credentials");
+        let saved: serde_json::Value = serde_json::from_str(&saved).expect("valid save json");
+        assert_eq!(saved["action"], json!("save"));
+        assert_eq!(saved["servers"][0]["storedCredentials"], json!(true));
+
+        let definitions = runtime_tool_definitions(None);
+        assert!(definitions
+            .iter()
+            .any(|tool| tool.name == "mcp__vendor-sse__echo"));
+
+        let called = execute_tool("mcp__vendor-sse__echo", &json!({ "text": "hello" }))
+            .expect("call dynamic legacy SSE MCP tool");
+        let called: serde_json::Value = serde_json::from_str(&called).expect("valid call json");
+        assert_eq!(called["transport"], json!("sse"));
+        assert_eq!(called["structuredContent"]["server"], json!("vendor-sse"));
+        assert_eq!(called["structuredContent"]["echoed"], json!("hello"));
+
+        let listed = execute_tool("MCPTool", &json!({ "server": "vendor-sse" }))
+            .expect("list legacy SSE MCP tools");
+        let listed: serde_json::Value = serde_json::from_str(&listed).expect("valid list json");
+        assert_eq!(listed["transport"], json!("sse"));
+        assert_eq!(listed["tools"][0]["name"], json!("echo"));
+
+        let resources = execute_tool("ListMcpResourcesTool", &json!({ "server": "vendor-sse" }))
+            .expect("list legacy SSE resources");
+        let resources: serde_json::Value =
+            serde_json::from_str(&resources).expect("valid resource list json");
+        assert_eq!(resources["transport"], json!("sse"));
+        assert_eq!(resources["resources"][0]["uri"], json!("file://legacy.txt"));
+
+        let read = execute_tool(
+            "ReadMcpResourceTool",
+            &json!({ "server": "vendor-sse", "uri": "file://legacy.txt" }),
+        )
+        .expect("read legacy SSE resource");
+        let read: serde_json::Value = serde_json::from_str(&read).expect("valid read json");
+        assert_eq!(read["contents"][0]["text"], json!("legacy contents"));
+
+        let ready = execute_tool("McpAuthTool", &json!({ "server": "vendor-sse" }))
+            .expect("inspect vendor-sse auth after save");
+        let ready: serde_json::Value = serde_json::from_str(&ready).expect("valid ready json");
+        assert_eq!(ready["servers"][0]["status"], json!("ready"));
+        assert_eq!(ready["servers"][0]["refreshTokenPresent"], json!(true));
+
+        let logout = execute_tool(
+            "McpAuthTool",
+            &json!({ "server": "vendor-sse", "action": "logout" }),
+        )
+        .expect("logout vendor-sse auth");
+        let logout: serde_json::Value = serde_json::from_str(&logout).expect("valid logout json");
+        assert_eq!(logout["servers"][0]["storedCredentials"], json!(false));
+
+        let missing_credentials = execute_tool("MCPTool", &json!({ "server": "vendor-sse" }))
+            .expect_err("legacy SSE execution should require saved credentials after logout");
+        assert!(missing_credentials.contains("requires stored OAuth credentials"));
+
+        let requests = server.requests();
+        assert!(
+            requests
+                .iter()
+                .filter(|request| request.path == "/oauth-token")
+                .count()
+                >= 1
+        );
+        assert!(requests
+            .iter()
+            .any(|request| request.request_line.starts_with("GET /sse ")));
+        assert!(requests
+            .iter()
+            .any(|request| request.request_line.starts_with("POST /messages ")));
+        assert!(requests
+            .iter()
+            .filter(|request| request.path == "/sse" || request.path == "/messages")
+            .all(|request| request.headers.get("authorization")
+                == Some(&String::from("Bearer refreshed-token"))));
+
+        match original_config_home {
+            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
+            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(&cwd);
+        let _ = fs::remove_dir_all(&config_home);
+    }
+
+    #[test]
+    fn websocket_mcp_tools_execute_with_static_headers() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cwd = temp_path("websocket-mcp-cwd");
+        let config_home = temp_path("websocket-mcp-home");
+        fs::create_dir_all(&cwd).expect("create cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+
+        let server = WebSocketTestServer::spawn();
+
+        fs::write(
+            cwd.join(".simcoe.json"),
+            serde_json::to_string_pretty(&json!({
+                "mcpServers": {
+                    "vendor-ws": {
+                        "type": "ws",
+                        "url": format!("ws://{}/mcp", server.addr()),
+                        "headers": {
+                            "X-Test": "static-header"
+                        }
+                    }
+                }
+            }))
+            .expect("serialize settings"),
+        )
+        .expect("write project settings");
+
+        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
+        let original_cwd = set_test_cwd(&cwd);
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+
+        let status = execute_tool("McpAuthTool", &json!({ "server": "vendor-ws" }))
+            .expect("inspect websocket MCP auth");
+        let status: serde_json::Value = serde_json::from_str(&status).expect("valid status json");
+        assert_eq!(status["servers"][0]["status"], json!("ready"));
+        assert_eq!(status["servers"][0]["supportedExecution"], json!(true));
+        assert_eq!(status["servers"][0]["authKind"], json!("none"));
+
+        let definitions = runtime_tool_definitions(None);
+        assert!(definitions
+            .iter()
+            .any(|tool| tool.name == "mcp__vendor-ws__echo"));
+
+        let called = execute_tool("mcp__vendor-ws__echo", &json!({ "text": "hello" }))
+            .expect("call websocket MCP tool");
+        let called: serde_json::Value = serde_json::from_str(&called).expect("valid call json");
+        assert_eq!(called["transport"], json!("ws"));
+        assert_eq!(called["structuredContent"]["server"], json!("vendor-ws"));
+        assert_eq!(called["structuredContent"]["echoed"], json!("hello"));
+
+        let listed = execute_tool("MCPTool", &json!({ "server": "vendor-ws" }))
+            .expect("list websocket MCP tools");
+        let listed: serde_json::Value = serde_json::from_str(&listed).expect("valid list json");
+        assert_eq!(listed["transport"], json!("ws"));
+        assert_eq!(listed["tools"][0]["name"], json!("echo"));
+
+        let resources = execute_tool("ListMcpResourcesTool", &json!({ "server": "vendor-ws" }))
+            .expect("list websocket MCP resources");
+        let resources: serde_json::Value =
+            serde_json::from_str(&resources).expect("valid resource list json");
+        assert_eq!(resources["transport"], json!("ws"));
+        assert_eq!(resources["resources"][0]["uri"], json!("file://ws.txt"));
+
+        let read = execute_tool(
+            "ReadMcpResourceTool",
+            &json!({ "server": "vendor-ws", "uri": "file://ws.txt" }),
+        )
+        .expect("read websocket MCP resource");
+        let read: serde_json::Value = serde_json::from_str(&read).expect("valid read json");
+        assert_eq!(read["contents"][0]["text"], json!("websocket contents"));
+
+        let requests = server.requests();
+        assert!(requests.iter().all(|request| request.path == "/mcp"));
+        assert!(requests.iter().all(|request| {
+            request.headers.get("x-test") == Some(&String::from("static-header"))
+        }));
+
+        let messages = server.messages();
+        assert!(messages
+            .iter()
+            .any(|message| message["method"] == json!("tools/list")));
+        assert!(messages
+            .iter()
+            .any(|message| message["method"] == json!("tools/call")));
+        assert!(messages
+            .iter()
+            .any(|message| message["method"] == json!("resources/list")));
+        assert!(messages
+            .iter()
+            .any(|message| message["method"] == json!("resources/read")));
 
         match original_config_home {
             Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
@@ -7017,6 +7948,458 @@ printf 'pwsh:%s' "$1"
         }
     }
 
+    #[derive(Default)]
+    struct LegacySseServerState {
+        requests: Vec<HttpRequest>,
+        pending_streams: VecDeque<std::sync::mpsc::Sender<String>>,
+    }
+
+    #[derive(Default)]
+    struct WebSocketServerState {
+        requests: Vec<HttpRequest>,
+        messages: Vec<serde_json::Value>,
+    }
+
+    struct LegacySseTestServer {
+        addr: SocketAddr,
+        state: Arc<Mutex<LegacySseServerState>>,
+        shutdown: Option<std::sync::mpsc::Sender<()>>,
+        handle: Option<thread::JoinHandle<()>>,
+    }
+
+    impl LegacySseTestServer {
+        fn spawn() -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind legacy SSE server");
+            listener
+                .set_nonblocking(true)
+                .expect("set nonblocking listener");
+            let addr = listener.local_addr().expect("local addr");
+            let state = Arc::new(Mutex::new(LegacySseServerState::default()));
+            let (tx, rx) = std::sync::mpsc::channel::<()>();
+            let base_url = format!("http://{addr}");
+
+            let handle = thread::spawn({
+                let state = Arc::clone(&state);
+                move || loop {
+                    if rx.try_recv().is_ok() {
+                        break;
+                    }
+
+                    match listener.accept() {
+                        Ok((stream, _)) => {
+                            let state = Arc::clone(&state);
+                            let base_url = base_url.clone();
+                            thread::spawn(move || {
+                                handle_legacy_sse_connection(stream, state, &base_url)
+                            });
+                        }
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                            thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(error) => panic!("server accept failed: {error}"),
+                    }
+                }
+            });
+
+            Self {
+                addr,
+                state,
+                shutdown: Some(tx),
+                handle: Some(handle),
+            }
+        }
+
+        fn addr(&self) -> SocketAddr {
+            self.addr
+        }
+
+        fn requests(&self) -> Vec<HttpRequest> {
+            self.state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .requests
+                .clone()
+        }
+    }
+
+    impl Drop for LegacySseTestServer {
+        fn drop(&mut self) {
+            if let Some(tx) = self.shutdown.take() {
+                let _ = tx.send(());
+            }
+            if let Some(handle) = self.handle.take() {
+                handle.join().expect("join legacy SSE server");
+            }
+        }
+    }
+
+    struct WebSocketTestServer {
+        addr: SocketAddr,
+        state: Arc<Mutex<WebSocketServerState>>,
+        shutdown: Option<std::sync::mpsc::Sender<()>>,
+        handle: Option<thread::JoinHandle<()>>,
+    }
+
+    impl WebSocketTestServer {
+        fn spawn() -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind websocket server");
+            listener
+                .set_nonblocking(true)
+                .expect("set nonblocking listener");
+            let addr = listener.local_addr().expect("local addr");
+            let state = Arc::new(Mutex::new(WebSocketServerState::default()));
+            let (tx, rx) = std::sync::mpsc::channel::<()>();
+
+            let handle = thread::spawn({
+                let state = Arc::clone(&state);
+                move || loop {
+                    if rx.try_recv().is_ok() {
+                        break;
+                    }
+
+                    match listener.accept() {
+                        Ok((stream, _)) => {
+                            let state = Arc::clone(&state);
+                            thread::spawn(move || handle_websocket_connection(stream, state));
+                        }
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                            thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(error) => panic!("server accept failed: {error}"),
+                    }
+                }
+            });
+
+            Self {
+                addr,
+                state,
+                shutdown: Some(tx),
+                handle: Some(handle),
+            }
+        }
+
+        fn addr(&self) -> SocketAddr {
+            self.addr
+        }
+
+        fn requests(&self) -> Vec<HttpRequest> {
+            self.state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .requests
+                .clone()
+        }
+
+        fn messages(&self) -> Vec<serde_json::Value> {
+            self.state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .messages
+                .clone()
+        }
+    }
+
+    impl Drop for WebSocketTestServer {
+        fn drop(&mut self) {
+            if let Some(tx) = self.shutdown.take() {
+                let _ = tx.send(());
+            }
+            if let Some(handle) = self.handle.take() {
+                handle.join().expect("join websocket server");
+            }
+        }
+    }
+
+    fn handle_legacy_sse_connection(
+        mut stream: std::net::TcpStream,
+        state: Arc<Mutex<LegacySseServerState>>,
+        base_url: &str,
+    ) {
+        stream
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .expect("set read timeout");
+        let request = read_http_request(&mut stream);
+        state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .requests
+            .push(request.clone());
+
+        match request.path.as_str() {
+            "/oauth-metadata" => {
+                let response = HttpResponse::json(
+                    200,
+                    "OK",
+                    &json!({
+                        "authorization_endpoint": format!("{base_url}/oauth-authorize"),
+                        "token_endpoint": format!("{base_url}/oauth-token"),
+                    })
+                    .to_string(),
+                );
+                stream
+                    .write_all(response.to_bytes().as_slice())
+                    .expect("write oauth metadata response");
+            }
+            "/oauth-token" => {
+                assert_eq!(
+                    request.headers.get("content-type"),
+                    Some(&String::from("application/x-www-form-urlencoded"))
+                );
+                assert!(request.body.contains("grant_type=refresh_token"));
+                let response = HttpResponse::json(
+                    200,
+                    "OK",
+                    &json!({
+                        "access_token": "refreshed-token",
+                        "refresh_token": "fresh-refresh",
+                        "expires_at": 9_999_999_999_u64,
+                        "scopes": ["scope:a"],
+                    })
+                    .to_string(),
+                );
+                stream
+                    .write_all(response.to_bytes().as_slice())
+                    .expect("write oauth token response");
+            }
+            "/sse" => {
+                let (tx, rx) = std::sync::mpsc::channel::<String>();
+                state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .pending_streams
+                    .push_back(tx);
+                let bootstrap = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\nevent: endpoint\ndata: /messages\n\n"
+                );
+                stream
+                    .write_all(bootstrap.as_bytes())
+                    .expect("write SSE bootstrap");
+                if let Ok(message) = rx.recv_timeout(Duration::from_secs(1)) {
+                    let event = format!("event: message\ndata: {message}\n\n");
+                    stream
+                        .write_all(event.as_bytes())
+                        .expect("write SSE message event");
+                }
+            }
+            "/messages" => {
+                let payload: serde_json::Value =
+                    serde_json::from_str(&request.body).expect("valid JSON-RPC request");
+                let response = match payload["method"].as_str().expect("method") {
+                    "tools/list" => json!({
+                        "jsonrpc": "2.0",
+                        "id": payload["id"].clone(),
+                        "result": {
+                            "tools": [
+                                {
+                                    "name": "echo",
+                                    "description": "Echo over legacy SSE",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "text": { "type": "string" }
+                                        },
+                                        "required": ["text"],
+                                        "additionalProperties": false
+                                    }
+                                }
+                            ]
+                        }
+                    }),
+                    "tools/call" => {
+                        assert_eq!(payload["params"]["name"], json!("echo"));
+                        json!({
+                            "jsonrpc": "2.0",
+                            "id": payload["id"].clone(),
+                            "result": {
+                                "content": [],
+                                "structuredContent": {
+                                    "server": "vendor-sse",
+                                    "echoed": payload["params"]["arguments"]["text"].clone()
+                                },
+                                "isError": false
+                            }
+                        })
+                    }
+                    "resources/list" => json!({
+                        "jsonrpc": "2.0",
+                        "id": payload["id"].clone(),
+                        "result": {
+                            "resources": [
+                                {
+                                    "uri": "file://legacy.txt",
+                                    "name": "Legacy Guide",
+                                    "mimeType": "text/plain"
+                                }
+                            ]
+                        }
+                    }),
+                    "resources/read" => json!({
+                        "jsonrpc": "2.0",
+                        "id": payload["id"].clone(),
+                        "result": {
+                            "contents": [
+                                {
+                                    "uri": payload["params"]["uri"].clone(),
+                                    "mimeType": "text/plain",
+                                    "text": "legacy contents"
+                                }
+                            ]
+                        }
+                    }),
+                    other => panic!("unexpected MCP method: {other}"),
+                };
+                let sender = state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .pending_streams
+                    .pop_front()
+                    .expect("pending SSE stream for POST request");
+                sender
+                    .send(response.to_string())
+                    .expect("send SSE response payload");
+                let response = HttpResponse::text(202, "Accepted", "");
+                stream
+                    .write_all(response.to_bytes().as_slice())
+                    .expect("write POST ack response");
+            }
+            other => panic!("unexpected request path: {other}"),
+        }
+    }
+
+    fn handle_websocket_connection(
+        stream: std::net::TcpStream,
+        state: Arc<Mutex<WebSocketServerState>>,
+    ) {
+        stream
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .expect("set read timeout");
+        stream
+            .set_write_timeout(Some(Duration::from_secs(1)))
+            .expect("set write timeout");
+
+        let request_state = Arc::clone(&state);
+        let mut websocket = accept_hdr(
+            stream,
+            move |request: &tungstenite::handshake::server::Request,
+                  response: tungstenite::handshake::server::Response| {
+                let headers = request
+                    .headers()
+                    .iter()
+                    .filter_map(|(name, value)| {
+                        value
+                            .to_str()
+                            .ok()
+                            .map(|value| (name.as_str().to_ascii_lowercase(), value.to_string()))
+                    })
+                    .collect::<std::collections::BTreeMap<_, _>>();
+                request_state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .requests
+                    .push(HttpRequest {
+                        request_line: format!("GET {} HTTP/1.1", request.uri()),
+                        path: request.uri().path().to_string(),
+                        headers,
+                        body: String::new(),
+                    });
+                Ok(response)
+            },
+        )
+        .expect("accept websocket");
+
+        let payload = loop {
+            match websocket.read().expect("read websocket message") {
+                WebSocketMessage::Text(text) => break text.to_string(),
+                WebSocketMessage::Binary(data) => {
+                    break String::from_utf8(data.to_vec()).expect("utf-8 websocket payload")
+                }
+                WebSocketMessage::Ping(payload) => websocket
+                    .send(WebSocketMessage::Pong(payload))
+                    .expect("send websocket pong"),
+                WebSocketMessage::Pong(_) => {}
+                WebSocketMessage::Close(_) => return,
+                _ => {}
+            }
+        };
+
+        let payload: serde_json::Value =
+            serde_json::from_str(&payload).expect("valid websocket JSON-RPC request");
+        state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .messages
+            .push(payload.clone());
+
+        let response = match payload["method"].as_str().expect("method") {
+            "tools/list" => json!({
+                "jsonrpc": "2.0",
+                "id": payload["id"].clone(),
+                "result": {
+                    "tools": [
+                        {
+                            "name": "echo",
+                            "description": "Echo over websocket",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "text": { "type": "string" }
+                                },
+                                "required": ["text"],
+                                "additionalProperties": false
+                            }
+                        }
+                    ]
+                }
+            }),
+            "tools/call" => {
+                assert_eq!(payload["params"]["name"], json!("echo"));
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": payload["id"].clone(),
+                    "result": {
+                        "content": [],
+                        "structuredContent": {
+                            "server": "vendor-ws",
+                            "echoed": payload["params"]["arguments"]["text"].clone()
+                        },
+                        "isError": false
+                    }
+                })
+            }
+            "resources/list" => json!({
+                "jsonrpc": "2.0",
+                "id": payload["id"].clone(),
+                "result": {
+                    "resources": [
+                        {
+                            "uri": "file://ws.txt",
+                            "name": "WebSocket Guide",
+                            "mimeType": "text/plain"
+                        }
+                    ]
+                }
+            }),
+            "resources/read" => json!({
+                "jsonrpc": "2.0",
+                "id": payload["id"].clone(),
+                "result": {
+                    "contents": [
+                        {
+                            "uri": payload["params"]["uri"].clone(),
+                            "mimeType": "text/plain",
+                            "text": "websocket contents"
+                        }
+                    ]
+                }
+            }),
+            other => panic!("unexpected MCP method: {other}"),
+        };
+
+        websocket
+            .send(WebSocketMessage::Text(response.to_string().into()))
+            .expect("send websocket response");
+    }
+
     fn read_http_request(stream: &mut impl Read) -> HttpRequest {
         let mut buffer = Vec::new();
         let mut chunk = [0_u8; 1024];
@@ -7106,6 +8489,15 @@ printf 'pwsh:%s' "$1"
                 reason,
                 content_type: "application/json",
                 body: body.to_string(),
+            }
+        }
+
+        fn event_stream(status: u16, reason: &'static str, body: &str) -> Self {
+            Self {
+                status,
+                reason,
+                content_type: "text/event-stream",
+                body: format!("event: message\ndata: {body}\n\n"),
             }
         }
 
