@@ -277,7 +277,7 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         name: "session",
         summary: "List or switch managed local sessions",
         argument_hint: Some("[list|switch <session-id>]"),
-        resume_supported: false,
+        resume_supported: true,
     },
 ];
 
@@ -515,6 +515,22 @@ pub fn render_slash_command_help() -> String {
     lines.join("\n")
 }
 
+#[must_use]
+pub fn render_resume_command_help() -> String {
+    let mut lines = vec![
+        "Resume-compatible slash commands".to_string(),
+        "  These commands work with --resume SESSION.json.".to_string(),
+    ];
+    for spec in resume_supported_slash_commands() {
+        let name = match spec.argument_hint {
+            Some(argument_hint) => format!("/{} {}", spec.name, argument_hint),
+            None => format!("/{}", spec.name),
+        };
+        lines.push(format!("  {name:<20} {}", spec.summary));
+    }
+    lines.join("\n")
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SlashCommandResult {
     pub message: String,
@@ -592,8 +608,8 @@ pub fn handle_slash_command(
 #[cfg(test)]
 mod tests {
     use super::{
-        handle_slash_command, render_slash_command_help, resume_supported_slash_commands,
-        slash_command_specs, SlashCommand,
+        handle_slash_command, render_resume_command_help, render_slash_command_help,
+        resume_supported_slash_commands, slash_command_specs, SlashCommand,
     };
     use runtime::{CompactionConfig, ContentBlock, ConversationMessage, MessageRole, Session};
 
@@ -836,7 +852,20 @@ mod tests {
         assert!(help.contains("/export [file]"));
         assert!(help.contains("/session [list|switch <session-id>]"));
         assert_eq!(slash_command_specs().len(), 40);
-        assert_eq!(resume_supported_slash_commands().len(), 25);
+        assert_eq!(resume_supported_slash_commands().len(), 26);
+    }
+
+    #[test]
+    fn renders_resume_help_from_resume_supported_specs() {
+        let help = render_resume_command_help();
+
+        assert!(help.contains("Resume-compatible slash commands"));
+        assert!(help.contains("/help"));
+        assert!(help.contains("/config [env|hooks|model]"));
+        assert!(help.contains("/export [file]"));
+        assert!(help.contains("/session [list|switch <session-id>]"));
+        assert!(!help.contains("/review [context]"));
+        assert!(!help.contains("/login"));
     }
 
     #[test]

@@ -7,6 +7,31 @@ use tools::mvp_tool_specs;
 
 pub(crate) type AllowedToolSet = BTreeSet<String>;
 
+const NAMED_CLI_SUBCOMMANDS: &[&str] = &[
+    "dump-manifests",
+    "bootstrap-plan",
+    "system-prompt",
+    "config",
+    "hooks",
+    "mcp",
+    "memory",
+    "agents",
+    "plugin",
+    "reload-plugins",
+    "remote-env",
+    "remote-setup",
+    "tools",
+    "doctor",
+    "skills",
+    "tasks",
+    "export",
+    "session",
+    "login",
+    "logout",
+    "init",
+    "prompt",
+];
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CliAction {
     DumpManifests {
@@ -67,6 +92,15 @@ pub(crate) enum CliAction {
         task: Option<String>,
         output_format: CliOutputFormat,
     },
+    Export {
+        path: Option<String>,
+        output_format: CliOutputFormat,
+    },
+    Session {
+        action: Option<String>,
+        target: Option<String>,
+        output_format: CliOutputFormat,
+    },
     Version {
         output_format: CliOutputFormat,
     },
@@ -117,6 +151,10 @@ impl CliOutputFormat {
             )),
         }
     }
+}
+
+pub(crate) fn named_cli_subcommands() -> &'static [&'static str] {
+    NAMED_CLI_SUBCOMMANDS
 }
 
 #[allow(clippy::too_many_lines)]
@@ -248,6 +286,8 @@ pub(crate) fn parse_args(args: &[String]) -> Result<CliAction, String> {
         "doctor" => parse_doctor_args(&rest[1..], output_format),
         "skills" => parse_skills_args(&rest[1..], output_format),
         "tasks" => parse_tasks_args(&rest[1..], output_format),
+        "export" => parse_export_args(&rest[1..], output_format),
+        "session" => parse_session_args(&rest[1..], output_format),
         "login" => Ok(CliAction::Login { output_format }),
         "logout" => Ok(CliAction::Logout { output_format }),
         "init" => Ok(CliAction::Init { output_format }),
@@ -578,4 +618,37 @@ fn parse_tasks_args(args: &[String], output_format: CliOutputFormat) -> Result<C
             output_format,
         }
     })
+}
+
+fn parse_export_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
+    parse_selector_command(args, output_format, "export", |path, output_format| {
+        CliAction::Export {
+            path,
+            output_format,
+        }
+    })
+}
+
+fn parse_session_args(
+    args: &[String],
+    output_format: CliOutputFormat,
+) -> Result<CliAction, String> {
+    match args {
+        [] => Ok(CliAction::Session {
+            action: None,
+            target: None,
+            output_format,
+        }),
+        [action] => Ok(CliAction::Session {
+            action: Some(action.clone()),
+            target: None,
+            output_format,
+        }),
+        [action, target] => Ok(CliAction::Session {
+            action: Some(action.clone()),
+            target: Some(target.clone()),
+            output_format,
+        }),
+        _ => Err("session accepts at most two positional arguments".to_string()),
+    }
 }

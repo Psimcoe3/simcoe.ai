@@ -70,6 +70,12 @@ impl UpstreamPaths {
         self.repo_root
             .join("src/reference_data/subsystems/cli.json")
     }
+
+    #[must_use]
+    pub fn parity_manifest_path(&self) -> PathBuf {
+        self.repo_root
+            .join("src/reference_data/parity_manifest.json")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -144,6 +150,41 @@ pub struct ToolCatalog {
     pub families: Vec<ArchivedToolFamilySummary>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ParityStatus {
+    Implemented,
+    Partial,
+    InspectionOnly,
+    DiagnosticOnly,
+    Missing,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ParitySlashCommand {
+    pub name: String,
+    pub resume_supported: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ParityCliCommand {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ParitySubsystem {
+    pub name: String,
+    pub status: ParityStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ParityManifest {
+    pub slash_commands: Vec<ParitySlashCommand>,
+    pub named_cli_subcommands: Vec<ParityCliCommand>,
+    pub native_tools: Vec<String>,
+    pub subsystems: Vec<ParitySubsystem>,
+}
+
 #[derive(Debug, Deserialize)]
 struct SnapshotEntry {
     name: String,
@@ -201,6 +242,10 @@ pub fn extract_manifest(paths: &UpstreamPaths) -> std::io::Result<ExtractedManif
         tools: extract_tools(&tools_source),
         bootstrap: extract_bootstrap_plan(&cli_source),
     })
+}
+
+pub fn load_parity_manifest(paths: &UpstreamPaths) -> std::io::Result<ParityManifest> {
+    read_json(&paths.parity_manifest_path())
 }
 
 pub fn load_plugin_catalog(paths: &UpstreamPaths) -> std::io::Result<PluginCatalog> {

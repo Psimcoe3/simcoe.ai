@@ -24,7 +24,8 @@ use api::{
 use app::LiveCli;
 use args::{default_permission_mode, parse_args, AllowedToolSet, CliAction, CliOutputFormat};
 use commands::{
-    render_slash_command_help, resume_supported_slash_commands, slash_command_specs, SlashCommand,
+    render_resume_command_help, render_slash_command_help, resume_supported_slash_commands,
+    slash_command_specs, SlashCommand,
 };
 use compat_harness::{extract_manifest, PluginSurfaceKind, UpstreamPaths};
 use format::{
@@ -56,6 +57,11 @@ use runtime::{
     ToolError, ToolExecutor, UsageTracker,
 };
 use serde_json::json;
+use session_manager::{
+    list_managed_sessions, load_active_session_handle, render_session_list,
+    resolve_session_reference, session_handle_from_path, sessions_dir, set_active_session_handle,
+    ManagedSessionSummary, SessionHandle,
+};
 use tools::{execute_tool, mvp_tool_specs, ToolSpec};
 use tui::status_bar::StatusBarHandle;
 
@@ -180,6 +186,17 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             output_format,
         } => run_tasks(task, output_format)
             .map_err(|error| with_cli_error_context(error, 1, Some("tasks"), None))?,
+        CliAction::Export {
+            path,
+            output_format,
+        } => run_export(path, output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("export"), None))?,
+        CliAction::Session {
+            action,
+            target,
+            output_format,
+        } => run_session(action, target, output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("session"), None))?,
         CliAction::Version { output_format } => run_version(output_format)
             .map_err(|error| with_cli_error_context(error, 1, Some("version"), None))?,
         CliAction::ResumeSession {
@@ -195,7 +212,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             allowed_tools,
             permission_mode,
         } => {
-            let mut cli = LiveCli::new(model, true, allowed_tools, permission_mode)
+            let mut cli = LiveCli::new(model, true, allowed_tools, permission_mode, false)
                 .map_err(|error| with_cli_error_context(error, 1, Some("prompt"), None))?;
             cli.run_turn_with_output(&prompt, output_format)
                 .map_err(|error| with_cli_error_context(error, 1, Some("prompt"), None))?;
@@ -271,7 +288,8 @@ fn inferred_error_metadata(args: &[String]) -> (Option<String>, Option<String>) 
             }
             "dump-manifests" | "bootstrap-plan" | "system-prompt" | "config" | "hooks" | "mcp"
             | "memory" | "agents" | "plugin" | "reload-plugins" | "remote-env" | "remote-setup"
-            | "tools" | "doctor" | "skills" | "tasks" | "login" | "logout" | "init" | "prompt" => {
+            | "tools" | "doctor" | "skills" | "tasks" | "export" | "session" | "login"
+            | "logout" | "init" | "prompt" => {
                 return (Some(args[index].clone()), None);
             }
             arg if !arg.starts_with('/') => return (Some("prompt".to_string()), None),
@@ -418,6 +436,101 @@ fn inspection_payload(
         payload.insert(selector_key.to_string(), json!(selector_value));
     }
     serde_json::Value::Object(payload)
+}
+
+fn managed_session_summary_payload(
+    summary: &ManagedSessionSummary,
+    active_session_id: Option<&str>,
+) -> serde_json::Value {
+    json!({
+        "id": summary.id,
+        "path": summary.path.display().to_string(),
+        "modified_epoch_secs": summary.modified_epoch_secs,
+        "message_count": summary.message_count,
+        "is_active": active_session_id.is_some_and(|id| summary.id == id),
+    })
+}
+
+fn session_handle_payload(handle: &SessionHandle, message_count: usize) -> serde_json::Value {
+    json!({
+        "id": handle.id,
+        "path": handle.path.display().to_string(),
+        "message_count": message_count,
+    })
+}
+
+fn session_switch_report(handle: &SessionHandle, message_count: usize) -> String {
+    format!(
+        "Session switched\n  Active session   {}\n  File             {}\n  Messages         {}",
+        handle.id,
+        handle.path.display(),
+        message_count,
+    )
+}
+
+fn session_list_report() -> Result<String, Box<dyn std::error::Error>> {
+    let active_session_id = load_active_session_handle()?.map(|handle| handle.id);
+    render_session_list(active_session_id.as_deref())
+}
+
+fn session_list_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let active_session = load_active_session_handle()?;
+    let active_session_id = active_session.as_ref().map(|handle| handle.id.clone());
+    let active_session_id_ref = active_session_id.as_deref();
+    let sessions = list_managed_sessions()?;
+    let content = render_session_list(active_session_id_ref)?;
+    let mut payload = content_payload_map("session", content);
+    payload.insert("action".to_string(), json!("list"));
+    payload.insert(
+        "directory".to_string(),
+        json!(sessions_dir()?.display().to_string()),
+    );
+    payload.insert(
+        "active_session".to_string(),
+        match active_session {
+            Some(handle) => session_handle_payload(
+                &handle,
+                Session::load_from_path(&handle.path)
+                    .map(|session| session.messages.len())
+                    .unwrap_or_default(),
+            ),
+            None => serde_json::Value::Null,
+        },
+    );
+    payload.insert(
+        "sessions".to_string(),
+        json!(sessions
+            .iter()
+            .map(|session| managed_session_summary_payload(session, active_session_id_ref))
+            .collect::<Vec<_>>()),
+    );
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn switch_managed_session(
+    target: &str,
+) -> Result<(SessionHandle, usize), Box<dyn std::error::Error>> {
+    let handle = resolve_session_reference(target)?;
+    let message_count = Session::load_from_path(&handle.path)?.messages.len();
+    set_active_session_handle(&handle)?;
+    Ok((handle, message_count))
+}
+
+fn session_switch_payload(
+    handle: &SessionHandle,
+    message_count: usize,
+) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let mut payload = content_payload_map("session", session_switch_report(handle, message_count));
+    payload.insert("action".to_string(), json!("switch"));
+    payload.insert(
+        "directory".to_string(),
+        json!(sessions_dir()?.display().to_string()),
+    );
+    payload.insert(
+        "active_session".to_string(),
+        session_handle_payload(handle, message_count),
+    );
+    Ok(serde_json::Value::Object(payload))
 }
 
 fn parse_runtime_json_value(rendered: String) -> Result<serde_json::Value, io::Error> {
@@ -1037,7 +1150,7 @@ fn run_repl(
     allowed_tools: Option<AllowedToolSet>,
     permission_mode: PermissionMode,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut cli = LiveCli::new(model, true, allowed_tools, permission_mode)?;
+    let mut cli = LiveCli::new(model, true, allowed_tools, permission_mode, true)?;
     let mut editor = input::LineEditor::new("> ", slash_command_completion_candidates());
     println!("{}", cli.startup_banner());
     let _ = cli.render_status_bar();
@@ -1323,6 +1436,102 @@ fn run_tasks(
     output_format: CliOutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     run_selector_text_or_structured_command(task, output_format, render_tasks_report, tasks_payload)
+}
+
+fn load_active_managed_session() -> Result<(SessionHandle, Session), Box<dyn std::error::Error>> {
+    let handle = load_active_session_handle()?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "no active managed session; start the REPL or run `claw session switch <session-id>` first",
+        )
+    })?;
+    let session = Session::load_from_path(&handle.path)?;
+    Ok((handle, session))
+}
+
+fn export_report(export_path: &Path, message_count: usize) -> String {
+    format!(
+        "Export\n  Result           wrote transcript\n  File             {}\n  Messages         {}",
+        export_path.display(),
+        message_count,
+    )
+}
+
+fn export_payload(
+    handle: &SessionHandle,
+    export_path: &Path,
+    message_count: usize,
+) -> serde_json::Value {
+    let mut payload = content_payload_map("export", export_report(export_path, message_count));
+    payload.insert("session_id".to_string(), json!(handle.id));
+    payload.insert(
+        "session_path".to_string(),
+        json!(handle.path.display().to_string()),
+    );
+    payload.insert(
+        "export_path".to_string(),
+        json!(export_path.display().to_string()),
+    );
+    payload.insert("message_count".to_string(), json!(message_count));
+    serde_json::Value::Object(payload)
+}
+
+fn export_active_session(
+    requested_path: Option<String>,
+) -> Result<(SessionHandle, PathBuf, usize), Box<dyn std::error::Error>> {
+    let (handle, session) = load_active_managed_session()?;
+    let export_path = resolve_export_path(requested_path.as_deref(), &session)?;
+    fs::write(&export_path, render_export_text(&session))?;
+    Ok((handle, export_path, session.messages.len()))
+}
+
+fn run_export(
+    requested_path: Option<String>,
+    output_format: CliOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (handle, export_path, message_count) = export_active_session(requested_path)?;
+    let report_path = export_path.clone();
+    let payload_path = export_path.clone();
+    run_text_or_structured_command(
+        output_format,
+        move || Ok(export_report(&report_path, message_count)),
+        move || Ok(export_payload(&handle, &payload_path, message_count)),
+    )
+}
+
+fn run_session(
+    action: Option<String>,
+    target: Option<String>,
+    output_format: CliOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match action.as_deref() {
+        None | Some("list") => {
+            run_text_or_structured_command(output_format, session_list_report, session_list_payload)
+        }
+        Some("switch") => {
+            let target = target.ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "session switch requires a session id or path",
+                )
+            })?;
+            let (handle, message_count) = switch_managed_session(&target)?;
+            let report_handle = handle.clone();
+            let payload_handle = handle.clone();
+            run_text_or_structured_command(
+                output_format,
+                move || Ok(session_switch_report(&report_handle, message_count)),
+                move || session_switch_payload(&payload_handle, message_count),
+            )
+        }
+        Some(other) => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "unknown session action '{other}'. Use `session list` or `session switch <session-id>`."
+            ),
+        )
+        .into()),
+    }
 }
 
 fn oauth_config_for_login<'a>(
@@ -1675,6 +1884,7 @@ fn resume_session(
         ) as Box<dyn std::error::Error>
     })?;
 
+    let mut current_session_path = session_path.to_path_buf();
     let initial_message_count = session.messages.len();
 
     if commands.is_empty() {
@@ -1689,7 +1899,7 @@ fn resume_session(
                 println!(
                     "{}",
                     build_resume_json_payload(
-                        session_path,
+                        current_session_path.as_path(),
                         initial_message_count,
                         Vec::new(),
                         initial_message_count,
@@ -1704,7 +1914,7 @@ fn resume_session(
                 println!(
                     "{}",
                     build_resume_summary_record(
-                        session_path,
+                        current_session_path.as_path(),
                         initial_message_count,
                         initial_message_count,
                         0,
@@ -1731,12 +1941,14 @@ fn resume_session(
                     .with_command(raw_command.clone()),
             ));
         };
-        match run_resume_command(session_path, &session, &command) {
+        match run_resume_command(current_session_path.as_path(), &session, &command) {
             Ok(ResumeCommandOutcome {
                 session: next_session,
+                session_path: next_session_path,
                 message,
             }) => {
-                let changed_session = next_session != session;
+                let changed_session =
+                    next_session != session || next_session_path != current_session_path;
                 match output_format {
                     CliOutputFormat::Text => {
                         if let Some(message) = &message {
@@ -1761,6 +1973,7 @@ fn resume_session(
                         )
                     ),
                 }
+                current_session_path = next_session_path;
                 session = next_session;
             }
             Err(error) => {
@@ -1778,7 +1991,7 @@ fn resume_session(
         CliOutputFormat::Json => println!(
             "{}",
             build_resume_json_payload(
-                session_path,
+                current_session_path.as_path(),
                 initial_message_count,
                 command_records,
                 session.messages.len(),
@@ -1787,7 +2000,7 @@ fn resume_session(
         CliOutputFormat::Ndjson => println!(
             "{}",
             build_resume_summary_record(
-                session_path,
+                current_session_path.as_path(),
                 initial_message_count,
                 session.messages.len(),
                 commands.len(),
@@ -1809,7 +2022,20 @@ fn restored_session_message(session_path: &Path, message_count: usize) -> String
 #[derive(Debug, Clone)]
 struct ResumeCommandOutcome {
     session: Session,
+    session_path: PathBuf,
     message: Option<String>,
+}
+
+fn resume_command_outcome(
+    session_path: &Path,
+    session: Session,
+    message: Option<String>,
+) -> ResumeCommandOutcome {
+    ResumeCommandOutcome {
+        session,
+        session_path: session_path.to_path_buf(),
+        message,
+    }
 }
 
 fn render_resume_read_only_message(
@@ -1942,10 +2168,11 @@ fn run_resume_command(
     command: &SlashCommand,
 ) -> Result<ResumeCommandOutcome, Box<dyn std::error::Error>> {
     match command {
-        SlashCommand::Help => Ok(ResumeCommandOutcome {
-            session: session.clone(),
-            message: Some(render_repl_help()),
-        }),
+        SlashCommand::Help => Ok(resume_command_outcome(
+            session_path,
+            session.clone(),
+            Some(render_resume_command_help()),
+        )),
         SlashCommand::Compact => {
             let result = runtime::compact_session(
                 session,
@@ -1958,36 +2185,40 @@ fn run_resume_command(
             let kept = result.compacted_session.messages.len();
             let skipped = removed == 0;
             result.compacted_session.save_to_path(session_path)?;
-            Ok(ResumeCommandOutcome {
-                session: result.compacted_session,
-                message: Some(format_compact_report(removed, kept, skipped)),
-            })
+            Ok(resume_command_outcome(
+                session_path,
+                result.compacted_session,
+                Some(format_compact_report(removed, kept, skipped)),
+            ))
         }
         SlashCommand::Clear { confirm } => {
             if !confirm {
-                return Ok(ResumeCommandOutcome {
-                    session: session.clone(),
-                    message: Some(
+                return Ok(resume_command_outcome(
+                    session_path,
+                    session.clone(),
+                    Some(
                         "clear: confirmation required; rerun with /clear --confirm".to_string(),
                     ),
-                });
+                ));
             }
             let cleared = Session::new();
             cleared.save_to_path(session_path)?;
-            Ok(ResumeCommandOutcome {
-                session: cleared,
-                message: Some(format!(
+            Ok(resume_command_outcome(
+                session_path,
+                cleared,
+                Some(format!(
                     "Cleared resumed session file {}.",
                     session_path.display()
                 )),
-            })
+            ))
         }
         SlashCommand::Status => {
             let tracker = UsageTracker::from_session(session);
             let usage = tracker.cumulative_usage();
-            Ok(ResumeCommandOutcome {
-                session: session.clone(),
-                message: Some(format_status_report(
+            Ok(resume_command_outcome(
+                session_path,
+                session.clone(),
+                Some(format_status_report(
                     "restored-session",
                     StatusUsage {
                         message_count: session.messages.len(),
@@ -1999,33 +2230,69 @@ fn run_resume_command(
                     default_permission_mode().as_str(),
                     &status_context(Some(session_path))?,
                 )),
-            })
+            ))
         }
         SlashCommand::Cost => {
             let usage = UsageTracker::from_session(session).cumulative_usage();
-            Ok(ResumeCommandOutcome {
-                session: session.clone(),
-                message: Some(format_cost_report(usage)),
-            })
+            Ok(resume_command_outcome(
+                session_path,
+                session.clone(),
+                Some(format_cost_report(usage)),
+            ))
         }
         SlashCommand::Export { path } => {
             let export_path = resolve_export_path(path.as_deref(), session)?;
             fs::write(&export_path, render_export_text(session))?;
-            Ok(ResumeCommandOutcome {
-                session: session.clone(),
-                message: Some(format!(
+            Ok(resume_command_outcome(
+                session_path,
+                session.clone(),
+                Some(format!(
                     "Export\n  Result           wrote transcript\n  File             {}\n  Messages         {}",
                     export_path.display(),
                     session.messages.len(),
                 )),
-            })
+            ))
+        }
+        SlashCommand::Session { action, target } => match action.as_deref() {
+            None | Some("list") => {
+                let active_session = session_handle_from_path(session_path);
+                Ok(resume_command_outcome(
+                    session_path,
+                    session.clone(),
+                    Some(render_session_list(Some(&active_session.id))?),
+                ))
+            }
+            Some("switch") => {
+                let target = target.as_deref().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "session switch requires a session id or path",
+                    )
+                })?;
+                let handle = resolve_session_reference(target)?;
+                let next_session = Session::load_from_path(&handle.path)?;
+                let message_count = next_session.messages.len();
+                Ok(ResumeCommandOutcome {
+                    session: next_session,
+                    session_path: handle.path.clone(),
+                    message: Some(session_switch_report(&handle, message_count)),
+                })
+            }
+            Some(other) => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "unknown session action '{other}'. Use /session list or /session switch <session-id>."
+                ),
+            )
+            .into()),
         }
         command => {
             if let Some(message) = render_resume_read_only_message(command)? {
-                Ok(ResumeCommandOutcome {
-                    session: session.clone(),
-                    message: Some(message),
-                })
+                Ok(resume_command_outcome(
+                    session_path,
+                    session.clone(),
+                    Some(message),
+                ))
             } else {
                 Err("unsupported resumed slash command".into())
             }
@@ -3083,6 +3350,8 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     writeln!(out, "  claw doctor")?;
     writeln!(out, "  claw skills [skill]")?;
     writeln!(out, "  claw tasks [id]")?;
+    writeln!(out, "  claw export [file]")?;
+    writeln!(out, "  claw session [list|switch <session-id>]")?;
     writeln!(out, "  claw login")?;
     writeln!(out, "      OAuth login; supports text and ndjson output")?;
     writeln!(out, "  claw logout")?;
@@ -3167,7 +3436,9 @@ fn print_help() {
 
 #[cfg(test)]
 mod tests {
-    use crate::args::{normalize_permission_mode, resolve_model_alias, CliOutputFormat};
+    use crate::args::{
+        named_cli_subcommands, normalize_permission_mode, resolve_model_alias, CliOutputFormat,
+    };
     use crate::VERSION;
 
     use super::format::{
@@ -3185,10 +3456,11 @@ mod tests {
         format_tool_call_start, format_tool_result, inferred_error_metadata,
         inferred_error_output_format, oauth_config_for_login, parse_args,
         parse_git_status_metadata, print_help_to, push_output_block, response_to_events,
-        resume_supported_slash_commands, version_payload, CliAction, CliExitError, CliToolExecutor,
-        SimcoeRuntimeClient, SlashCommand, DEFAULT_MODEL,
+        resume_supported_slash_commands, run_resume_command, slash_command_specs, version_payload,
+        CliAction, CliExitError, CliToolExecutor, SimcoeRuntimeClient, SlashCommand, DEFAULT_MODEL,
     };
     use api::{MessageResponse, OutputContentBlock, Usage};
+    use compat_harness::{load_parity_manifest, ParityStatus, UpstreamPaths};
     use runtime::{
         ApiRequest, AssistantEvent, ContentBlock, ConversationMessage, MessageRole, PermissionMode,
     };
@@ -3213,11 +3485,179 @@ mod tests {
         );
     }
 
+    fn current_repo_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../..")
+            .canonicalize()
+            .expect("canonical repo root")
+    }
+
+    fn current_parity_manifest() -> compat_harness::ParityManifest {
+        load_parity_manifest(&UpstreamPaths::from_repo_root(current_repo_root()))
+            .expect("load parity manifest")
+    }
+
+    fn cli_action_name(action: &CliAction) -> &'static str {
+        match action {
+            CliAction::DumpManifests { .. } => "dump-manifests",
+            CliAction::BootstrapPlan { .. } => "bootstrap-plan",
+            CliAction::PrintSystemPrompt { .. } => "system-prompt",
+            CliAction::Config { .. } => "config",
+            CliAction::Hooks { .. } => "hooks",
+            CliAction::Mcp { .. } => "mcp",
+            CliAction::Memory { .. } => "memory",
+            CliAction::Agents { .. } => "agents",
+            CliAction::Plugin { .. } => "plugin",
+            CliAction::ReloadPlugins { .. } => "reload-plugins",
+            CliAction::RemoteEnv { .. } => "remote-env",
+            CliAction::RemoteSetup { .. } => "remote-setup",
+            CliAction::Tools { .. } => "tools",
+            CliAction::Doctor { .. } => "doctor",
+            CliAction::Skills { .. } => "skills",
+            CliAction::Tasks { .. } => "tasks",
+            CliAction::Export { .. } => "export",
+            CliAction::Session { .. } => "session",
+            CliAction::Version { .. } => "version",
+            CliAction::ResumeSession { .. } => "resume",
+            CliAction::Prompt { .. } => "prompt",
+            CliAction::Login { .. } => "login",
+            CliAction::Logout { .. } => "logout",
+            CliAction::Init { .. } => "init",
+            CliAction::Repl { .. } => "repl",
+            CliAction::Help => "help",
+        }
+    }
+
+    fn minimal_named_cli_args(command: &str) -> Vec<String> {
+        match command {
+            "prompt" => vec![command.to_string(), "test prompt".to_string()],
+            _ => vec![command.to_string()],
+        }
+    }
+
     #[test]
     fn runtime_client_initializes_without_auth() {
         assert!(
             SimcoeRuntimeClient::new(DEFAULT_MODEL.to_string(), true, false, None, None,).is_ok()
         );
+    }
+
+    #[test]
+    fn parity_manifest_matches_slash_command_registry() {
+        let manifest = current_parity_manifest();
+        let expected = manifest
+            .slash_commands
+            .into_iter()
+            .map(|command| (command.name, command.resume_supported))
+            .collect::<Vec<_>>();
+        let actual = slash_command_specs()
+            .iter()
+            .map(|spec| (spec.name.to_string(), spec.resume_supported))
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn parity_manifest_matches_named_cli_subcommands() {
+        let manifest = current_parity_manifest();
+        let expected = manifest
+            .named_cli_subcommands
+            .into_iter()
+            .map(|command| command.name)
+            .collect::<Vec<_>>();
+        let actual = named_cli_subcommands()
+            .iter()
+            .map(|command| (*command).to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, expected);
+
+        for command in named_cli_subcommands() {
+            let args = minimal_named_cli_args(command);
+            let action = parse_args(&args).expect("named CLI subcommand should parse");
+            assert_eq!(cli_action_name(&action), *command);
+        }
+    }
+
+    #[test]
+    fn parity_manifest_matches_native_tool_registry() {
+        let manifest = current_parity_manifest();
+        let actual = mvp_tool_specs()
+            .into_iter()
+            .map(|spec| spec.name.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(manifest.native_tools, actual);
+    }
+
+    #[test]
+    fn parity_manifest_tracks_current_subsystem_status_rows() {
+        let manifest = current_parity_manifest();
+        let expected_names = vec![
+            "auth",
+            "sessions",
+            "cli",
+            "structured-output",
+            "tools",
+            "hooks",
+            "skills",
+            "plugins",
+            "remote",
+            "assistant",
+            "services",
+        ];
+        let actual_names = manifest
+            .subsystems
+            .iter()
+            .map(|subsystem| subsystem.name.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual_names, expected_names);
+        assert_eq!(
+            manifest
+                .subsystems
+                .iter()
+                .find(|subsystem| subsystem.name == "plugins")
+                .expect("plugins row")
+                .status,
+            ParityStatus::InspectionOnly
+        );
+        assert_eq!(
+            manifest
+                .subsystems
+                .iter()
+                .find(|subsystem| subsystem.name == "remote")
+                .expect("remote row")
+                .status,
+            ParityStatus::DiagnosticOnly
+        );
+        assert_eq!(
+            manifest
+                .subsystems
+                .iter()
+                .find(|subsystem| subsystem.name == "cli")
+                .expect("cli row")
+                .status,
+            ParityStatus::Partial
+        );
+    }
+
+    #[test]
+    fn resumed_help_uses_resume_filtered_help() {
+        let session = runtime::Session::new();
+        let session_path = PathBuf::from("session.json");
+
+        let outcome = run_resume_command(session_path.as_path(), &session, &SlashCommand::Help)
+            .expect("resumed help should render");
+        let message = outcome.message.expect("help message");
+
+        assert!(message.contains("Resume-compatible slash commands"));
+        assert!(message.contains("/help"));
+        assert!(message.contains("/config [env|hooks|model]"));
+        assert!(message.contains("/session [list|switch <session-id>]"));
+        assert!(!message.contains("/review [context]"));
+        assert!(!message.contains("/login"));
     }
 
     #[test]
@@ -3488,6 +3928,35 @@ mod tests {
             CliAction::Tools {
                 tool: Some("grep_search".to_string()),
                 output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&["session".to_string()]).expect("session should parse"),
+            CliAction::Session {
+                action: None,
+                target: None,
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&["export".to_string()]).expect("export should parse"),
+            CliAction::Export {
+                path: None,
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&[
+                "--output-format=json".to_string(),
+                "session".to_string(),
+                "switch".to_string(),
+                "session-123".to_string(),
+            ])
+            .expect("session switch should parse"),
+            CliAction::Session {
+                action: Some("switch".to_string()),
+                target: Some("session-123".to_string()),
+                output_format: CliOutputFormat::Json,
             }
         );
         assert_eq!(
@@ -3971,8 +4440,215 @@ mod tests {
                 "diff",
                 "version",
                 "export",
+                "session",
             ]
         );
+    }
+
+    fn sample_session(message_count: usize) -> runtime::Session {
+        runtime::Session {
+            version: 1,
+            messages: (0..message_count)
+                .map(|index| runtime::ConversationMessage::user_text(format!("message {index}")))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn session_list_payload_reports_saved_and_active_sessions() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("session-list-payload");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let sessions_root = nested_cwd.join(".simcoe").join("sessions");
+        let session_a_path = sessions_root.join("session-alpha.json");
+        let session_b_path = sessions_root.join("session-beta.json");
+        fs::create_dir_all(&sessions_root).expect("create sessions root");
+        sample_session(2)
+            .save_to_path(&session_a_path)
+            .expect("write first session");
+        sample_session(1)
+            .save_to_path(&session_b_path)
+            .expect("write second session");
+
+        {
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+            let active = crate::session_manager::session_handle_from_path(&session_a_path);
+            crate::session_manager::set_active_session_handle(&active).expect("set active session");
+
+            let report = super::session_list_report().expect("session list report should render");
+            assert!(report.contains("Sessions"));
+            assert!(report.contains("session-alpha"));
+            assert!(report.contains("● current"));
+
+            let payload =
+                super::session_list_payload().expect("session list payload should render");
+            assert_eq!(payload["type"], json!("session"));
+            assert_eq!(payload["action"], json!("list"));
+            assert_eq!(payload["active_session"]["id"], json!("session-alpha"));
+            assert!(payload["sessions"].as_array().is_some_and(
+                |sessions: &Vec<serde_json::Value>| sessions
+                    .iter()
+                    .any(|session| session["id"] == json!("session-alpha")
+                        && session["is_active"] == json!(true))
+            ));
+            assert!(payload["sessions"].as_array().is_some_and(
+                |sessions: &Vec<serde_json::Value>| sessions
+                    .iter()
+                    .any(|session| session["id"] == json!("session-beta")
+                        && session["is_active"] == json!(false))
+            ));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn direct_session_switch_updates_active_session_pointer() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("session-switch-direct");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let sessions_root = nested_cwd.join(".simcoe").join("sessions");
+        let session_path = sessions_root.join("session-target.json");
+        fs::create_dir_all(&sessions_root).expect("create sessions root");
+        sample_session(3)
+            .save_to_path(&session_path)
+            .expect("write target session");
+
+        {
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+            let (handle, message_count) = super::switch_managed_session("session-target")
+                .expect("session switch should succeed");
+            let active = crate::session_manager::load_active_session_handle()
+                .expect("load active session")
+                .expect("active session should exist");
+            assert_eq!(active.id, "session-target");
+            assert_eq!(message_count, 3);
+
+            let payload = super::session_switch_payload(&handle, message_count)
+                .expect("session switch payload should render");
+            assert_eq!(payload["type"], json!("session"));
+            assert_eq!(payload["action"], json!("switch"));
+            assert_eq!(payload["active_session"]["id"], json!("session-target"));
+            assert_eq!(payload["active_session"]["message_count"], json!(3));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn direct_export_uses_active_managed_session() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("session-export-direct");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let sessions_root = nested_cwd.join(".simcoe").join("sessions");
+        let session_path = sessions_root.join("session-export.json");
+        fs::create_dir_all(&sessions_root).expect("create sessions root");
+        sample_session(2)
+            .save_to_path(&session_path)
+            .expect("write export session");
+
+        {
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+            let active = crate::session_manager::session_handle_from_path(&session_path);
+            crate::session_manager::set_active_session_handle(&active).expect("set active session");
+
+            let (handle, export_path, message_count) =
+                super::export_active_session(Some("session-notes".to_string()))
+                    .expect("direct export should succeed");
+            assert_eq!(handle.id, "session-export");
+            assert_eq!(message_count, 2);
+            assert!(export_path.ends_with("session-notes.txt"));
+
+            let exported = fs::read_to_string(&export_path).expect("read exported transcript");
+            assert!(exported.contains("## 1. user"));
+            assert!(exported.contains("message 0"));
+
+            let payload = super::export_payload(&handle, &export_path, message_count);
+            assert_eq!(payload["type"], json!("export"));
+            assert_eq!(payload["session_id"], json!("session-export"));
+            assert_eq!(payload["message_count"], json!(2));
+            assert!(payload["export_path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("session-notes.txt")));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn resumed_session_command_lists_and_switches_sessions() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("session-resume-command");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let sessions_root = nested_cwd.join(".simcoe").join("sessions");
+        let session_a_path = sessions_root.join("session-alpha.json");
+        let session_b_path = sessions_root.join("session-beta.json");
+        fs::create_dir_all(&sessions_root).expect("create sessions root");
+        let session_a = sample_session(1);
+        let session_b = sample_session(4);
+        session_a
+            .save_to_path(&session_a_path)
+            .expect("write session alpha");
+        session_b
+            .save_to_path(&session_b_path)
+            .expect("write session beta");
+
+        {
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let listed = run_resume_command(
+                session_a_path.as_path(),
+                &session_a,
+                &SlashCommand::Session {
+                    action: Some("list".to_string()),
+                    target: None,
+                },
+            )
+            .expect("resume session list should succeed");
+            assert_eq!(listed.session_path, session_a_path);
+            assert!(listed.message.as_deref().is_some_and(|message| message
+                .contains("session-alpha")
+                && message.contains("● current")));
+
+            let switched = run_resume_command(
+                session_a_path.as_path(),
+                &session_a,
+                &SlashCommand::Session {
+                    action: Some("switch".to_string()),
+                    target: Some("session-beta".to_string()),
+                },
+            )
+            .expect("resume session switch should succeed");
+            assert_eq!(switched.session_path, session_b_path);
+            assert_eq!(switched.session.messages.len(), 4);
+            assert!(switched
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains("Session switched")
+                    && message.contains("session-beta")));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
     }
 
     fn write_plugin_snapshots(repo_root: &std::path::Path) {

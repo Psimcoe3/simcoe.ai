@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use runtime::Session;
@@ -19,17 +20,72 @@ pub(crate) struct ManagedSessionSummary {
     pub(crate) message_count: usize,
 }
 
-fn sessions_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+pub(crate) fn sessions_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let cwd = env::current_dir()?;
     let path = cwd.join(".simcoe").join("sessions");
     fs::create_dir_all(&path)?;
     Ok(path)
 }
 
+fn active_session_marker_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    Ok(sessions_dir()?.join(".active"))
+}
+
+fn absolute_session_path(path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        Ok(env::current_dir()?.join(path))
+    }
+}
+
+pub(crate) fn session_handle_from_path(path: &Path) -> SessionHandle {
+    let id = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+    SessionHandle {
+        id,
+        path: path.to_path_buf(),
+    }
+}
+
 pub(crate) fn create_managed_session_handle() -> Result<SessionHandle, Box<dyn std::error::Error>> {
     let id = generate_session_id();
     let path = sessions_dir()?.join(format!("{id}.json"));
     Ok(SessionHandle { id, path })
+}
+
+pub(crate) fn load_active_session_handle(
+) -> Result<Option<SessionHandle>, Box<dyn std::error::Error>> {
+    let marker_path = active_session_marker_path()?;
+    let reference = match fs::read_to_string(&marker_path) {
+        Ok(reference) => reference,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let reference = reference.trim();
+    if reference.is_empty() {
+        return Ok(None);
+    }
+
+    let path = absolute_session_path(Path::new(reference))?;
+    if !path.exists() {
+        let _ = fs::remove_file(marker_path);
+        return Ok(None);
+    }
+
+    Ok(Some(session_handle_from_path(&path)))
+}
+
+pub(crate) fn set_active_session_handle(
+    handle: &SessionHandle,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let marker_path = active_session_marker_path()?;
+    let session_path = absolute_session_path(&handle.path)?;
+    fs::write(marker_path, session_path.display().to_string())?;
+    Ok(())
 }
 
 fn generate_session_id() -> String {
@@ -52,15 +108,11 @@ pub(crate) fn resolve_session_reference(
     if !path.exists() {
         return Err(format!("session not found: {reference}").into());
     }
-    let id = path
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or(reference)
-        .to_string();
-    Ok(SessionHandle { id, path })
+    Ok(session_handle_from_path(&path))
 }
 
-fn list_managed_sessions() -> Result<Vec<ManagedSessionSummary>, Box<dyn std::error::Error>> {
+pub(crate) fn list_managed_sessions(
+) -> Result<Vec<ManagedSessionSummary>, Box<dyn std::error::Error>> {
     let mut sessions = Vec::new();
     for entry in fs::read_dir(sessions_dir()?)? {
         let entry = entry?;
@@ -95,7 +147,7 @@ fn list_managed_sessions() -> Result<Vec<ManagedSessionSummary>, Box<dyn std::er
 }
 
 pub(crate) fn render_session_list(
-    active_session_id: &str,
+    active_session_id: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let sessions = list_managed_sessions()?;
     let mut lines = vec![
@@ -107,7 +159,7 @@ pub(crate) fn render_session_list(
         return Ok(lines.join("\n"));
     }
     for session in sessions {
-        let marker = if session.id == active_session_id {
+        let marker = if active_session_id.is_some_and(|id| session.id == id) {
             "● current"
         } else {
             "○ saved"
