@@ -291,6 +291,81 @@ pub fn clear_oauth_credentials() -> io::Result<()> {
     write_credentials_root(&path, &root)
 }
 
+pub fn load_mcp_oauth_credentials(server_key: &str) -> io::Result<Option<OAuthTokenSet>> {
+    let server_key = validate_credentials_namespace_key(server_key)?;
+    let path = credentials_path()?;
+    let root = read_credentials_root(&path)?;
+    let Some(mcp) = root.get("mcp") else {
+        return Ok(None);
+    };
+    if mcp.is_null() {
+        return Ok(None);
+    }
+    let namespace = mcp.as_object().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "credentials.mcp must contain a JSON object",
+        )
+    })?;
+    let Some(stored) = namespace.get(&server_key) else {
+        return Ok(None);
+    };
+    if stored.is_null() {
+        return Ok(None);
+    }
+    let stored = serde_json::from_value::<StoredOAuthCredentials>(stored.clone())
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    Ok(Some(stored.into()))
+}
+
+pub fn save_mcp_oauth_credentials(server_key: &str, token_set: &OAuthTokenSet) -> io::Result<()> {
+    let server_key = validate_credentials_namespace_key(server_key)?;
+    let path = credentials_path()?;
+    let mut root = read_credentials_root(&path)?;
+    let mut namespace = match root.remove("mcp") {
+        Some(Value::Object(object)) => object,
+        Some(Value::Null) | None => Map::new(),
+        Some(_) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "credentials.mcp must contain a JSON object",
+            ));
+        }
+    };
+    namespace.insert(
+        server_key,
+        serde_json::to_value(StoredOAuthCredentials::from(token_set.clone()))
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+    );
+    root.insert("mcp".to_string(), Value::Object(namespace));
+    write_credentials_root(&path, &root)
+}
+
+pub fn clear_mcp_oauth_credentials(server_key: &str) -> io::Result<()> {
+    let server_key = validate_credentials_namespace_key(server_key)?;
+    let path = credentials_path()?;
+    let mut root = read_credentials_root(&path)?;
+    let Some(mcp) = root.remove("mcp") else {
+        return Ok(());
+    };
+
+    let mut namespace = match mcp {
+        Value::Object(object) => object,
+        Value::Null => return Ok(()),
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "credentials.mcp must contain a JSON object",
+            ));
+        }
+    };
+    namespace.remove(&server_key);
+    if !namespace.is_empty() {
+        root.insert("mcp".to_string(), Value::Object(namespace));
+    }
+    write_credentials_root(&path, &root)
+}
+
 pub fn parse_oauth_callback_request_target(target: &str) -> Result<OAuthCallbackParams, String> {
     let (path, query) = target
         .split_once('?')
@@ -330,6 +405,17 @@ fn credentials_home_dir() -> io::Result<PathBuf> {
     let home = std::env::var_os("HOME")
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME is not set"))?;
     Ok(PathBuf::from(home).join(".simcoe"))
+}
+
+fn validate_credentials_namespace_key(value: &str) -> io::Result<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "credentials namespace key must not be empty",
+        ));
+    }
+    Ok(trimmed.to_string())
 }
 
 fn read_credentials_root(path: &PathBuf) -> io::Result<Map<String, Value>> {
@@ -451,10 +537,12 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        clear_oauth_credentials, code_challenge_s256, credentials_path, generate_pkce_pair,
-        generate_state, load_oauth_credentials, loopback_redirect_uri, parse_oauth_callback_query,
-        parse_oauth_callback_request_target, save_oauth_credentials, OAuthAuthorizationRequest,
-        OAuthConfig, OAuthRefreshRequest, OAuthTokenExchangeRequest, OAuthTokenSet,
+        clear_mcp_oauth_credentials, clear_oauth_credentials, code_challenge_s256,
+        credentials_path, generate_pkce_pair, generate_state, load_mcp_oauth_credentials,
+        load_oauth_credentials, loopback_redirect_uri, parse_oauth_callback_query,
+        parse_oauth_callback_request_target, save_mcp_oauth_credentials, save_oauth_credentials,
+        OAuthAuthorizationRequest, OAuthConfig, OAuthRefreshRequest, OAuthTokenExchangeRequest,
+        OAuthTokenSet,
     };
 
     fn sample_config() -> OAuthConfig {
@@ -566,6 +654,49 @@ mod tests {
         let cleared = std::fs::read_to_string(&path).expect("read cleared file");
         assert!(cleared.contains("\"other\": \"value\""));
         assert!(!cleared.contains("\"oauth\""));
+
+        std::env::remove_var("SIMCOE_CONFIG_HOME");
+        std::fs::remove_dir_all(config_home).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn mcp_oauth_credentials_round_trip_and_clear_preserves_other_fields() {
+        let _guard = env_lock();
+        let config_home = temp_config_home();
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+        let path = credentials_path().expect("credentials path");
+        std::fs::create_dir_all(path.parent().expect("parent")).expect("create parent");
+        std::fs::write(
+            &path,
+            "{\"other\":\"value\",\"oauth\":{\"accessToken\":\"root-token\"}}\n",
+        )
+        .expect("seed credentials");
+
+        let token_set = OAuthTokenSet {
+            access_token: "mcp-access-token".to_string(),
+            refresh_token: Some("mcp-refresh-token".to_string()),
+            expires_at: Some(456),
+            scopes: vec!["scope:b".to_string()],
+        };
+        save_mcp_oauth_credentials("remote-http", &token_set).expect("save MCP credentials");
+        assert_eq!(
+            load_mcp_oauth_credentials("remote-http").expect("load MCP credentials"),
+            Some(token_set)
+        );
+        let saved = std::fs::read_to_string(&path).expect("read saved file");
+        assert!(saved.contains("\"other\": \"value\""));
+        assert!(saved.contains("\"oauth\""));
+        assert!(saved.contains("\"mcp\""));
+
+        clear_mcp_oauth_credentials("remote-http").expect("clear MCP credentials");
+        assert_eq!(
+            load_mcp_oauth_credentials("remote-http").expect("load cleared MCP credentials"),
+            None
+        );
+        let cleared = std::fs::read_to_string(&path).expect("read cleared file");
+        assert!(cleared.contains("\"other\": \"value\""));
+        assert!(cleared.contains("\"oauth\""));
+        assert!(!cleared.contains("\"mcp\""));
 
         std::env::remove_var("SIMCOE_CONFIG_HOME");
         std::fs::remove_dir_all(config_home).expect("cleanup temp dir");

@@ -18,7 +18,7 @@ use std::process::Command;
 use api::{
     resolve_startup_auth_source, AuthSource, ContentBlockDelta, InputContentBlock, InputMessage,
     MessageRequest, MessageResponse, OutputContentBlock, SimcoeApiClient,
-    StreamEvent as ApiStreamEvent, ToolChoice, ToolDefinition, ToolResultContentBlock,
+    StreamEvent as ApiStreamEvent, ToolChoice, ToolResultContentBlock,
 };
 
 use app::LiveCli;
@@ -62,7 +62,9 @@ use session_manager::{
     resolve_session_reference, session_handle_from_path, sessions_dir, set_active_session_handle,
     ManagedSessionSummary, SessionHandle,
 };
-use tools::{execute_tool, mvp_tool_specs, ToolSpec};
+use tools::{
+    execute_tool, mvp_tool_specs, runtime_tool_definitions, tool_name_is_allowed, ToolSpec,
+};
 use tui::status_bar::StatusBarHandle;
 
 const DEFAULT_MODEL: &str = "simcoe-opus-4-6";
@@ -2563,16 +2565,9 @@ impl SimcoeRuntimeClient {
             max_tokens: max_tokens_for_model(&self.model),
             messages: convert_messages(&request.messages),
             system: (!request.system_prompt.is_empty()).then(|| request.system_prompt.join("\n\n")),
-            tools: self.enable_tools.then(|| {
-                filter_tool_specs(self.allowed_tools.as_ref())
-                    .into_iter()
-                    .map(|spec| ToolDefinition {
-                        name: spec.name.to_string(),
-                        description: Some(spec.description.to_string()),
-                        input_schema: spec.input_schema,
-                    })
-                    .collect()
-            }),
+            tools: self
+                .enable_tools
+                .then(|| runtime_tool_definitions(self.allowed_tools.as_ref())),
             tool_choice: self.enable_tools.then_some(ToolChoice::Auto),
             stream: true,
         };
@@ -3217,7 +3212,7 @@ impl CliToolExecutor {
         if self
             .allowed_tools
             .as_ref()
-            .is_some_and(|allowed| !allowed.contains(tool_name))
+            .is_some_and(|allowed| !tool_name_is_allowed(allowed, tool_name))
         {
             return Err(ToolError::new(format!(
                 "tool `{tool_name}` is not enabled by the current --allowedTools setting"
