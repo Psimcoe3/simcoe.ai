@@ -430,6 +430,22 @@ fn not_found_io_error(error: impl Into<Box<dyn std::error::Error + Send + Sync>>
     io::Error::new(io::ErrorKind::NotFound, error)
 }
 
+fn render_snapshot_report<Snapshot>(
+    load_snapshot: impl FnOnce() -> Result<Snapshot, Box<dyn std::error::Error>>,
+    render_snapshot: impl FnOnce(&Snapshot) -> String,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let snapshot = load_snapshot()?;
+    Ok(render_snapshot(&snapshot))
+}
+
+fn render_fallible_snapshot_report<Snapshot>(
+    load_snapshot: impl FnOnce() -> Result<Snapshot, Box<dyn std::error::Error>>,
+    render_snapshot: impl FnOnce(&Snapshot) -> Result<String, Box<dyn std::error::Error>>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let snapshot = load_snapshot()?;
+    render_snapshot(&snapshot)
+}
+
 pub(crate) fn status_context(
     session_path: Option<&Path>,
 ) -> Result<StatusContext, Box<dyn std::error::Error>> {
@@ -624,9 +640,10 @@ pub(crate) fn render_config_report_from_snapshot(snapshot: &ConfigReportSnapshot
 pub(crate) fn render_config_report(
     section: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    Ok(render_config_report_from_snapshot(&config_report_snapshot(
-        section,
-    )?))
+    render_snapshot_report(
+        || config_report_snapshot(section),
+        render_config_report_from_snapshot,
+    )
 }
 
 pub(crate) fn hooks_report_snapshot(
@@ -704,9 +721,10 @@ pub(crate) fn render_hooks_report_from_snapshot(snapshot: &HooksReportSnapshot) 
 pub(crate) fn render_hooks_report(
     event: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    Ok(render_hooks_report_from_snapshot(&hooks_report_snapshot(
-        event,
-    )?))
+    render_snapshot_report(
+        || hooks_report_snapshot(event),
+        render_hooks_report_from_snapshot,
+    )
 }
 
 pub(crate) fn memory_report_snapshot() -> Result<MemoryReportSnapshot, Box<dyn std::error::Error>> {
@@ -763,9 +781,7 @@ pub(crate) fn render_memory_report_from_snapshot(snapshot: &MemoryReportSnapshot
 }
 
 pub(crate) fn render_memory_report() -> Result<String, Box<dyn std::error::Error>> {
-    Ok(render_memory_report_from_snapshot(
-        &memory_report_snapshot()?
-    ))
+    render_snapshot_report(memory_report_snapshot, render_memory_report_from_snapshot)
 }
 
 pub(crate) fn mcp_report_snapshot(
@@ -844,9 +860,10 @@ pub(crate) fn render_mcp_report_from_snapshot(snapshot: &McpReportSnapshot) -> S
 pub(crate) fn render_mcp_report(
     server: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    Ok(render_mcp_report_from_snapshot(&mcp_report_snapshot(
-        server,
-    )?))
+    render_snapshot_report(
+        || mcp_report_snapshot(server),
+        render_mcp_report_from_snapshot,
+    )
 }
 
 fn task_status_counts(tasks: &[AgentTaskSummary]) -> TaskStatusCountsSnapshot {
@@ -991,9 +1008,10 @@ pub(crate) fn render_agents_report_from_snapshot(snapshot: &AgentsReportSnapshot
 pub(crate) fn render_agents_report(
     agent: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    Ok(render_agents_report_from_snapshot(&agents_report_snapshot(
-        agent,
-    )?))
+    render_snapshot_report(
+        || agents_report_snapshot(agent),
+        render_agents_report_from_snapshot,
+    )
 }
 
 pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Error>> {
@@ -1309,7 +1327,7 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
 }
 
 pub(crate) fn render_doctor_report() -> Result<String, Box<dyn std::error::Error>> {
-    Ok(render_doctor_report_from_snapshot(&doctor_snapshot()?))
+    render_snapshot_report(doctor_snapshot, render_doctor_report_from_snapshot)
 }
 
 pub(crate) fn tools_report_snapshot(
@@ -1359,12 +1377,7 @@ pub(crate) fn render_tools_report_from_snapshot(
             sections.push(render_tool_detail(spec)?);
         }
         if let Some(family) = snapshot.selected_archived_family.as_ref() {
-            let source_hints = family
-                .source_hints
-                .iter()
-                .map(|hint| format!("  - {hint}"))
-                .collect::<Vec<_>>()
-                .join("\n");
+            let source_hints = render_bulleted_items(&family.source_hints);
             sections.push(format!(
                 "Archived TS family\n  Name             {name}\n  Archived files   {archived_files}\n  Summary          {summary}\n\nSource hints\n{source_hints}",
                 name = family.name,
@@ -1444,7 +1457,10 @@ pub(crate) fn render_tools_report_from_snapshot(
 pub(crate) fn render_tools_report(
     tool: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    render_tools_report_from_snapshot(&tools_report_snapshot(tool)?)
+    render_fallible_snapshot_report(
+        || tools_report_snapshot(tool),
+        render_tools_report_from_snapshot,
+    )
 }
 
 pub(crate) fn plugin_report_snapshot(
@@ -1470,12 +1486,7 @@ pub(crate) fn render_plugin_report_from_snapshot(
     snapshot: &PluginReportSnapshot,
 ) -> Result<String, Box<dyn std::error::Error>> {
     if let Some(surface) = snapshot.selected_surface.as_ref() {
-        let source_hints = surface
-            .source_hints
-            .iter()
-            .map(|hint| format!("  - {hint}"))
-            .collect::<Vec<_>>()
-            .join("\n");
+        let source_hints = render_bulleted_items(&surface.source_hints);
         return Ok(format!(
             "Plugin\n  Name             {name}\n  Kind             {kind}\n  Rust status      inspection only\n  Archived files   {archived_files}\n  Summary          {summary}\n\nSource hints\n{source_hints}",
             name = surface.name,
@@ -1544,7 +1555,10 @@ pub(crate) fn render_plugin_report_from_snapshot(
 pub(crate) fn render_plugin_report(
     surface: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    render_plugin_report_from_snapshot(&plugin_report_snapshot(surface)?)
+    render_fallible_snapshot_report(
+        || plugin_report_snapshot(surface),
+        render_plugin_report_from_snapshot,
+    )
 }
 
 pub(crate) fn reload_plugins_report_snapshot(
@@ -1558,13 +1572,7 @@ pub(crate) fn reload_plugins_report_snapshot(
 pub(crate) fn render_reload_plugins_report_from_snapshot(
     snapshot: &ReloadPluginsReportSnapshot,
 ) -> String {
-    let source_hints = snapshot
-        .surface
-        .source_hints
-        .iter()
-        .map(|hint| format!("  - {hint}"))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let source_hints = render_bulleted_items(&snapshot.surface.source_hints);
 
     format!(
         "Reload plugins\n  Rust status      inspection only\n  Runtime support  no plugin loader or live reload flow is implemented\n  Archive          {archive}\n  Package          {package}\n  Archived files   {archived_files}\n  Archived modules {module_count}\n  Summary          {summary}\n\nSource hints\n{source_hints}",
@@ -1578,9 +1586,10 @@ pub(crate) fn render_reload_plugins_report_from_snapshot(
 }
 
 pub(crate) fn render_reload_plugins_report() -> Result<String, Box<dyn std::error::Error>> {
-    Ok(render_reload_plugins_report_from_snapshot(
-        &reload_plugins_report_snapshot()?,
-    ))
+    render_snapshot_report(
+        reload_plugins_report_snapshot,
+        render_reload_plugins_report_from_snapshot,
+    )
 }
 
 fn remote_env_snapshot_from_env_map(env_map: &BTreeMap<String, String>) -> RemoteEnvReportSnapshot {
@@ -1637,9 +1646,10 @@ pub(crate) fn render_remote_env_report_from_snapshot(snapshot: &RemoteEnvReportS
 }
 
 pub(crate) fn render_remote_env_report() -> Result<String, Box<dyn std::error::Error>> {
-    Ok(render_remote_env_report_from_snapshot(
-        &remote_env_report_snapshot(),
-    ))
+    render_snapshot_report(
+        || Ok(remote_env_report_snapshot()),
+        render_remote_env_report_from_snapshot,
+    )
 }
 
 pub(crate) fn remote_setup_report_snapshot(
@@ -1669,20 +1679,8 @@ pub(crate) fn render_remote_setup_report_from_snapshot(
     } else {
         remote.base_url.clone()
     };
-    let source_hints = snapshot
-        .command
-        .source_hints
-        .iter()
-        .map(|hint| format!("  - {hint}"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let transport_hints = snapshot
-        .catalog
-        .transport_files
-        .iter()
-        .map(|hint| format!("  - {hint}"))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let source_hints = render_bulleted_items(&snapshot.command.source_hints);
+    let transport_hints = render_bulleted_items(&snapshot.catalog.transport_files);
 
     format!(
         "Remote setup\n  Rust status       bootstrap foundation only\n  Remote ready      {ready}\n  Remote enabled    {remote_enabled}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Token present     {token_present}\n  Archive           {archive}\n  Package           {package}\n  Archived files    {archived_files}\n  Transport files   {transport_files}\n  Summary           {summary}\n  Missing           {missing}\n  Usage             /remote-env\n\nSource hints\n{source_hints}\n\nTransport hints\n{transport_hints}",
@@ -1703,9 +1701,10 @@ pub(crate) fn render_remote_setup_report_from_snapshot(
 }
 
 pub(crate) fn render_remote_setup_report() -> Result<String, Box<dyn std::error::Error>> {
-    Ok(render_remote_setup_report_from_snapshot(
-        &remote_setup_report_snapshot()?,
-    ))
+    render_snapshot_report(
+        remote_setup_report_snapshot,
+        render_remote_setup_report_from_snapshot,
+    )
 }
 
 fn yes_no(value: bool) -> &'static str {
@@ -1808,6 +1807,14 @@ fn render_json_block(value: &serde_json::Value) -> Result<String, serde_json::Er
         .map(|line| format!("  {line}"))
         .collect::<Vec<_>>()
         .join("\n"))
+}
+
+fn render_bulleted_items(items: &[String]) -> String {
+    items
+        .iter()
+        .map(|item| format!("  - {item}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn remote_setup_gaps(bootstrap: &UpstreamProxyBootstrap) -> String {
@@ -1929,9 +1936,10 @@ Entries
 pub(crate) fn render_skills_report(
     skill: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    Ok(render_skills_report_from_snapshot(&skills_report_snapshot(
-        skill,
-    )?))
+    render_snapshot_report(
+        || skills_report_snapshot(skill),
+        render_skills_report_from_snapshot,
+    )
 }
 
 pub(crate) fn tasks_report_snapshot(
@@ -2021,9 +2029,10 @@ pub(crate) fn render_tasks_report_from_snapshot(snapshot: &TasksReportSnapshot) 
 pub(crate) fn render_tasks_report(
     task: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    Ok(render_tasks_report_from_snapshot(&tasks_report_snapshot(
-        task,
-    )?))
+    render_snapshot_report(
+        || tasks_report_snapshot(task),
+        render_tasks_report_from_snapshot,
+    )
 }
 
 pub(crate) fn render_diff_report() -> Result<String, Box<dyn std::error::Error>> {
