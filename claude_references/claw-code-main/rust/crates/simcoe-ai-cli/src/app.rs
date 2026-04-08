@@ -559,6 +559,24 @@ impl LiveCli {
         println!("{}", format_cost_report(cumulative));
     }
 
+    fn print_report(
+        render: impl FnOnce() -> Result<String, Box<dyn std::error::Error>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        println!("{}", render()?);
+        Ok(())
+    }
+
+    fn print_selector_report(
+        selector: Option<&str>,
+        render: impl FnOnce(Option<&str>) -> Result<String, Box<dyn std::error::Error>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        Self::print_report(|| render(selector))
+    }
+
+    fn print_infallible_report(render: impl FnOnce() -> String) {
+        println!("{}", render());
+    }
+
     fn resume_session(
         &mut self,
         session_path: Option<String>,
@@ -595,92 +613,78 @@ impl LiveCli {
     }
 
     fn print_config(section: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", render_config_report(section)?);
-        Ok(())
+        Self::print_selector_report(section, render_config_report)
     }
 
     fn print_hooks(event: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", render_hooks_report(event)?);
-        Ok(())
+        Self::print_selector_report(event, render_hooks_report)
     }
 
     fn print_memory() -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", render_memory_report()?);
-        Ok(())
+        Self::print_report(render_memory_report)
     }
 
     fn print_dump_manifests() -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", crate::dump_manifests_report()?);
-        Ok(())
+        Self::print_report(crate::dump_manifests_report)
     }
 
     fn print_bootstrap_plan() {
-        println!("{}", crate::bootstrap_plan_report());
+        Self::print_infallible_report(crate::bootstrap_plan_report);
     }
 
     fn print_system_prompt(args: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        let (cwd, date) = crate::parse_system_prompt_command_args(args)?;
-        println!("{}", crate::system_prompt_report(cwd, date)?);
-        Ok(())
+        Self::print_report(|| {
+            let (cwd, date) = crate::parse_system_prompt_command_args(args)?;
+            crate::system_prompt_report(cwd, date)
+        })
     }
 
     fn print_mcp(server: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", render_mcp_report(server)?);
-        Ok(())
+        Self::print_selector_report(server, render_mcp_report)
     }
 
     fn print_skills(skill: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", render_skills_report(skill)?);
-        Ok(())
+        Self::print_selector_report(skill, render_skills_report)
     }
 
     fn print_agents(agent: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", render_agents_report(agent)?);
-        Ok(())
+        Self::print_selector_report(agent, render_agents_report)
     }
 
     fn print_plugin(surface: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", render_plugin_report(surface)?);
-        Ok(())
+        Self::print_selector_report(surface, render_plugin_report)
     }
 
     fn print_reload_plugins() -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", render_reload_plugins_report()?);
-        Ok(())
+        Self::print_report(render_reload_plugins_report)
     }
 
     fn print_remote_env() -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", render_remote_env_report()?);
-        Ok(())
+        Self::print_report(render_remote_env_report)
     }
 
     fn print_remote_setup() -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", render_remote_setup_report()?);
-        Ok(())
+        Self::print_report(render_remote_setup_report)
     }
 
     fn print_tools(tool: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", render_tools_report(tool)?);
-        Ok(())
+        Self::print_selector_report(tool, render_tools_report)
     }
 
     fn print_doctor() -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", render_doctor_report()?);
-        Ok(())
+        Self::print_report(render_doctor_report)
     }
 
     fn print_tasks(task: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", render_tasks_report(task)?);
-        Ok(())
+        Self::print_selector_report(task, render_tasks_report)
     }
 
     fn print_diff() -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", render_diff_report()?);
-        Ok(())
+        Self::print_report(render_diff_report)
     }
 
     fn print_version() {
-        println!("{}", render_version_report());
+        Self::print_infallible_report(|| render_version_report());
     }
 
     fn export_session(
