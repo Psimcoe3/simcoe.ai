@@ -15,10 +15,10 @@ use compat_harness::{
 };
 use runtime::{
     credentials_path, inherited_upstream_proxy_env, load_oauth_credentials,
-    mcp_client_transport_display_name, mcp_transport_display_name,
-    unsupported_live_mcp_execution_reason, ConfigSource, ContentBlock, McpClientAuth,
-    McpClientBootstrap, McpClientTransport, ProjectContext, RemoteSessionContext,
-    ResolvedPermissionMode, Session, TokenUsage, UpstreamProxyBootstrap,
+    mcp_client_transport_display_name, mcp_server_auth_status, mcp_transport_display_name,
+    ConfigSource, ContentBlock, McpClientAuth, McpClientBootstrap, McpClientTransport,
+    McpServerAuthStatusSnapshot, ProjectContext, RemoteSessionContext, ResolvedPermissionMode,
+    Session, TokenUsage, UpstreamProxyBootstrap,
 };
 use tools::{
     list_agent_profiles, list_agent_tasks, list_skills, load_agent_profile, load_agent_task,
@@ -103,9 +103,11 @@ pub(crate) struct DoctorHooksSnapshot {
 pub(crate) struct DoctorMcpSnapshot {
     pub(crate) server_count: Option<usize>,
     pub(crate) transport_counts: Option<BTreeMap<String, usize>>,
+    pub(crate) status_counts: Option<BTreeMap<String, usize>>,
     pub(crate) supported_execution_count: Option<usize>,
     pub(crate) unsupported_execution_count: Option<usize>,
     pub(crate) unsupported_servers: Option<Vec<DoctorBlockedMcpSnapshot>>,
+    pub(crate) attention_servers: Option<Vec<DoctorAttentionMcpSnapshot>>,
 }
 
 #[derive(Debug, Clone)]
@@ -113,6 +115,14 @@ pub(crate) struct DoctorBlockedMcpSnapshot {
     pub(crate) name: String,
     pub(crate) transport: &'static str,
     pub(crate) detail: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct DoctorAttentionMcpSnapshot {
+    pub(crate) name: String,
+    pub(crate) transport: &'static str,
+    pub(crate) status: String,
+    pub(crate) detail: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -175,6 +185,7 @@ pub(crate) struct McpServerSnapshot {
     pub(crate) signature: Option<String>,
     pub(crate) supported_execution: bool,
     pub(crate) execution_detail: Option<String>,
+    pub(crate) runtime: McpServerAuthStatusSnapshot,
     pub(crate) detail: McpServerDetailSnapshot,
 }
 
@@ -812,25 +823,25 @@ pub(crate) fn mcp_report_snapshot(
             .ok_or_else(|| not_found_io_error(format!("unknown MCP server: {requested}")))?;
         let bootstrap = McpClientBootstrap::from_scoped_config(name, config);
         return Ok(McpReportSnapshot {
-            selected_server: Some(mcp_server_snapshot(name, config.scope, &bootstrap)),
+            selected_server: Some(mcp_server_snapshot(name, config, &bootstrap)?),
             servers: Vec::new(),
         });
     }
 
     Ok(McpReportSnapshot {
         selected_server: None,
-        servers: mcp_server_snapshots(servers),
+        servers: mcp_server_snapshots(servers)?,
     })
 }
 
 fn mcp_server_snapshots(
     servers: &BTreeMap<String, runtime::ScopedMcpServerConfig>,
-) -> Vec<McpServerSnapshot> {
+) -> io::Result<Vec<McpServerSnapshot>> {
     servers
         .iter()
         .map(|(name, config)| {
             let bootstrap = McpClientBootstrap::from_scoped_config(name, config);
-            mcp_server_snapshot(name, config.scope, &bootstrap)
+            mcp_server_snapshot(name, config, &bootstrap)
         })
         .collect()
 }
@@ -858,11 +869,12 @@ pub(crate) fn render_mcp_report_from_snapshot(snapshot: &McpReportSnapshot) -> S
         .iter()
         .map(|server| {
             format!(
-                "  {name:<name_width$}{scope:<8}{transport:<14}{executable:<6}{target}",
+                "  {name:<name_width$}{scope:<8}{transport:<14}{status:<24}{executable:<6}{target}",
                 name = server.name,
                 name_width = name_width,
                 scope = server.scope,
                 transport = server.transport,
+                status = server.runtime.status,
                 executable = yes_no(server.supported_execution),
                 target = server.target,
             )
@@ -875,12 +887,26 @@ pub(crate) fn render_mcp_report_from_snapshot(snapshot: &McpReportSnapshot) -> S
         .iter()
         .filter(|server| server.supported_execution)
         .count();
+    let status_counts = summarize_doctor_mcp_statuses(Some(&mcp_status_counts(&snapshot.servers)));
+    let attention = snapshot
+        .servers
+        .iter()
+        .filter(|server| server.runtime.status != "ready")
+        .map(|server| format!("{} ({})", server.name, server.runtime.status))
+        .collect::<Vec<_>>();
+    let attention = if attention.is_empty() {
+        String::from("<none>")
+    } else {
+        attention.join(", ")
+    };
 
     format!(
-        "MCP\n  Configured servers {}\n  Executable now    {}\n  Blocked now       {}\n  Usage             /mcp <server>\n\nServers\n{}",
+        "MCP\n  Configured servers {}\n  Executable now    {}\n  Blocked now       {}\n  Status counts     {}\n  Attention         {}\n  Usage             /mcp <server>\n\nServers\n{}",
         snapshot.servers.len(),
         supported_count,
         snapshot.servers.len().saturating_sub(supported_count),
+        status_counts,
+        attention,
         entries,
     )
 }
@@ -1167,25 +1193,52 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
 
             let hooks = runtime_config.hooks();
             let mcp_servers = runtime_config.mcp().servers();
-            let mcp_server_snapshots = mcp_server_snapshots(mcp_servers);
-            let unsupported_mcp_servers = mcp_server_snapshots
+            let mcp_server_snapshots = mcp_server_snapshots(mcp_servers)?;
+            let mcp_attention_servers = mcp_server_snapshots
                 .iter()
-                .filter(|server| !server.supported_execution)
+                .filter(|server| server.runtime.status != "ready")
+                .map(|server| DoctorAttentionMcpSnapshot {
+                    name: server.name.clone(),
+                    transport: server.transport,
+                    status: server.runtime.status.clone(),
+                    detail: server.runtime.detail.clone(),
+                })
+                .collect::<Vec<_>>();
+
+            let unsupported_mcp_servers = mcp_attention_servers
+                .iter()
+                .filter(|server| server.status == "unsupported-transport")
                 .map(|server| DoctorBlockedMcpSnapshot {
                     name: server.name.clone(),
                     transport: server.transport,
                     detail: server
-                        .execution_detail
+                        .detail
                         .clone()
                         .unwrap_or_else(|| String::from("<unknown>")),
                 })
                 .collect::<Vec<_>>();
 
-            for server in &unsupported_mcp_servers {
-                issues.push(format!(
-                    "MCP server `{}` ({}) is configured but not executable by the Rust runtime: {}",
-                    server.name, server.transport, server.detail
-                ));
+            for server in &mcp_attention_servers {
+                let detail = server.detail.as_deref().unwrap_or("<unknown>");
+                let issue = match server.status.as_str() {
+                    "unsupported-transport" => format!(
+                        "MCP server `{}` ({}) is configured but not executable by the Rust runtime: {}",
+                        server.name, server.transport, detail
+                    ),
+                    "user-auth-required" => format!(
+                        "MCP server `{}` ({}) requires stored OAuth credentials before execution: {}",
+                        server.name, server.transport, detail
+                    ),
+                    "expired" => format!(
+                        "MCP server `{}` ({}) has expired stored OAuth credentials: {}",
+                        server.name, server.transport, detail
+                    ),
+                    other => format!(
+                        "MCP server `{}` ({}) is in `{}` state: {}",
+                        server.name, server.transport, other, detail
+                    ),
+                };
+                issues.push(issue);
             }
 
             Ok(DoctorSnapshot {
@@ -1225,6 +1278,7 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
                 mcp: DoctorMcpSnapshot {
                     server_count: Some(mcp_servers.len()),
                     transport_counts: Some(mcp_transport_counts(mcp_servers)),
+                    status_counts: Some(mcp_status_counts(&mcp_server_snapshots)),
                     supported_execution_count: Some(
                         mcp_server_snapshots
                             .iter()
@@ -1233,6 +1287,7 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
                     ),
                     unsupported_execution_count: Some(unsupported_mcp_servers.len()),
                     unsupported_servers: Some(unsupported_mcp_servers),
+                    attention_servers: Some(mcp_attention_servers),
                 },
                 remote: remote_snapshot,
             })
@@ -1266,9 +1321,11 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
                 mcp: DoctorMcpSnapshot {
                     server_count: None,
                     transport_counts: None,
+                    status_counts: None,
                     supported_execution_count: None,
                     unsupported_execution_count: None,
                     unsupported_servers: None,
+                    attention_servers: None,
                 },
                 remote: remote_snapshot,
             })
@@ -1316,7 +1373,7 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
         );
 
         return format!(
-            "Doctor\n  Rust status       {rust_status}\n  Working directory {cwd}\n  Project root      {project_root}\n  Git branch        {git_branch}\n  Instruction files {instruction_files}\n  Issues            {issue_count}\n\nConfig\n  Status            ok\n  Discovered files  {discovered_files}\n  Loaded files      {loaded_files}\n  Model             {model}\n  Permission mode   {permission_mode}\n  Sandbox enabled   {sandbox_enabled}\n  Sandbox active    {sandbox_active}\n  Filesystem mode   {filesystem_mode}\n  Network isolation {network_isolation}\n  Detail            {sandbox_detail}\n\nAuth\n  OAuth config      {oauth_config}\n  Credentials path  {credentials_path}\n  Stored creds      {stored_creds}\n  Refresh token     {refresh_token}\n  Expiry            {expiry}\n  Scopes            {scopes}\n\nHooks + MCP\n  Pre hooks         {pre_hooks}\n  Post hooks        {post_hooks}\n  MCP servers       {mcp_servers}\n  MCP transports    {mcp_transports}\n  MCP executable    {mcp_executable}\n  MCP blocked       {mcp_blocked}\n  MCP blockers      {mcp_blockers}\n\nRemote\n  Enabled           {remote_enabled}\n  Proxy ready       {proxy_ready}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Missing           {remote_missing}\n\nIssues\n{issue_lines}",
+            "Doctor\n  Rust status       {rust_status}\n  Working directory {cwd}\n  Project root      {project_root}\n  Git branch        {git_branch}\n  Instruction files {instruction_files}\n  Issues            {issue_count}\n\nConfig\n  Status            ok\n  Discovered files  {discovered_files}\n  Loaded files      {loaded_files}\n  Model             {model}\n  Permission mode   {permission_mode}\n  Sandbox enabled   {sandbox_enabled}\n  Sandbox active    {sandbox_active}\n  Filesystem mode   {filesystem_mode}\n  Network isolation {network_isolation}\n  Detail            {sandbox_detail}\n\nAuth\n  OAuth config      {oauth_config}\n  Credentials path  {credentials_path}\n  Stored creds      {stored_creds}\n  Refresh token     {refresh_token}\n  Expiry            {expiry}\n  Scopes            {scopes}\n\nHooks + MCP\n  Pre hooks         {pre_hooks}\n  Post hooks        {post_hooks}\n  MCP servers       {mcp_servers}\n  MCP transports    {mcp_transports}\n  MCP executable    {mcp_executable}\n  MCP blocked       {mcp_blocked}\n  MCP statuses      {mcp_statuses}\n  MCP blockers      {mcp_blockers}\n  MCP attention     {mcp_attention}\n\nRemote\n  Enabled           {remote_enabled}\n  Proxy ready       {proxy_ready}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Missing           {remote_missing}\n\nIssues\n{issue_lines}",
             rust_status = snapshot.rust_status,
             cwd = snapshot.working_directory.as_str(),
             project_root = project_root,
@@ -1346,7 +1403,9 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
             mcp_transports = summarize_recorded_mcp_transports(snapshot.mcp.transport_counts.as_ref()),
             mcp_executable = snapshot.mcp.supported_execution_count.unwrap_or_default(),
             mcp_blocked = snapshot.mcp.unsupported_execution_count.unwrap_or_default(),
+            mcp_statuses = summarize_doctor_mcp_statuses(snapshot.mcp.status_counts.as_ref()),
             mcp_blockers = summarize_doctor_mcp_blockers(snapshot.mcp.unsupported_servers.as_deref()),
+            mcp_attention = summarize_doctor_mcp_attention(snapshot.mcp.attention_servers.as_deref()),
             remote_enabled = yes_no(snapshot.remote.enabled),
             proxy_ready = yes_no(snapshot.remote.proxy_ready),
             session_id = session_id,
@@ -1366,7 +1425,7 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
     );
 
     format!(
-        "Doctor\n  Rust status       {rust_status}\n  Working directory {cwd}\n  Project root      {project_root}\n  Git branch        {git_branch}\n  Instruction files {instruction_files}\n  Issues            {issue_count}\n\nConfig\n  Status            error\n  Discovered files  {discovered_files}\n  Loaded files      0\n  Model             <unavailable>\n  Permission mode   <unavailable>\n  Sandbox enabled   <unavailable>\n  Sandbox active    <unavailable>\n  Filesystem mode   <unavailable>\n  Network isolation <unavailable>\n  Detail            {config_error}\n\nAuth\n  OAuth config      <unavailable>\n  Credentials path  {credentials_path}\n  Stored creds      {stored_creds}\n  Refresh token     <unavailable>\n  Expiry            {expiry}\n  Scopes            {scopes}\n\nHooks + MCP\n  Pre hooks         <unavailable>\n  Post hooks        <unavailable>\n  MCP servers       <unavailable>\n  MCP transports    <unavailable>\n  MCP executable    <unavailable>\n  MCP blocked       <unavailable>\n  MCP blockers      <unavailable>\n\nRemote\n  Enabled           {remote_enabled}\n  Proxy ready       {proxy_ready}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Missing           {remote_missing}\n\nIssues\n{issue_lines}",
+        "Doctor\n  Rust status       {rust_status}\n  Working directory {cwd}\n  Project root      {project_root}\n  Git branch        {git_branch}\n  Instruction files {instruction_files}\n  Issues            {issue_count}\n\nConfig\n  Status            error\n  Discovered files  {discovered_files}\n  Loaded files      0\n  Model             <unavailable>\n  Permission mode   <unavailable>\n  Sandbox enabled   <unavailable>\n  Sandbox active    <unavailable>\n  Filesystem mode   <unavailable>\n  Network isolation <unavailable>\n  Detail            {config_error}\n\nAuth\n  OAuth config      <unavailable>\n  Credentials path  {credentials_path}\n  Stored creds      {stored_creds}\n  Refresh token     <unavailable>\n  Expiry            {expiry}\n  Scopes            {scopes}\n\nHooks + MCP\n  Pre hooks         <unavailable>\n  Post hooks        <unavailable>\n  MCP servers       <unavailable>\n  MCP transports    <unavailable>\n  MCP executable    <unavailable>\n  MCP blocked       <unavailable>\n  MCP statuses      <unavailable>\n  MCP blockers      <unavailable>\n  MCP attention     <unavailable>\n\nRemote\n  Enabled           {remote_enabled}\n  Proxy ready       {proxy_ready}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Missing           {remote_missing}\n\nIssues\n{issue_lines}",
         rust_status = snapshot.rust_status,
         cwd = snapshot.working_directory.as_str(),
         project_root = project_root,
@@ -1796,6 +1855,14 @@ fn mcp_transport_counts(
     counts
 }
 
+fn mcp_status_counts(servers: &[McpServerSnapshot]) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::<String, usize>::new();
+    for server in servers {
+        *counts.entry(server.runtime.status.clone()).or_default() += 1;
+    }
+    counts
+}
+
 fn summarize_recorded_mcp_transports(counts: Option<&BTreeMap<String, usize>>) -> String {
     match counts {
         None => String::from("<unavailable>"),
@@ -1808,6 +1875,18 @@ fn summarize_recorded_mcp_transports(counts: Option<&BTreeMap<String, usize>>) -
     }
 }
 
+fn summarize_doctor_mcp_statuses(counts: Option<&BTreeMap<String, usize>>) -> String {
+    match counts {
+        None => String::from("<unavailable>"),
+        Some(counts) if counts.is_empty() => String::from("<none>"),
+        Some(counts) => counts
+            .iter()
+            .map(|(status, count)| format!("{status}={count}"))
+            .collect::<Vec<_>>()
+            .join(", "),
+    }
+}
+
 fn summarize_doctor_mcp_blockers(blocked_servers: Option<&[DoctorBlockedMcpSnapshot]>) -> String {
     match blocked_servers {
         None => String::from("<unavailable>"),
@@ -1815,6 +1894,20 @@ fn summarize_doctor_mcp_blockers(blocked_servers: Option<&[DoctorBlockedMcpSnaps
         Some(blocked_servers) => blocked_servers
             .iter()
             .map(|server| format!("{} ({})", server.name, server.transport))
+            .collect::<Vec<_>>()
+            .join(", "),
+    }
+}
+
+fn summarize_doctor_mcp_attention(
+    attention_servers: Option<&[DoctorAttentionMcpSnapshot]>,
+) -> String {
+    match attention_servers {
+        None => String::from("<unavailable>"),
+        Some(attention_servers) if attention_servers.is_empty() => String::from("<none>"),
+        Some(attention_servers) => attention_servers
+            .iter()
+            .map(|server| format!("{} ({})", server.name, server.status))
             .collect::<Vec<_>>()
             .join(", "),
     }
@@ -2285,17 +2378,12 @@ fn transport_target_summary(transport: &McpClientTransport) -> String {
     }
 }
 
-fn runtime_execution_support(transport: &McpClientTransport) -> (bool, Option<String>) {
-    let detail = unsupported_live_mcp_execution_reason(transport);
-    (detail.is_none(), detail)
-}
-
 fn mcp_server_snapshot(
     name: &str,
-    scope: ConfigSource,
+    config: &runtime::ScopedMcpServerConfig,
     bootstrap: &McpClientBootstrap,
-) -> McpServerSnapshot {
-    let (supported_execution, execution_detail) = runtime_execution_support(&bootstrap.transport);
+) -> io::Result<McpServerSnapshot> {
+    let runtime = mcp_server_auth_status(name, config)?;
     let detail = match &bootstrap.transport {
         McpClientTransport::Stdio(config) => McpServerDetailSnapshot::Stdio {
             command: config.command.clone(),
@@ -2319,21 +2407,47 @@ fn mcp_server_snapshot(
         },
     };
 
-    McpServerSnapshot {
+    Ok(McpServerSnapshot {
         name: name.to_string(),
-        scope: config_source_label(scope),
+        scope: config_source_label(config.scope),
         transport: transport_label(&bootstrap.transport),
         target: transport_target_summary(&bootstrap.transport),
         normalized_name: bootstrap.normalized_name.clone(),
         tool_prefix: bootstrap.tool_prefix.clone(),
         signature: bootstrap.signature.clone(),
-        supported_execution,
-        execution_detail,
+        supported_execution: runtime.supported_execution,
+        execution_detail: if runtime.supported_execution {
+            None
+        } else {
+            runtime.detail.clone()
+        },
+        runtime,
         detail,
-    }
+    })
 }
 
 fn render_mcp_server_detail(server: &McpServerSnapshot) -> String {
+    let stored_creds = if server.runtime.requires_user_auth {
+        yes_no(server.runtime.stored_credentials).to_string()
+    } else {
+        String::from("<n/a>")
+    };
+    let refresh_token = if server.runtime.requires_user_auth {
+        yes_no(server.runtime.refresh_token_present).to_string()
+    } else {
+        String::from("<n/a>")
+    };
+    let expiry = if server.runtime.requires_user_auth {
+        oauth_expiry_summary(server.runtime.expires_at)
+    } else {
+        String::from("<n/a>")
+    };
+    let scopes = if server.runtime.requires_user_auth {
+        summarize_scopes(&server.runtime.scopes)
+    } else {
+        String::from("<n/a>")
+    };
+
     let mut lines = vec![format!(
         "MCP server\n  Name              {name}\n  Scope             {scope}\n  Transport         {transport}\n  Normalized name   {normalized}\n  Tool prefix       {tool_prefix}\n  Signature         {signature}",
         name = server.name,
@@ -2346,9 +2460,16 @@ fn render_mcp_server_detail(server: &McpServerSnapshot) -> String {
 
     lines.push(String::from(""));
     lines.push(format!(
-        "Runtime\n  Executable        {}\n  Detail            {}",
-        yes_no(server.supported_execution),
-        server.execution_detail.as_deref().unwrap_or("<none>"),
+        "Runtime\n  Status            {}\n  Executable        {}\n  Auth kind         {}\n  User auth         {}\n  Stored creds      {}\n  Refresh token     {}\n  Expiry            {}\n  Scopes            {}\n  Detail            {}",
+        server.runtime.status,
+        yes_no(server.runtime.supported_execution),
+        server.runtime.auth_kind,
+        yes_no(server.runtime.requires_user_auth),
+        stored_creds,
+        refresh_token,
+        expiry,
+        scopes,
+        server.runtime.detail.as_deref().unwrap_or("<none>"),
     ));
 
     match &server.detail {

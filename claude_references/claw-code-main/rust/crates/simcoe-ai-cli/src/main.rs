@@ -8,6 +8,7 @@ mod session_manager;
 mod transport;
 mod tui;
 
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::io::{self, Read, Write};
@@ -691,6 +692,23 @@ fn mcp_server_payload(server: &McpServerSnapshot) -> serde_json::Value {
         "signature": server.signature.as_deref(),
         "supported_execution": server.supported_execution,
         "execution_detail": server.execution_detail.as_deref(),
+        "runtime": {
+            "transport": server.runtime.transport.as_str(),
+            "status": server.runtime.status.as_str(),
+            "detail": server.runtime.detail.as_deref(),
+            "auth_kind": server.runtime.auth_kind.as_str(),
+            "requires_user_auth": server.runtime.requires_user_auth,
+            "supported_execution": server.runtime.supported_execution,
+            "interactive_supported": server.runtime.interactive_supported,
+            "stored_credentials": server.runtime.stored_credentials,
+            "refresh_token_present": server.runtime.refresh_token_present,
+            "expires_at": server.runtime.expires_at,
+            "scopes": server.runtime.scopes.clone(),
+            "client_id": server.runtime.client_id.as_deref(),
+            "callback_port": server.runtime.callback_port,
+            "auth_server_metadata_url": server.runtime.auth_server_metadata_url.as_deref(),
+            "xaa": server.runtime.xaa,
+        },
         "details": mcp_transport_payload(&server.detail),
     })
 }
@@ -710,6 +728,25 @@ fn mcp_payload(server: Option<String>) -> Result<serde_json::Value, Box<dyn std:
         .iter()
         .map(mcp_server_payload)
         .collect::<Vec<_>>();
+    let mut status_counts = BTreeMap::<String, usize>::new();
+    for server in &snapshot.servers {
+        *status_counts
+            .entry(server.runtime.status.clone())
+            .or_default() += 1;
+    }
+    let attention_servers = snapshot
+        .servers
+        .iter()
+        .filter(|server| server.runtime.status != "ready")
+        .map(|server| {
+            json!({
+                "name": server.name.as_str(),
+                "transport": server.transport,
+                "status": server.runtime.status.as_str(),
+                "detail": server.runtime.detail.as_deref(),
+            })
+        })
+        .collect::<Vec<_>>();
 
     payload.insert("configured_server_count".to_string(), json!(entries.len()));
     payload.insert(
@@ -728,6 +765,8 @@ fn mcp_payload(server: Option<String>) -> Result<serde_json::Value, Box<dyn std:
             .filter(|server| !server.supported_execution)
             .count()),
     );
+    payload.insert("status_counts".to_string(), json!(status_counts));
+    payload.insert("attention_servers".to_string(), json!(attention_servers));
     payload.insert("servers".to_string(), json!(entries));
     Ok(serde_json::Value::Object(payload))
 }
@@ -1064,6 +1103,7 @@ fn doctor_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         json!({
             "server_count": snapshot.mcp.server_count,
             "transport_counts": snapshot.mcp.transport_counts,
+            "status_counts": snapshot.mcp.status_counts,
             "supported_execution_count": snapshot.mcp.supported_execution_count,
             "unsupported_execution_count": snapshot.mcp.unsupported_execution_count,
             "unsupported_servers": snapshot.mcp.unsupported_servers.as_ref().map(|servers| {
@@ -1074,6 +1114,19 @@ fn doctor_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
                             "name": server.name.as_str(),
                             "transport": server.transport,
                             "detail": server.detail.as_str(),
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            }),
+            "attention_servers": snapshot.mcp.attention_servers.as_ref().map(|servers| {
+                servers
+                    .iter()
+                    .map(|server| {
+                        json!({
+                            "name": server.name.as_str(),
+                            "transport": server.transport,
+                            "status": server.status.as_str(),
+                            "detail": server.detail.as_deref(),
                         })
                     })
                     .collect::<Vec<_>>()
@@ -5754,7 +5807,9 @@ mod tests {
             assert!(report.contains("MCP transports    http=1, stdio=1"));
             assert!(report.contains("MCP executable    1"));
             assert!(report.contains("MCP blocked       1"));
+            assert!(report.contains("MCP statuses      ready=1, unsupported-transport=1"));
             assert!(report.contains("MCP blockers      remote (http)"));
+            assert!(report.contains("MCP attention     remote (unsupported-transport)"));
             assert!(report.contains("Pre hooks         1"));
             assert!(report.contains("Post hooks        1"));
             assert!(report.contains("Filesystem mode   workspace-only"));
@@ -5781,11 +5836,25 @@ mod tests {
             assert_eq!(payload["mcp"]["unsupported_execution_count"], json!(1));
             assert_eq!(payload["mcp"]["transport_counts"]["stdio"], json!(1));
             assert_eq!(payload["mcp"]["transport_counts"]["http"], json!(1));
+            assert_eq!(payload["mcp"]["status_counts"]["ready"], json!(1));
+            assert_eq!(
+                payload["mcp"]["status_counts"]["unsupported-transport"],
+                json!(1)
+            );
             assert!(payload["mcp"]["unsupported_servers"]
                 .as_array()
                 .is_some_and(|servers| servers.iter().any(|server| {
                     server["name"] == json!("remote")
                         && server["transport"] == json!("http")
+                        && server["detail"]
+                            .as_str()
+                            .is_some_and(|detail| detail.contains("headersHelper"))
+                })));
+            assert!(payload["mcp"]["attention_servers"]
+                .as_array()
+                .is_some_and(|servers| servers.iter().any(|server| {
+                    server["name"] == json!("remote")
+                        && server["status"] == json!("unsupported-transport")
                         && server["detail"]
                             .as_str()
                             .is_some_and(|detail| detail.contains("headersHelper"))
@@ -5803,6 +5872,77 @@ mod tests {
                     issue.as_str().is_some_and(|text| {
                         text.contains("MCP server `remote` (http) is configured but not executable")
                     })
+                })));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn doctor_report_surfaces_mcp_auth_attention() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("doctor-mcp-auth");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+        fs::write(
+            config_home.join("settings.json"),
+            r#"{
+    "mcpServers": {
+        "local": {
+            "command": "node",
+            "args": ["server.js"]
+        },
+        "remote-auth": {
+            "type": "http",
+            "url": "https://example.test/mcp",
+            "oauth": {
+                "clientId": "mcp-client"
+            }
+        }
+    },
+    "model": "simcoe-sonnet-4-6",
+    "permissionMode": "workspace-write"
+}"#,
+        )
+        .expect("write doctor auth settings");
+
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report = render_doctor_report().expect("doctor report should render");
+            assert!(report.contains("MCP executable    2"));
+            assert!(report.contains("MCP blocked       0"));
+            assert!(report.contains("MCP statuses      ready=1, user-auth-required=1"));
+            assert!(report.contains("MCP attention     remote-auth (user-auth-required)"));
+            assert!(report.contains(
+                "MCP server `remote-auth` (http) requires stored OAuth credentials before execution"
+            ));
+
+            let payload = super::doctor_payload().expect("doctor payload should render");
+            assert_eq!(payload["mcp"]["server_count"], json!(2));
+            assert_eq!(payload["mcp"]["supported_execution_count"], json!(2));
+            assert_eq!(payload["mcp"]["unsupported_execution_count"], json!(0));
+            assert_eq!(payload["mcp"]["status_counts"]["ready"], json!(1));
+            assert_eq!(
+                payload["mcp"]["status_counts"]["user-auth-required"],
+                json!(1)
+            );
+            assert!(payload["mcp"]["attention_servers"]
+                .as_array()
+                .is_some_and(|servers| servers.iter().any(|server| {
+                    server["name"] == json!("remote-auth")
+                        && server["status"] == json!("user-auth-required")
+                        && server["detail"]
+                            .as_str()
+                            .is_some_and(|detail| detail.contains("McpAuthTool action `save`"))
                 })));
         }
 
@@ -6066,6 +6206,8 @@ mod tests {
             assert!(report.contains("Configured servers 3"));
             assert!(report.contains("Executable now    2"));
             assert!(report.contains("Blocked now       1"));
+            assert!(report.contains("Status counts     ready=2, unsupported-transport=1"));
+            assert!(report.contains("Attention         proxy-server (unsupported-transport)"));
             assert!(report.contains("stdio-server"));
             assert!(report.contains("remote-server"));
             assert!(report.contains("proxy-server"));
@@ -6079,7 +6221,18 @@ mod tests {
             assert_eq!(payload["configured_server_count"], json!(3));
             assert_eq!(payload["supported_execution_count"], json!(2));
             assert_eq!(payload["unsupported_execution_count"], json!(1));
+            assert_eq!(payload["status_counts"]["ready"], json!(2));
+            assert_eq!(payload["status_counts"]["unsupported-transport"], json!(1));
             assert_eq!(servers.len(), 3);
+            assert!(payload["attention_servers"]
+                .as_array()
+                .is_some_and(|servers| servers.iter().any(|server| {
+                    server["name"] == json!("proxy-server")
+                        && server["status"] == json!("unsupported-transport")
+                        && server["detail"].as_str().is_some_and(|detail| {
+                            detail.contains("proxy `proxy-123` targets `wss://vendor.example/mcp`")
+                        })
+                })));
             assert!(servers.iter().any(|server| {
                 server["name"] == json!("stdio-server")
                     && server["transport"] == json!("stdio")
@@ -6143,7 +6296,10 @@ mod tests {
             assert!(report.contains("MCP server"));
             assert!(report.contains("Name              remote-server"));
             assert!(report.contains("Transport         http"));
+            assert!(report.contains("Status            unsupported-transport"));
             assert!(report.contains("Executable        no"));
+            assert!(report.contains("User auth         yes"));
+            assert!(report.contains("Stored creds      no"));
             assert!(report.contains(
                 "http transport with headersHelper is not executed by the Rust MCP runtime yet"
             ));
@@ -6165,6 +6321,25 @@ mod tests {
                 )
             );
             assert_eq!(
+                payload["server"]["runtime"]["status"],
+                json!("unsupported-transport")
+            );
+            assert_eq!(payload["server"]["runtime"]["auth_kind"], json!("oauth"));
+            assert_eq!(
+                payload["server"]["runtime"]["requires_user_auth"],
+                json!(true)
+            );
+            assert_eq!(
+                payload["server"]["runtime"]["stored_credentials"],
+                json!(false)
+            );
+            assert_eq!(
+                payload["server"]["runtime"]["detail"],
+                json!(
+                    "http transport with headersHelper is not executed by the Rust MCP runtime yet"
+                )
+            );
+            assert_eq!(
                 payload["server"]["details"]["target"],
                 json!("https://example.test/mcp")
             );
@@ -6174,6 +6349,72 @@ mod tests {
                 payload["server"]["details"]["headers_helper"],
                 json!("helper.sh")
             );
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn mcp_report_renders_oauth_auth_required_status() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("mcp-auth-required");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+        fs::write(
+            config_home.join("settings.json"),
+            r#"{
+                            "mcpServers": {
+                                "oauth-server": {
+                                    "type": "http",
+                                    "url": "https://example.test/mcp",
+                                    "oauth": {"clientId": "mcp-client"}
+                                }
+                            }
+                        }"#,
+        )
+        .expect("write settings");
+
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report = render_mcp_report(Some("oauth-server"))
+                .expect("selected oauth mcp report should render");
+            assert!(report.contains("Status            user-auth-required"));
+            assert!(report.contains("Executable        yes"));
+            assert!(report.contains("User auth         yes"));
+            assert!(report.contains("Stored creds      no"));
+            assert!(report.contains(
+                "stored OAuth credentials are required before this server can be executed"
+            ));
+
+            let payload = super::mcp_payload(Some("oauth-server".to_string()))
+                .expect("selected oauth mcp payload should render");
+            assert_eq!(payload["server"]["supported_execution"], json!(true));
+            assert_eq!(payload["server"]["execution_detail"], json!(null));
+            assert_eq!(
+                payload["server"]["runtime"]["status"],
+                json!("user-auth-required")
+            );
+            assert_eq!(payload["server"]["runtime"]["auth_kind"], json!("oauth"));
+            assert_eq!(
+                payload["server"]["runtime"]["requires_user_auth"],
+                json!(true)
+            );
+            assert_eq!(
+                payload["server"]["runtime"]["stored_credentials"],
+                json!(false)
+            );
+            assert!(payload["server"]["runtime"]["detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("McpAuthTool action `save`")));
         }
 
         let _ = fs::remove_dir_all(repo_root);
