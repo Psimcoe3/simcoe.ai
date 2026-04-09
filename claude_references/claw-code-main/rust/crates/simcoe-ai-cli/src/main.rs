@@ -8,7 +8,6 @@ mod session_manager;
 mod transport;
 mod tui;
 
-use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::io::{self, Read, Write};
@@ -728,22 +727,15 @@ fn mcp_payload(server: Option<String>) -> Result<serde_json::Value, Box<dyn std:
         .iter()
         .map(mcp_server_payload)
         .collect::<Vec<_>>();
-    let mut status_counts = BTreeMap::<String, usize>::new();
-    for server in &snapshot.servers {
-        *status_counts
-            .entry(server.runtime.status.clone())
-            .or_default() += 1;
-    }
     let attention_servers = snapshot
-        .servers
+        .attention_servers
         .iter()
-        .filter(|server| server.runtime.status != "ready")
         .map(|server| {
             json!({
                 "name": server.name.as_str(),
                 "transport": server.transport,
-                "status": server.runtime.status.as_str(),
-                "detail": server.runtime.detail.as_deref(),
+                "status": server.status.as_str(),
+                "detail": server.detail.as_deref(),
             })
         })
         .collect::<Vec<_>>();
@@ -751,21 +743,13 @@ fn mcp_payload(server: Option<String>) -> Result<serde_json::Value, Box<dyn std:
     payload.insert("configured_server_count".to_string(), json!(entries.len()));
     payload.insert(
         "supported_execution_count".to_string(),
-        json!(snapshot
-            .servers
-            .iter()
-            .filter(|server| server.supported_execution)
-            .count()),
+        json!(snapshot.supported_execution_count),
     );
     payload.insert(
         "unsupported_execution_count".to_string(),
-        json!(snapshot
-            .servers
-            .iter()
-            .filter(|server| !server.supported_execution)
-            .count()),
+        json!(snapshot.unsupported_execution_count),
     );
-    payload.insert("status_counts".to_string(), json!(status_counts));
+    payload.insert("status_counts".to_string(), json!(snapshot.status_counts));
     payload.insert("attention_servers".to_string(), json!(attention_servers));
     payload.insert("servers".to_string(), json!(entries));
     Ok(serde_json::Value::Object(payload))

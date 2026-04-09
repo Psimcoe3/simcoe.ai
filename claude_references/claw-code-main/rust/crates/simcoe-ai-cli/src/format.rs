@@ -172,6 +172,18 @@ pub(crate) struct HookEventSnapshot {
 pub(crate) struct McpReportSnapshot {
     pub(crate) selected_server: Option<McpServerSnapshot>,
     pub(crate) servers: Vec<McpServerSnapshot>,
+    pub(crate) supported_execution_count: usize,
+    pub(crate) unsupported_execution_count: usize,
+    pub(crate) status_counts: BTreeMap<String, usize>,
+    pub(crate) attention_servers: Vec<McpAttentionSnapshot>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct McpAttentionSnapshot {
+    pub(crate) name: String,
+    pub(crate) transport: &'static str,
+    pub(crate) status: String,
+    pub(crate) detail: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -825,12 +837,28 @@ pub(crate) fn mcp_report_snapshot(
         return Ok(McpReportSnapshot {
             selected_server: Some(mcp_server_snapshot(name, config, &bootstrap)?),
             servers: Vec::new(),
+            supported_execution_count: 0,
+            unsupported_execution_count: 0,
+            status_counts: BTreeMap::new(),
+            attention_servers: Vec::new(),
         });
     }
 
+    let servers = mcp_server_snapshots(servers)?;
+
     Ok(McpReportSnapshot {
         selected_server: None,
-        servers: mcp_server_snapshots(servers)?,
+        supported_execution_count: servers
+            .iter()
+            .filter(|server| server.supported_execution)
+            .count(),
+        unsupported_execution_count: servers
+            .iter()
+            .filter(|server| !server.supported_execution)
+            .count(),
+        status_counts: mcp_status_counts(&servers),
+        attention_servers: mcp_attention_servers(&servers),
+        servers,
     })
 }
 
@@ -882,17 +910,11 @@ pub(crate) fn render_mcp_report_from_snapshot(snapshot: &McpReportSnapshot) -> S
         .collect::<Vec<_>>()
         .join("\n");
 
-    let supported_count = snapshot
-        .servers
-        .iter()
-        .filter(|server| server.supported_execution)
-        .count();
-    let status_counts = summarize_doctor_mcp_statuses(Some(&mcp_status_counts(&snapshot.servers)));
+    let status_counts = summarize_doctor_mcp_statuses(Some(&snapshot.status_counts));
     let attention = snapshot
-        .servers
+        .attention_servers
         .iter()
-        .filter(|server| server.runtime.status != "ready")
-        .map(|server| format!("{} ({})", server.name, server.runtime.status))
+        .map(|server| format!("{} ({})", server.name, server.status))
         .collect::<Vec<_>>();
     let attention = if attention.is_empty() {
         String::from("<none>")
@@ -903,8 +925,8 @@ pub(crate) fn render_mcp_report_from_snapshot(snapshot: &McpReportSnapshot) -> S
     format!(
         "MCP\n  Configured servers {}\n  Executable now    {}\n  Blocked now       {}\n  Status counts     {}\n  Attention         {}\n  Usage             /mcp <server>\n\nServers\n{}",
         snapshot.servers.len(),
-        supported_count,
-        snapshot.servers.len().saturating_sub(supported_count),
+        snapshot.supported_execution_count,
+        snapshot.unsupported_execution_count,
         status_counts,
         attention,
         entries,
@@ -1861,6 +1883,19 @@ fn mcp_status_counts(servers: &[McpServerSnapshot]) -> BTreeMap<String, usize> {
         *counts.entry(server.runtime.status.clone()).or_default() += 1;
     }
     counts
+}
+
+fn mcp_attention_servers(servers: &[McpServerSnapshot]) -> Vec<McpAttentionSnapshot> {
+    servers
+        .iter()
+        .filter(|server| server.runtime.status != "ready")
+        .map(|server| McpAttentionSnapshot {
+            name: server.name.clone(),
+            transport: server.transport,
+            status: server.runtime.status.clone(),
+            detail: server.runtime.detail.clone(),
+        })
+        .collect()
 }
 
 fn summarize_recorded_mcp_transports(counts: Option<&BTreeMap<String, usize>>) -> String {
