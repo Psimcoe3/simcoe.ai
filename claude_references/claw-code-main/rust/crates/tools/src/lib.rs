@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use api::{
     ContentBlockDelta, InputContentBlock, InputMessage, MessageRequest, MessageResponse,
@@ -14,10 +14,10 @@ use runtime::{
     clear_mcp_oauth_credentials, edit_file, execute_bash, glob_search, grep_search,
     load_mcp_oauth_credentials, load_system_prompt, read_file, save_mcp_oauth_credentials,
     write_file, ApiClient, ApiRequest, AssistantEvent, BashCommandInput, ConfigLoader,
-    ContentBlock, ConversationMessage, ConversationRuntime, GrepSearchInput, McpClientAuth,
-    McpClientTransport, McpRemoteServerConfig, McpServerConfig, McpServerManager,
-    McpWebSocketServerConfig, MessageRole, OAuthRefreshRequest, OAuthTokenSet, PermissionMode,
-    PermissionPolicy, RuntimeConfig, RuntimeError, Session, TokenUsage, ToolError, ToolExecutor,
+    ContentBlock, ConversationMessage, ConversationRuntime, GrepSearchInput, McpClientTransport,
+    McpRemoteServerConfig, McpServerConfig, McpServerManager, McpWebSocketServerConfig,
+    MessageRole, OAuthRefreshRequest, OAuthTokenSet, PermissionMode, PermissionPolicy,
+    RuntimeConfig, RuntimeError, Session, TokenUsage, ToolError, ToolExecutor,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -1356,37 +1356,12 @@ fn parse_sse_frame(frame: &str) -> Result<Option<SseFrame>, String> {
     }))
 }
 
-fn current_unix_timestamp() -> Option<u64> {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .map(|duration| duration.as_secs())
-}
-
-fn mcp_credentials_key(
-    server_name: &str,
-    server_config: &runtime::ScopedMcpServerConfig,
-) -> String {
-    format!(
-        "{}:{}",
-        runtime::normalize_name_for_mcp(server_name),
-        runtime::scoped_mcp_config_hash(server_config)
-    )
-}
-
 fn load_stored_mcp_credentials(
     server_name: &str,
     server_config: &runtime::ScopedMcpServerConfig,
 ) -> Result<Option<OAuthTokenSet>, String> {
-    load_mcp_oauth_credentials(&mcp_credentials_key(server_name, server_config))
+    load_mcp_oauth_credentials(&runtime::mcp_credentials_key(server_name, server_config))
         .map_err(io_to_string)
-}
-
-fn mcp_oauth_token_is_expired(token_set: &OAuthTokenSet) -> bool {
-    let Some(expires_at) = token_set.expires_at else {
-        return false;
-    };
-    current_unix_timestamp().is_some_and(|now| expires_at <= now.saturating_add(30))
 }
 
 fn ensure_live_mcp_execution_supported(
@@ -1421,10 +1396,6 @@ fn mcp_transport_name(transport: runtime::McpTransport) -> &'static str {
 
 fn mcp_transport_label(config: &runtime::ScopedMcpServerConfig) -> &'static str {
     mcp_transport_name(config.transport())
-}
-
-fn mcp_client_transport_label(transport: &McpClientTransport) -> &'static str {
-    runtime::mcp_client_transport_display_name(transport)
 }
 
 fn config_source_label(source: runtime::ConfigSource) -> &'static str {
@@ -1814,8 +1785,11 @@ fn refresh_stored_mcp_credentials(
     if refreshed.scopes.is_empty() {
         refreshed.scopes = existing.scopes.clone();
     }
-    save_mcp_oauth_credentials(&mcp_credentials_key(server_name, server_config), &refreshed)
-        .map_err(io_to_string)?;
+    save_mcp_oauth_credentials(
+        &runtime::mcp_credentials_key(server_name, server_config),
+        &refreshed,
+    )
+    .map_err(io_to_string)?;
     Ok(refreshed)
 }
 
@@ -1832,7 +1806,7 @@ fn resolve_remote_mcp_bearer_token(
                     "MCP server `{server_name}` requires stored OAuth credentials; save them with McpAuthTool action `save`"
                 )
             })?;
-            let token_set = if mcp_oauth_token_is_expired(&stored) {
+            let token_set = if runtime::mcp_oauth_token_is_expired(&stored) {
                 refresh_stored_mcp_credentials(server_name, server_config, oauth, &stored)?
             } else {
                 stored
@@ -2559,157 +2533,32 @@ fn execute_mcp_tool(input: McpToolInput) -> Result<Value, String> {
     }
 }
 
-fn mcp_auth_details(
-    auth: &McpClientAuth,
-) -> (
-    String,
-    bool,
-    Option<String>,
-    Option<u16>,
-    Option<String>,
-    Option<bool>,
-) {
-    match auth {
-        McpClientAuth::None => (String::from("none"), false, None, None, None, None),
-        McpClientAuth::OAuth(oauth) => (
-            String::from("oauth"),
-            true,
-            oauth.client_id.clone(),
-            oauth.callback_port,
-            oauth.auth_server_metadata_url.clone(),
-            oauth.xaa,
-        ),
-    }
-}
-
 fn mcp_status_for_server(
     server_name: &str,
     server_config: &runtime::ScopedMcpServerConfig,
 ) -> Result<McpServerAuthStatus, String> {
-    let transport = McpClientTransport::from_config(&server_config.config);
-    let transport_name = mcp_client_transport_label(&transport).to_string();
     let scope = config_source_label(server_config.scope).to_string();
-    let execution_reason = runtime::unsupported_live_mcp_execution_reason(&transport);
-
-    match &transport {
-        McpClientTransport::Stdio(_) => Ok(McpServerAuthStatus {
-            server: server_name.to_string(),
-            scope,
-            transport: transport_name,
-            auth_kind: String::from("none"),
-            requires_user_auth: false,
-            supported_execution: true,
-            interactive_supported: false,
-            status: String::from("ready"),
-            stored_credentials: false,
-            refresh_token_present: false,
-            expires_at: None,
-            scopes: Vec::new(),
-            detail: None,
-            client_id: None,
-            callback_port: None,
-            auth_server_metadata_url: None,
-            xaa: None,
-        }),
-        McpClientTransport::Sse(remote)
-        | McpClientTransport::Http(remote)
-        | McpClientTransport::WebSocket(remote) => {
-            let (
-                auth_kind,
-                requires_user_auth,
-                client_id,
-                callback_port,
-                auth_server_metadata_url,
-                xaa,
-            ) = mcp_auth_details(&remote.auth);
-            let stored = if requires_user_auth {
-                load_stored_mcp_credentials(server_name, server_config)?
-            } else {
-                None
-            };
-            let stored_credentials = stored.is_some();
-            let refresh_token_present = stored
-                .as_ref()
-                .and_then(|token| token.refresh_token.as_ref())
-                .is_some();
-            let expires_at = stored.as_ref().and_then(|token| token.expires_at);
-            let scopes = stored
-                .as_ref()
-                .map(|token| token.scopes.clone())
-                .unwrap_or_default();
-            let token_expired = stored
-                .as_ref()
-                .is_some_and(|token| mcp_oauth_token_is_expired(token));
-            let supported_execution = execution_reason.is_none();
-            let status = if !supported_execution {
-                String::from("unsupported-transport")
-            } else if requires_user_auth && !stored_credentials {
-                String::from("user-auth-required")
-            } else if requires_user_auth && token_expired && !refresh_token_present {
-                String::from("expired")
-            } else {
-                String::from("ready")
-            };
-            let detail = if let Some(reason) = execution_reason {
-                Some(reason)
-            } else if requires_user_auth && !stored_credentials {
-                Some(String::from(
-                    "stored OAuth credentials are required before this server can be executed; save them with McpAuthTool action `save`",
-                ))
-            } else if requires_user_auth && token_expired && !refresh_token_present {
-                Some(String::from(
-                    "stored OAuth access token is expired and no refresh token is available",
-                ))
-            } else {
-                None
-            };
-            Ok(McpServerAuthStatus {
-                server: server_name.to_string(),
-                scope,
-                transport: transport_name,
-                auth_kind,
-                requires_user_auth,
-                supported_execution,
-                interactive_supported: false,
-                status,
-                stored_credentials,
-                refresh_token_present,
-                expires_at,
-                scopes,
-                detail,
-                client_id,
-                callback_port,
-                auth_server_metadata_url,
-                xaa,
-            })
-        }
-        McpClientTransport::Sdk(_) | McpClientTransport::SimcoeAiProxy(_) => {
-            Ok(McpServerAuthStatus {
-                server: server_name.to_string(),
-                scope,
-                transport: transport_name.clone(),
-                auth_kind: String::from("none"),
-                requires_user_auth: false,
-                supported_execution: false,
-                interactive_supported: false,
-                status: String::from("unsupported-transport"),
-                stored_credentials: false,
-                refresh_token_present: false,
-                expires_at: None,
-                scopes: Vec::new(),
-                detail: execution_reason.or_else(|| {
-                    Some(format!(
-                        "{} transport is not executed by the Rust MCP runtime yet",
-                        transport_name
-                    ))
-                }),
-                client_id: None,
-                callback_port: None,
-                auth_server_metadata_url: None,
-                xaa: None,
-            })
-        }
-    }
+    let status =
+        runtime::mcp_server_auth_status(server_name, server_config).map_err(io_to_string)?;
+    Ok(McpServerAuthStatus {
+        server: server_name.to_string(),
+        scope,
+        transport: status.transport,
+        auth_kind: status.auth_kind,
+        requires_user_auth: status.requires_user_auth,
+        supported_execution: status.supported_execution,
+        interactive_supported: status.interactive_supported,
+        status: status.status,
+        stored_credentials: status.stored_credentials,
+        refresh_token_present: status.refresh_token_present,
+        expires_at: status.expires_at,
+        scopes: status.scopes,
+        detail: status.detail,
+        client_id: status.client_id,
+        callback_port: status.callback_port,
+        auth_server_metadata_url: status.auth_server_metadata_url,
+        xaa: status.xaa,
+    })
 }
 
 fn mcp_oauth_config_for_server<'a>(
@@ -2780,7 +2629,7 @@ fn execute_mcp_auth(input: McpAuthInput) -> Result<McpAuthOutput, String> {
                 scopes,
             };
             save_mcp_oauth_credentials(
-                &mcp_credentials_key(server_name, server_config),
+                &runtime::mcp_credentials_key(server_name, server_config),
                 &token_set,
             )
             .map_err(io_to_string)?;
@@ -2794,7 +2643,7 @@ fn execute_mcp_auth(input: McpAuthInput) -> Result<McpAuthOutput, String> {
                 .get(server_name)
                 .expect("resolved MCP server must exist");
             let _oauth = mcp_oauth_config_for_server(server_name, server_config)?;
-            clear_mcp_oauth_credentials(&mcp_credentials_key(server_name, server_config))
+            clear_mcp_oauth_credentials(&runtime::mcp_credentials_key(server_name, server_config))
                 .map_err(io_to_string)?;
         }
         other => {

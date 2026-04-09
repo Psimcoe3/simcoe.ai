@@ -1,5 +1,9 @@
+use std::io;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use crate::config::{McpServerConfig, McpTransport, ScopedMcpServerConfig};
 use crate::mcp_client::McpClientTransport;
+use crate::oauth::{load_mcp_oauth_credentials, OAuthTokenSet};
 
 const SIMCOEAI_SERVER_PREFIX: &str = "simcoe.ai ";
 const CCR_PROXY_PATH_MARKERS: [&str; 2] = ["/v2/session_ingress/shttp/mcp/", "/v2/ccr-sessions/"];
@@ -123,6 +127,163 @@ pub fn unsupported_live_mcp_execution_reason(transport: &McpClientTransport) -> 
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct McpServerAuthStatusSnapshot {
+    pub transport: String,
+    pub auth_kind: String,
+    pub requires_user_auth: bool,
+    pub supported_execution: bool,
+    pub interactive_supported: bool,
+    pub status: String,
+    pub stored_credentials: bool,
+    pub refresh_token_present: bool,
+    pub expires_at: Option<u64>,
+    pub scopes: Vec<String>,
+    pub detail: Option<String>,
+    pub client_id: Option<String>,
+    pub callback_port: Option<u16>,
+    pub auth_server_metadata_url: Option<String>,
+    pub xaa: Option<bool>,
+}
+
+#[must_use]
+pub fn mcp_credentials_key(server_name: &str, server_config: &ScopedMcpServerConfig) -> String {
+    format!(
+        "{}:{}",
+        normalize_name_for_mcp(server_name),
+        scoped_mcp_config_hash(server_config)
+    )
+}
+
+#[must_use]
+pub fn mcp_oauth_token_is_expired(token_set: &OAuthTokenSet) -> bool {
+    let Some(expires_at) = token_set.expires_at else {
+        return false;
+    };
+    current_unix_timestamp().is_some_and(|now| expires_at <= now.saturating_add(30))
+}
+
+pub fn mcp_server_auth_status(
+    server_name: &str,
+    server_config: &ScopedMcpServerConfig,
+) -> io::Result<McpServerAuthStatusSnapshot> {
+    let transport = McpClientTransport::from_config(&server_config.config);
+    let transport_name = mcp_client_transport_display_name(&transport).to_string();
+    let execution_reason = unsupported_live_mcp_execution_reason(&transport);
+
+    match &transport {
+        McpClientTransport::Stdio(_) => Ok(McpServerAuthStatusSnapshot {
+            transport: transport_name,
+            auth_kind: String::from("none"),
+            requires_user_auth: false,
+            supported_execution: true,
+            interactive_supported: false,
+            status: String::from("ready"),
+            stored_credentials: false,
+            refresh_token_present: false,
+            expires_at: None,
+            scopes: Vec::new(),
+            detail: None,
+            client_id: None,
+            callback_port: None,
+            auth_server_metadata_url: None,
+            xaa: None,
+        }),
+        McpClientTransport::Sse(remote)
+        | McpClientTransport::Http(remote)
+        | McpClientTransport::WebSocket(remote) => {
+            let (
+                auth_kind,
+                requires_user_auth,
+                client_id,
+                callback_port,
+                auth_server_metadata_url,
+                xaa,
+            ) = mcp_auth_details(&remote.auth);
+            let stored = if requires_user_auth {
+                load_mcp_oauth_credentials(&mcp_credentials_key(server_name, server_config))?
+            } else {
+                None
+            };
+            let stored_credentials = stored.is_some();
+            let refresh_token_present = stored
+                .as_ref()
+                .and_then(|token| token.refresh_token.as_ref())
+                .is_some();
+            let expires_at = stored.as_ref().and_then(|token| token.expires_at);
+            let scopes = stored
+                .as_ref()
+                .map(|token| token.scopes.clone())
+                .unwrap_or_default();
+            let token_expired = stored.as_ref().is_some_and(mcp_oauth_token_is_expired);
+            let supported_execution = execution_reason.is_none();
+            let status = if !supported_execution {
+                String::from("unsupported-transport")
+            } else if requires_user_auth && !stored_credentials {
+                String::from("user-auth-required")
+            } else if requires_user_auth && token_expired && !refresh_token_present {
+                String::from("expired")
+            } else {
+                String::from("ready")
+            };
+            let detail = if let Some(reason) = execution_reason {
+                Some(reason)
+            } else if requires_user_auth && !stored_credentials {
+                Some(String::from(
+                    "stored OAuth credentials are required before this server can be executed; save them with McpAuthTool action `save`",
+                ))
+            } else if requires_user_auth && token_expired && !refresh_token_present {
+                Some(String::from(
+                    "stored OAuth access token is expired and no refresh token is available",
+                ))
+            } else {
+                None
+            };
+            Ok(McpServerAuthStatusSnapshot {
+                transport: transport_name,
+                auth_kind,
+                requires_user_auth,
+                supported_execution,
+                interactive_supported: false,
+                status,
+                stored_credentials,
+                refresh_token_present,
+                expires_at,
+                scopes,
+                detail,
+                client_id,
+                callback_port,
+                auth_server_metadata_url,
+                xaa,
+            })
+        }
+        McpClientTransport::Sdk(_) | McpClientTransport::SimcoeAiProxy(_) => {
+            Ok(McpServerAuthStatusSnapshot {
+                transport: transport_name.clone(),
+                auth_kind: String::from("none"),
+                requires_user_auth: false,
+                supported_execution: false,
+                interactive_supported: false,
+                status: String::from("unsupported-transport"),
+                stored_credentials: false,
+                refresh_token_present: false,
+                expires_at: None,
+                scopes: Vec::new(),
+                detail: execution_reason.or_else(|| {
+                    Some(format!(
+                        "{} transport is not executed by the Rust MCP runtime yet",
+                        transport_name
+                    ))
+                }),
+                client_id: None,
+                callback_port: None,
+                auth_server_metadata_url: None,
+                xaa: None,
+            })
+        }
+    }
+}
+
 #[must_use]
 pub fn mcp_server_signature(config: &McpServerConfig) -> Option<String> {
     match config {
@@ -217,6 +378,38 @@ fn stable_hex_hash(value: &str) -> String {
     format!("{hash:016x}")
 }
 
+fn mcp_auth_details(
+    auth: &crate::mcp_client::McpClientAuth,
+) -> (
+    String,
+    bool,
+    Option<String>,
+    Option<u16>,
+    Option<String>,
+    Option<bool>,
+) {
+    match auth {
+        crate::mcp_client::McpClientAuth::None => {
+            (String::from("none"), false, None, None, None, None)
+        }
+        crate::mcp_client::McpClientAuth::OAuth(oauth) => (
+            String::from("oauth"),
+            true,
+            oauth.client_id.clone(),
+            oauth.callback_port,
+            oauth.auth_server_metadata_url.clone(),
+            oauth.xaa,
+        ),
+    }
+}
+
+fn current_unix_timestamp() -> Option<u64> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_secs())
+}
+
 fn collapse_underscores(value: &str) -> String {
     let mut collapsed = String::with_capacity(value.len());
     let mut last_was_underscore = false;
@@ -268,19 +461,36 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::config::{
-        ConfigSource, McpRemoteServerConfig, McpServerConfig, McpStdioServerConfig, McpTransport,
-        McpWebSocketServerConfig, ScopedMcpServerConfig,
+        ConfigSource, McpOAuthConfig, McpRemoteServerConfig, McpServerConfig, McpStdioServerConfig,
+        McpTransport, McpWebSocketServerConfig, ScopedMcpServerConfig,
     };
     use crate::mcp_client::{
         McpClientAuth, McpClientTransport, McpRemoteTransport, McpSdkTransport,
         McpSimcoeAiProxyTransport,
     };
+    use crate::oauth::{save_mcp_oauth_credentials, OAuthTokenSet};
 
     use super::{
-        mcp_client_transport_display_name, mcp_server_signature, mcp_tool_name,
-        mcp_transport_display_name, normalize_name_for_mcp, scoped_mcp_config_hash,
-        unsupported_live_mcp_execution_reason, unwrap_ccr_proxy_url,
+        mcp_client_transport_display_name, mcp_credentials_key, mcp_oauth_token_is_expired,
+        mcp_server_auth_status, mcp_server_signature, mcp_tool_name, mcp_transport_display_name,
+        normalize_name_for_mcp, scoped_mcp_config_hash, unsupported_live_mcp_execution_reason,
+        unwrap_ccr_proxy_url,
     };
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        crate::test_env_lock()
+    }
+
+    fn temp_config_home() -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "runtime-mcp-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ))
+    }
 
     #[test]
     fn normalizes_server_names_for_mcp_tooling() {
@@ -421,5 +631,90 @@ mod tests {
             unsupported_live_mcp_execution_reason(&blocked_proxy).expect("proxy blocker");
         assert!(proxy_reason.contains("simcoe-ai-proxy transport is not executed"));
         assert!(proxy_reason.contains("proxy `proxy-123` targets `wss://vendor.example/mcp`"));
+    }
+
+    #[test]
+    fn reports_mcp_server_auth_status_for_oauth_and_blocked_servers() {
+        let _guard = env_lock();
+        let config_home = temp_config_home();
+        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+
+        let oauth_server = ScopedMcpServerConfig {
+            scope: ConfigSource::Local,
+            config: McpServerConfig::Http(McpRemoteServerConfig {
+                url: "https://vendor.example/mcp".to_string(),
+                headers: BTreeMap::new(),
+                headers_helper: None,
+                oauth: Some(McpOAuthConfig {
+                    client_id: Some("client-id".to_string()),
+                    callback_port: Some(4545),
+                    auth_server_metadata_url: Some(
+                        "https://vendor.example/oauth-metadata".to_string(),
+                    ),
+                    xaa: Some(true),
+                }),
+            }),
+        };
+
+        let auth_required =
+            mcp_server_auth_status("vendor", &oauth_server).expect("auth-required status");
+        assert_eq!(auth_required.transport, "http");
+        assert_eq!(auth_required.auth_kind, "oauth");
+        assert!(auth_required.requires_user_auth);
+        assert!(auth_required.supported_execution);
+        assert_eq!(auth_required.status, "user-auth-required");
+        assert!(!auth_required.stored_credentials);
+        assert!(auth_required
+            .detail
+            .as_deref()
+            .is_some_and(|detail| { detail.contains("save them with McpAuthTool action `save`") }));
+
+        let server_key = mcp_credentials_key("vendor", &oauth_server);
+        assert!(server_key.starts_with("vendor:"));
+        let expired = OAuthTokenSet {
+            access_token: "expired-token".to_string(),
+            refresh_token: None,
+            expires_at: Some(1),
+            scopes: vec!["scope:a".to_string()],
+        };
+        assert!(mcp_oauth_token_is_expired(&expired));
+        save_mcp_oauth_credentials(&server_key, &expired).expect("save expired credentials");
+
+        let expired_status =
+            mcp_server_auth_status("vendor", &oauth_server).expect("expired status");
+        assert_eq!(expired_status.status, "expired");
+        assert!(expired_status.stored_credentials);
+        assert!(!expired_status.refresh_token_present);
+        assert_eq!(expired_status.scopes, vec!["scope:a".to_string()]);
+        assert!(expired_status
+            .detail
+            .as_deref()
+            .is_some_and(|detail| { detail.contains("expired and no refresh token") }));
+
+        let blocked_server = ScopedMcpServerConfig {
+            scope: ConfigSource::Local,
+            config: McpServerConfig::Http(McpRemoteServerConfig {
+                url: "https://blocked.example/mcp".to_string(),
+                headers: BTreeMap::new(),
+                headers_helper: Some("helper.sh".to_string()),
+                oauth: None,
+            }),
+        };
+        let blocked_status =
+            mcp_server_auth_status("blocked", &blocked_server).expect("blocked status");
+        assert_eq!(blocked_status.status, "unsupported-transport");
+        assert!(!blocked_status.supported_execution);
+        assert_eq!(blocked_status.auth_kind, "none");
+        assert!(blocked_status
+            .detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("headersHelper")));
+
+        match original_config_home {
+            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
+            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+        }
+        let _ = std::fs::remove_dir_all(config_home);
     }
 }
