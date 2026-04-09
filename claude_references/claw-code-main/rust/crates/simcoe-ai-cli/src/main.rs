@@ -1064,6 +1064,20 @@ fn doctor_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         json!({
             "server_count": snapshot.mcp.server_count,
             "transport_counts": snapshot.mcp.transport_counts,
+            "supported_execution_count": snapshot.mcp.supported_execution_count,
+            "unsupported_execution_count": snapshot.mcp.unsupported_execution_count,
+            "unsupported_servers": snapshot.mcp.unsupported_servers.as_ref().map(|servers| {
+                servers
+                    .iter()
+                    .map(|server| {
+                        json!({
+                            "name": server.name.as_str(),
+                            "transport": server.transport,
+                            "detail": server.detail.as_str(),
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            }),
         }),
     );
     payload.insert(
@@ -4754,8 +4768,9 @@ mod tests {
             "args": ["server.js"]
         },
         "remote": {
-            "type": "ws",
-            "url": "ws://example.test/socket"
+            "type": "http",
+            "url": "https://example.test/mcp",
+            "headersHelper": "helper.sh"
         }
     },
     "oauth": {
@@ -5736,11 +5751,17 @@ mod tests {
             assert!(report.contains("Stored creds      yes"));
             assert!(report.contains("Refresh token     yes"));
             assert!(report.contains("MCP servers       2"));
-            assert!(report.contains("MCP transports    stdio=1, ws=1"));
+            assert!(report.contains("MCP transports    http=1, stdio=1"));
+            assert!(report.contains("MCP executable    1"));
+            assert!(report.contains("MCP blocked       1"));
+            assert!(report.contains("MCP blockers      remote (http)"));
             assert!(report.contains("Pre hooks         1"));
             assert!(report.contains("Post hooks        1"));
             assert!(report.contains("Filesystem mode   workspace-only"));
             assert!(report.contains("no instruction files discovered"));
+            assert!(report.contains(
+                "MCP server `remote` (http) is configured but not executable by the Rust runtime"
+            ));
 
             let payload = super::doctor_payload().expect("doctor payload should render");
             assert_eq!(payload["type"], json!("doctor"));
@@ -5756,8 +5777,19 @@ mod tests {
             assert_eq!(payload["hooks"]["pre_count"], json!(1));
             assert_eq!(payload["hooks"]["post_count"], json!(1));
             assert_eq!(payload["mcp"]["server_count"], json!(2));
+            assert_eq!(payload["mcp"]["supported_execution_count"], json!(1));
+            assert_eq!(payload["mcp"]["unsupported_execution_count"], json!(1));
             assert_eq!(payload["mcp"]["transport_counts"]["stdio"], json!(1));
-            assert_eq!(payload["mcp"]["transport_counts"]["ws"], json!(1));
+            assert_eq!(payload["mcp"]["transport_counts"]["http"], json!(1));
+            assert!(payload["mcp"]["unsupported_servers"]
+                .as_array()
+                .is_some_and(|servers| servers.iter().any(|server| {
+                    server["name"] == json!("remote")
+                        && server["transport"] == json!("http")
+                        && server["detail"]
+                            .as_str()
+                            .is_some_and(|detail| detail.contains("headersHelper"))
+                })));
             assert_eq!(
                 payload["config"]["sandbox"]["filesystem_mode"],
                 json!("workspace-only")
@@ -5765,6 +5797,13 @@ mod tests {
             assert!(payload["issues"].as_array().is_some_and(|issues| issues
                 .iter()
                 .any(|issue| issue == &json!("no instruction files discovered"))));
+            assert!(payload["issues"]
+                .as_array()
+                .is_some_and(|issues| issues.iter().any(|issue| {
+                    issue.as_str().is_some_and(|text| {
+                        text.contains("MCP server `remote` (http) is configured but not executable")
+                    })
+                })));
         }
 
         let _ = fs::remove_dir_all(repo_root);

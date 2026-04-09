@@ -1,4 +1,5 @@
-use crate::config::{McpServerConfig, ScopedMcpServerConfig};
+use crate::config::{McpServerConfig, McpTransport, ScopedMcpServerConfig};
+use crate::mcp_client::McpClientTransport;
 
 const SIMCOEAI_SERVER_PREFIX: &str = "simcoe.ai ";
 const CCR_PROXY_PATH_MARKERS: [&str; 2] = ["/v2/session_ingress/shttp/mcp/", "/v2/ccr-sessions/"];
@@ -59,6 +60,67 @@ pub fn unwrap_ccr_proxy_url(url: &str) -> String {
     }
 
     url.to_string()
+}
+
+#[must_use]
+pub fn mcp_transport_display_name(transport: McpTransport) -> &'static str {
+    match transport {
+        McpTransport::Stdio => "stdio",
+        McpTransport::Sse => "sse",
+        McpTransport::Http => "http",
+        McpTransport::Ws => "ws",
+        McpTransport::Sdk => "sdk",
+        McpTransport::SimcoeAiProxy => "simcoe-ai-proxy",
+    }
+}
+
+#[must_use]
+pub fn mcp_client_transport_display_name(transport: &McpClientTransport) -> &'static str {
+    match transport {
+        McpClientTransport::Stdio(_) => "stdio",
+        McpClientTransport::Sse(_) => "sse",
+        McpClientTransport::Http(_) => "http",
+        McpClientTransport::WebSocket(_) => "ws",
+        McpClientTransport::Sdk(_) => "sdk",
+        McpClientTransport::SimcoeAiProxy(_) => "simcoe-ai-proxy",
+    }
+}
+
+#[must_use]
+pub fn unsupported_live_mcp_execution_reason(transport: &McpClientTransport) -> Option<String> {
+    match transport {
+        McpClientTransport::Stdio(_) => None,
+        McpClientTransport::Sse(remote) => {
+            remote.headers_helper.as_ref().map(|_| {
+                String::from(
+                    "sse transport with headersHelper is not executed by the Rust MCP runtime yet",
+                )
+            })
+        }
+        McpClientTransport::Http(remote) => {
+            remote.headers_helper.as_ref().map(|_| {
+                String::from(
+                    "http transport with headersHelper is not executed by the Rust MCP runtime yet",
+                )
+            })
+        }
+        McpClientTransport::WebSocket(remote) => {
+            remote.headers_helper.as_ref().map(|_| {
+                String::from(
+                    "ws transport with headersHelper is not executed by the Rust MCP runtime yet",
+                )
+            })
+        }
+        McpClientTransport::Sdk(sdk) => Some(format!(
+            "sdk transport is not executed by the Rust MCP runtime yet; SDK server `{}` needs the upstream SDK adapter path, which is not present in the Rust port",
+            sdk.name
+        )),
+        McpClientTransport::SimcoeAiProxy(proxy) => Some(format!(
+            "simcoe-ai-proxy transport is not executed by the Rust MCP runtime yet; proxy `{}` targets `{}`, but the upstream proxy websocket/session adapter path (`remote/SessionsWebSocket.ts` / `remote/sdkMessageAdapter.ts`) is not ported in Rust",
+            proxy.id,
+            unwrap_ccr_proxy_url(&proxy.url)
+        )),
+    }
 }
 
 #[must_use]
@@ -206,13 +268,18 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::config::{
-        ConfigSource, McpRemoteServerConfig, McpServerConfig, McpStdioServerConfig,
+        ConfigSource, McpRemoteServerConfig, McpServerConfig, McpStdioServerConfig, McpTransport,
         McpWebSocketServerConfig, ScopedMcpServerConfig,
+    };
+    use crate::mcp_client::{
+        McpClientAuth, McpClientTransport, McpRemoteTransport, McpSdkTransport,
+        McpSimcoeAiProxyTransport,
     };
 
     use super::{
-        mcp_server_signature, mcp_tool_name, normalize_name_for_mcp, scoped_mcp_config_hash,
-        unwrap_ccr_proxy_url,
+        mcp_client_transport_display_name, mcp_server_signature, mcp_tool_name,
+        mcp_transport_display_name, normalize_name_for_mcp, scoped_mcp_config_hash,
+        unsupported_live_mcp_execution_reason, unwrap_ccr_proxy_url,
     };
 
     #[test]
@@ -296,5 +363,63 @@ mod tests {
             scoped_mcp_config_hash(&user),
             scoped_mcp_config_hash(&changed)
         );
+    }
+
+    #[test]
+    fn reports_shared_mcp_transport_labels() {
+        assert_eq!(
+            mcp_transport_display_name(McpTransport::SimcoeAiProxy),
+            "simcoe-ai-proxy"
+        );
+        assert_eq!(
+            mcp_client_transport_display_name(&McpClientTransport::SimcoeAiProxy(
+                McpSimcoeAiProxyTransport {
+                    url: "https://api.anthropic.com/v2/ccr-sessions/1?mcp_url=wss%3A%2F%2Fvendor.example%2Fmcp".to_string(),
+                    id: "proxy-123".to_string(),
+                }
+            )),
+            "simcoe-ai-proxy"
+        );
+    }
+
+    #[test]
+    fn reports_shared_live_mcp_execution_blockers() {
+        let supported = McpClientTransport::Http(McpRemoteTransport {
+            url: "https://vendor.example/mcp".to_string(),
+            headers: BTreeMap::new(),
+            headers_helper: None,
+            auth: McpClientAuth::None,
+        });
+        assert_eq!(unsupported_live_mcp_execution_reason(&supported), None);
+
+        let blocked_ws = McpClientTransport::WebSocket(McpRemoteTransport {
+            url: "wss://vendor.example/mcp".to_string(),
+            headers: BTreeMap::new(),
+            headers_helper: Some("helper.sh".to_string()),
+            auth: McpClientAuth::None,
+        });
+        assert_eq!(
+            unsupported_live_mcp_execution_reason(&blocked_ws),
+            Some(
+                "ws transport with headersHelper is not executed by the Rust MCP runtime yet"
+                    .to_string()
+            )
+        );
+
+        let blocked_sdk = McpClientTransport::Sdk(McpSdkTransport {
+            name: "sdk-adapter".to_string(),
+        });
+        assert!(unsupported_live_mcp_execution_reason(&blocked_sdk)
+            .expect("sdk blocker")
+            .contains("SDK server `sdk-adapter` needs the upstream SDK adapter path"));
+
+        let blocked_proxy = McpClientTransport::SimcoeAiProxy(McpSimcoeAiProxyTransport {
+            url: "https://api.anthropic.com/v2/ccr-sessions/1?mcp_url=wss%3A%2F%2Fvendor.example%2Fmcp".to_string(),
+            id: "proxy-123".to_string(),
+        });
+        let proxy_reason =
+            unsupported_live_mcp_execution_reason(&blocked_proxy).expect("proxy blocker");
+        assert!(proxy_reason.contains("simcoe-ai-proxy transport is not executed"));
+        assert!(proxy_reason.contains("proxy `proxy-123` targets `wss://vendor.example/mcp`"));
     }
 }

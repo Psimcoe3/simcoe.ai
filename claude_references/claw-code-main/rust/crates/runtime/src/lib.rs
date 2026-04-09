@@ -42,8 +42,9 @@ pub use file_ops::{
 };
 pub use hooks::{HookEvent, HookRunResult, HookRunner};
 pub use mcp::{
-    mcp_server_signature, mcp_tool_name, mcp_tool_prefix, normalize_name_for_mcp,
-    scoped_mcp_config_hash, unwrap_ccr_proxy_url,
+    mcp_client_transport_display_name, mcp_server_signature, mcp_tool_name, mcp_tool_prefix,
+    mcp_transport_display_name, normalize_name_for_mcp, scoped_mcp_config_hash,
+    unsupported_live_mcp_execution_reason, unwrap_ccr_proxy_url,
 };
 pub use mcp_client::{
     McpClientAuth, McpClientBootstrap, McpClientTransport, McpRemoteTransport, McpSdkTransport,

@@ -1138,6 +1138,12 @@ struct McpAuthOutput {
     action: String,
     #[serde(rename = "serverCount")]
     server_count: usize,
+    #[serde(rename = "supportedExecutionCount")]
+    supported_execution_count: usize,
+    #[serde(rename = "unsupportedExecutionCount")]
+    unsupported_execution_count: usize,
+    #[serde(rename = "statusCounts")]
+    status_counts: BTreeMap<String, usize>,
     servers: Vec<McpServerAuthStatus>,
 }
 
@@ -1187,6 +1193,14 @@ fn load_runtime_config_for_tools() -> Result<RuntimeConfig, String> {
 
 fn configured_mcp_server_names(config: &RuntimeConfig) -> Vec<String> {
     config.mcp().servers().keys().cloned().collect()
+}
+
+fn mcp_auth_status_counts(servers: &[McpServerAuthStatus]) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for server in servers {
+        *counts.entry(server.status.clone()).or_default() += 1;
+    }
+    counts
 }
 
 fn resolve_mcp_server_name(config: &RuntimeConfig, requested: &str) -> Result<String, String> {
@@ -1375,43 +1389,12 @@ fn mcp_oauth_token_is_expired(token_set: &OAuthTokenSet) -> bool {
     current_unix_timestamp().is_some_and(|now| expires_at <= now.saturating_add(30))
 }
 
-fn unsupported_live_mcp_execution_reason(
-    server_config: &runtime::ScopedMcpServerConfig,
-) -> Option<String> {
-    match &server_config.config {
-        McpServerConfig::Stdio(_) => None,
-        McpServerConfig::Http(remote) => remote.headers_helper.as_ref().map(|_| {
-            String::from(
-                "http transport with headersHelper is not executed by the Rust MCP runtime yet",
-            )
-        }),
-        McpServerConfig::Sse(remote) => remote.headers_helper.as_ref().map(|_| {
-            String::from(
-                "sse transport with headersHelper is not executed by the Rust MCP runtime yet",
-            )
-        }),
-        McpServerConfig::Ws(remote) => remote.headers_helper.as_ref().map(|_| {
-            String::from(
-                "ws transport with headersHelper is not executed by the Rust MCP runtime yet",
-            )
-        }),
-        McpServerConfig::Sdk(sdk) => Some(format!(
-            "sdk transport is not executed by the Rust MCP runtime yet; SDK server `{}` needs the upstream SDK adapter path, which is not present in the Rust port",
-            sdk.name
-        )),
-        McpServerConfig::SimcoeAiProxy(proxy) => Some(format!(
-            "simcoeai-proxy transport is not executed by the Rust MCP runtime yet; proxy `{}` targets `{}`, but the upstream proxy websocket/session adapter path (`remote/SessionsWebSocket.ts` / `remote/sdkMessageAdapter.ts`) is not ported in Rust",
-            proxy.id,
-            runtime::unwrap_ccr_proxy_url(&proxy.url)
-        )),
-    }
-}
-
 fn ensure_live_mcp_execution_supported(
     server_name: &str,
     server_config: &runtime::ScopedMcpServerConfig,
 ) -> Result<(), String> {
-    if let Some(reason) = unsupported_live_mcp_execution_reason(server_config) {
+    let transport = McpClientTransport::from_config(&server_config.config);
+    if let Some(reason) = runtime::unsupported_live_mcp_execution_reason(&transport) {
         return Err(format!(
             "MCP server `{server_name}` uses {} transport; {reason}",
             mcp_transport_label(server_config)
@@ -1433,14 +1416,7 @@ fn resolve_mcp_server_config<'a>(
 }
 
 fn mcp_transport_name(transport: runtime::McpTransport) -> &'static str {
-    match transport {
-        runtime::McpTransport::Stdio => "stdio",
-        runtime::McpTransport::Sse => "sse",
-        runtime::McpTransport::Http => "http",
-        runtime::McpTransport::Ws => "ws",
-        runtime::McpTransport::Sdk => "sdk",
-        runtime::McpTransport::SimcoeAiProxy => "simcoeai-proxy",
-    }
+    runtime::mcp_transport_display_name(transport)
 }
 
 fn mcp_transport_label(config: &runtime::ScopedMcpServerConfig) -> &'static str {
@@ -1448,14 +1424,7 @@ fn mcp_transport_label(config: &runtime::ScopedMcpServerConfig) -> &'static str 
 }
 
 fn mcp_client_transport_label(transport: &McpClientTransport) -> &'static str {
-    match transport {
-        McpClientTransport::Stdio(_) => "stdio",
-        McpClientTransport::Sse(_) => "sse",
-        McpClientTransport::Http(_) => "http",
-        McpClientTransport::WebSocket(_) => "ws",
-        McpClientTransport::Sdk(_) => "sdk",
-        McpClientTransport::SimcoeAiProxy(_) => "simcoeai-proxy",
-    }
+    runtime::mcp_client_transport_display_name(transport)
 }
 
 fn config_source_label(source: runtime::ConfigSource) -> &'static str {
@@ -2620,7 +2589,7 @@ fn mcp_status_for_server(
     let transport = McpClientTransport::from_config(&server_config.config);
     let transport_name = mcp_client_transport_label(&transport).to_string();
     let scope = config_source_label(server_config.scope).to_string();
-    let execution_reason = unsupported_live_mcp_execution_reason(server_config);
+    let execution_reason = runtime::unsupported_live_mcp_execution_reason(&transport);
 
     match &transport {
         McpClientTransport::Stdio(_) => Ok(McpServerAuthStatus {
@@ -2844,9 +2813,19 @@ fn execute_mcp_auth(input: McpAuthInput) -> Result<McpAuthOutput, String> {
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    let supported_execution_count = servers
+        .iter()
+        .filter(|server| server.supported_execution)
+        .count();
+    let unsupported_execution_count = servers.len().saturating_sub(supported_execution_count);
+    let status_counts = mcp_auth_status_counts(&servers);
+
     Ok(McpAuthOutput {
         action: action.to_string(),
         server_count: servers.len(),
+        supported_execution_count,
+        unsupported_execution_count,
+        status_counts,
         servers,
     })
 }
@@ -5746,6 +5725,10 @@ mod tests {
         let auth = execute_tool("McpAuthTool", &json!({})).expect("inspect MCP auth");
         let auth: serde_json::Value = serde_json::from_str(&auth).expect("valid MCP auth json");
         assert_eq!(auth["serverCount"], json!(2));
+        assert_eq!(auth["supportedExecutionCount"], json!(2));
+        assert_eq!(auth["unsupportedExecutionCount"], json!(0));
+        assert_eq!(auth["statusCounts"]["ready"], json!(1));
+        assert_eq!(auth["statusCounts"]["user-auth-required"], json!(1));
         let servers = auth["servers"].as_array().expect("auth server list");
         assert!(servers.iter().any(|server| {
             server["server"] == json!("alpha")
@@ -5816,6 +5799,9 @@ mod tests {
             execute_tool("McpAuthTool", &json!({})).expect("inspect unsupported transports");
         let status: serde_json::Value = serde_json::from_str(&status).expect("valid status json");
         assert_eq!(status["serverCount"], json!(2));
+        assert_eq!(status["supportedExecutionCount"], json!(0));
+        assert_eq!(status["unsupportedExecutionCount"], json!(2));
+        assert_eq!(status["statusCounts"]["unsupported-transport"], json!(2));
 
         let servers = status["servers"].as_array().expect("server status array");
         let sdk = servers
@@ -6072,6 +6058,10 @@ mod tests {
             .expect("inspect vendor auth");
         let status: serde_json::Value = serde_json::from_str(&status).expect("valid status json");
         assert_eq!(status["action"], json!("status"));
+        assert_eq!(status["serverCount"], json!(1));
+        assert_eq!(status["supportedExecutionCount"], json!(1));
+        assert_eq!(status["unsupportedExecutionCount"], json!(0));
+        assert_eq!(status["statusCounts"]["ready"], json!(1));
         assert_eq!(status["servers"][0]["status"], json!("ready"));
         assert_eq!(status["servers"][0]["storedCredentials"], json!(true));
         assert_eq!(status["servers"][0]["refreshTokenPresent"], json!(true));
@@ -6155,6 +6145,13 @@ mod tests {
             .expect("inspect vendor-sse auth before save");
         let initial_status: serde_json::Value =
             serde_json::from_str(&initial_status).expect("valid initial status json");
+        assert_eq!(initial_status["serverCount"], json!(1));
+        assert_eq!(initial_status["supportedExecutionCount"], json!(1));
+        assert_eq!(initial_status["unsupportedExecutionCount"], json!(0));
+        assert_eq!(
+            initial_status["statusCounts"]["user-auth-required"],
+            json!(1)
+        );
         assert_eq!(
             initial_status["servers"][0]["status"],
             json!("user-auth-required")
@@ -6216,6 +6213,9 @@ mod tests {
         let ready = execute_tool("McpAuthTool", &json!({ "server": "vendor-sse" }))
             .expect("inspect vendor-sse auth after save");
         let ready: serde_json::Value = serde_json::from_str(&ready).expect("valid ready json");
+        assert_eq!(ready["supportedExecutionCount"], json!(1));
+        assert_eq!(ready["unsupportedExecutionCount"], json!(0));
+        assert_eq!(ready["statusCounts"]["ready"], json!(1));
         assert_eq!(ready["servers"][0]["status"], json!("ready"));
         assert_eq!(ready["servers"][0]["refreshTokenPresent"], json!(true));
 
@@ -6296,6 +6296,10 @@ mod tests {
         let status = execute_tool("McpAuthTool", &json!({ "server": "vendor-ws" }))
             .expect("inspect websocket MCP auth");
         let status: serde_json::Value = serde_json::from_str(&status).expect("valid status json");
+        assert_eq!(status["serverCount"], json!(1));
+        assert_eq!(status["supportedExecutionCount"], json!(1));
+        assert_eq!(status["unsupportedExecutionCount"], json!(0));
+        assert_eq!(status["statusCounts"]["ready"], json!(1));
         assert_eq!(status["servers"][0]["status"], json!("ready"));
         assert_eq!(status["servers"][0]["supportedExecution"], json!(true));
         assert_eq!(status["servers"][0]["authKind"], json!("none"));

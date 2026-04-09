@@ -14,10 +14,11 @@ use compat_harness::{
     RemoteCatalog, RemoteCommandSummary, ToolCatalog,
 };
 use runtime::{
-    credentials_path, inherited_upstream_proxy_env, load_oauth_credentials, unwrap_ccr_proxy_url,
-    ConfigSource, ContentBlock, McpClientAuth, McpClientBootstrap, McpClientTransport,
-    McpTransport, ProjectContext, RemoteSessionContext, ResolvedPermissionMode, Session,
-    TokenUsage, UpstreamProxyBootstrap,
+    credentials_path, inherited_upstream_proxy_env, load_oauth_credentials,
+    mcp_client_transport_display_name, mcp_transport_display_name,
+    unsupported_live_mcp_execution_reason, ConfigSource, ContentBlock, McpClientAuth,
+    McpClientBootstrap, McpClientTransport, ProjectContext, RemoteSessionContext,
+    ResolvedPermissionMode, Session, TokenUsage, UpstreamProxyBootstrap,
 };
 use tools::{
     list_agent_profiles, list_agent_tasks, list_skills, load_agent_profile, load_agent_task,
@@ -102,6 +103,16 @@ pub(crate) struct DoctorHooksSnapshot {
 pub(crate) struct DoctorMcpSnapshot {
     pub(crate) server_count: Option<usize>,
     pub(crate) transport_counts: Option<BTreeMap<String, usize>>,
+    pub(crate) supported_execution_count: Option<usize>,
+    pub(crate) unsupported_execution_count: Option<usize>,
+    pub(crate) unsupported_servers: Option<Vec<DoctorBlockedMcpSnapshot>>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct DoctorBlockedMcpSnapshot {
+    pub(crate) name: String,
+    pub(crate) transport: &'static str,
+    pub(crate) detail: String,
 }
 
 #[derive(Debug, Clone)]
@@ -808,14 +819,20 @@ pub(crate) fn mcp_report_snapshot(
 
     Ok(McpReportSnapshot {
         selected_server: None,
-        servers: servers
-            .iter()
-            .map(|(name, config)| {
-                let bootstrap = McpClientBootstrap::from_scoped_config(name, config);
-                mcp_server_snapshot(name, config.scope, &bootstrap)
-            })
-            .collect(),
+        servers: mcp_server_snapshots(servers),
     })
+}
+
+fn mcp_server_snapshots(
+    servers: &BTreeMap<String, runtime::ScopedMcpServerConfig>,
+) -> Vec<McpServerSnapshot> {
+    servers
+        .iter()
+        .map(|(name, config)| {
+            let bootstrap = McpClientBootstrap::from_scoped_config(name, config);
+            mcp_server_snapshot(name, config.scope, &bootstrap)
+        })
+        .collect()
 }
 
 pub(crate) fn render_mcp_report_from_snapshot(snapshot: &McpReportSnapshot) -> String {
@@ -1150,6 +1167,26 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
 
             let hooks = runtime_config.hooks();
             let mcp_servers = runtime_config.mcp().servers();
+            let mcp_server_snapshots = mcp_server_snapshots(mcp_servers);
+            let unsupported_mcp_servers = mcp_server_snapshots
+                .iter()
+                .filter(|server| !server.supported_execution)
+                .map(|server| DoctorBlockedMcpSnapshot {
+                    name: server.name.clone(),
+                    transport: server.transport,
+                    detail: server
+                        .execution_detail
+                        .clone()
+                        .unwrap_or_else(|| String::from("<unknown>")),
+                })
+                .collect::<Vec<_>>();
+
+            for server in &unsupported_mcp_servers {
+                issues.push(format!(
+                    "MCP server `{}` ({}) is configured but not executable by the Rust runtime: {}",
+                    server.name, server.transport, server.detail
+                ));
+            }
 
             Ok(DoctorSnapshot {
                 rust_status: "inspection only",
@@ -1188,6 +1225,14 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
                 mcp: DoctorMcpSnapshot {
                     server_count: Some(mcp_servers.len()),
                     transport_counts: Some(mcp_transport_counts(mcp_servers)),
+                    supported_execution_count: Some(
+                        mcp_server_snapshots
+                            .iter()
+                            .filter(|server| server.supported_execution)
+                            .count(),
+                    ),
+                    unsupported_execution_count: Some(unsupported_mcp_servers.len()),
+                    unsupported_servers: Some(unsupported_mcp_servers),
                 },
                 remote: remote_snapshot,
             })
@@ -1221,6 +1266,9 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
                 mcp: DoctorMcpSnapshot {
                     server_count: None,
                     transport_counts: None,
+                    supported_execution_count: None,
+                    unsupported_execution_count: None,
+                    unsupported_servers: None,
                 },
                 remote: remote_snapshot,
             })
@@ -1268,7 +1316,7 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
         );
 
         return format!(
-            "Doctor\n  Rust status       {rust_status}\n  Working directory {cwd}\n  Project root      {project_root}\n  Git branch        {git_branch}\n  Instruction files {instruction_files}\n  Issues            {issue_count}\n\nConfig\n  Status            ok\n  Discovered files  {discovered_files}\n  Loaded files      {loaded_files}\n  Model             {model}\n  Permission mode   {permission_mode}\n  Sandbox enabled   {sandbox_enabled}\n  Sandbox active    {sandbox_active}\n  Filesystem mode   {filesystem_mode}\n  Network isolation {network_isolation}\n  Detail            {sandbox_detail}\n\nAuth\n  OAuth config      {oauth_config}\n  Credentials path  {credentials_path}\n  Stored creds      {stored_creds}\n  Refresh token     {refresh_token}\n  Expiry            {expiry}\n  Scopes            {scopes}\n\nHooks + MCP\n  Pre hooks         {pre_hooks}\n  Post hooks        {post_hooks}\n  MCP servers       {mcp_servers}\n  MCP transports    {mcp_transports}\n\nRemote\n  Enabled           {remote_enabled}\n  Proxy ready       {proxy_ready}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Missing           {remote_missing}\n\nIssues\n{issue_lines}",
+            "Doctor\n  Rust status       {rust_status}\n  Working directory {cwd}\n  Project root      {project_root}\n  Git branch        {git_branch}\n  Instruction files {instruction_files}\n  Issues            {issue_count}\n\nConfig\n  Status            ok\n  Discovered files  {discovered_files}\n  Loaded files      {loaded_files}\n  Model             {model}\n  Permission mode   {permission_mode}\n  Sandbox enabled   {sandbox_enabled}\n  Sandbox active    {sandbox_active}\n  Filesystem mode   {filesystem_mode}\n  Network isolation {network_isolation}\n  Detail            {sandbox_detail}\n\nAuth\n  OAuth config      {oauth_config}\n  Credentials path  {credentials_path}\n  Stored creds      {stored_creds}\n  Refresh token     {refresh_token}\n  Expiry            {expiry}\n  Scopes            {scopes}\n\nHooks + MCP\n  Pre hooks         {pre_hooks}\n  Post hooks        {post_hooks}\n  MCP servers       {mcp_servers}\n  MCP transports    {mcp_transports}\n  MCP executable    {mcp_executable}\n  MCP blocked       {mcp_blocked}\n  MCP blockers      {mcp_blockers}\n\nRemote\n  Enabled           {remote_enabled}\n  Proxy ready       {proxy_ready}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Missing           {remote_missing}\n\nIssues\n{issue_lines}",
             rust_status = snapshot.rust_status,
             cwd = snapshot.working_directory.as_str(),
             project_root = project_root,
@@ -1296,6 +1344,9 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
             post_hooks = snapshot.hooks.post_count.unwrap_or_default(),
             mcp_servers = snapshot.mcp.server_count.unwrap_or_default(),
             mcp_transports = summarize_recorded_mcp_transports(snapshot.mcp.transport_counts.as_ref()),
+            mcp_executable = snapshot.mcp.supported_execution_count.unwrap_or_default(),
+            mcp_blocked = snapshot.mcp.unsupported_execution_count.unwrap_or_default(),
+            mcp_blockers = summarize_doctor_mcp_blockers(snapshot.mcp.unsupported_servers.as_deref()),
             remote_enabled = yes_no(snapshot.remote.enabled),
             proxy_ready = yes_no(snapshot.remote.proxy_ready),
             session_id = session_id,
@@ -1315,7 +1366,7 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
     );
 
     format!(
-        "Doctor\n  Rust status       {rust_status}\n  Working directory {cwd}\n  Project root      {project_root}\n  Git branch        {git_branch}\n  Instruction files {instruction_files}\n  Issues            {issue_count}\n\nConfig\n  Status            error\n  Discovered files  {discovered_files}\n  Loaded files      0\n  Model             <unavailable>\n  Permission mode   <unavailable>\n  Sandbox enabled   <unavailable>\n  Sandbox active    <unavailable>\n  Filesystem mode   <unavailable>\n  Network isolation <unavailable>\n  Detail            {config_error}\n\nAuth\n  OAuth config      <unavailable>\n  Credentials path  {credentials_path}\n  Stored creds      {stored_creds}\n  Refresh token     <unavailable>\n  Expiry            {expiry}\n  Scopes            {scopes}\n\nHooks + MCP\n  Pre hooks         <unavailable>\n  Post hooks        <unavailable>\n  MCP servers       <unavailable>\n  MCP transports    <unavailable>\n\nRemote\n  Enabled           {remote_enabled}\n  Proxy ready       {proxy_ready}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Missing           {remote_missing}\n\nIssues\n{issue_lines}",
+        "Doctor\n  Rust status       {rust_status}\n  Working directory {cwd}\n  Project root      {project_root}\n  Git branch        {git_branch}\n  Instruction files {instruction_files}\n  Issues            {issue_count}\n\nConfig\n  Status            error\n  Discovered files  {discovered_files}\n  Loaded files      0\n  Model             <unavailable>\n  Permission mode   <unavailable>\n  Sandbox enabled   <unavailable>\n  Sandbox active    <unavailable>\n  Filesystem mode   <unavailable>\n  Network isolation <unavailable>\n  Detail            {config_error}\n\nAuth\n  OAuth config      <unavailable>\n  Credentials path  {credentials_path}\n  Stored creds      {stored_creds}\n  Refresh token     <unavailable>\n  Expiry            {expiry}\n  Scopes            {scopes}\n\nHooks + MCP\n  Pre hooks         <unavailable>\n  Post hooks        <unavailable>\n  MCP servers       <unavailable>\n  MCP transports    <unavailable>\n  MCP executable    <unavailable>\n  MCP blocked       <unavailable>\n  MCP blockers      <unavailable>\n\nRemote\n  Enabled           {remote_enabled}\n  Proxy ready       {proxy_ready}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Missing           {remote_missing}\n\nIssues\n{issue_lines}",
         rust_status = snapshot.rust_status,
         cwd = snapshot.working_directory.as_str(),
         project_root = project_root,
@@ -1739,14 +1790,7 @@ fn mcp_transport_counts(
 ) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::<String, usize>::new();
     for server in servers.values() {
-        let label = match server.transport() {
-            McpTransport::Stdio => "stdio",
-            McpTransport::Sse => "sse",
-            McpTransport::Http => "http",
-            McpTransport::Ws => "ws",
-            McpTransport::Sdk => "sdk",
-            McpTransport::SimcoeAiProxy => "simcoe-ai-proxy",
-        };
+        let label = mcp_transport_display_name(server.transport());
         *counts.entry(label.to_string()).or_default() += 1;
     }
     counts
@@ -1759,6 +1803,18 @@ fn summarize_recorded_mcp_transports(counts: Option<&BTreeMap<String, usize>>) -
         Some(counts) => counts
             .iter()
             .map(|(label, count)| format!("{label}={count}"))
+            .collect::<Vec<_>>()
+            .join(", "),
+    }
+}
+
+fn summarize_doctor_mcp_blockers(blocked_servers: Option<&[DoctorBlockedMcpSnapshot]>) -> String {
+    match blocked_servers {
+        None => String::from("<unavailable>"),
+        Some(blocked_servers) if blocked_servers.is_empty() => String::from("<none>"),
+        Some(blocked_servers) => blocked_servers
+            .iter()
+            .map(|server| format!("{} ({})", server.name, server.transport))
             .collect::<Vec<_>>()
             .join(", "),
     }
@@ -2201,14 +2257,7 @@ fn render_hook_command_entries(commands: &[String]) -> String {
 }
 
 fn transport_label(transport: &McpClientTransport) -> &'static str {
-    match transport {
-        McpClientTransport::Stdio(_) => "stdio",
-        McpClientTransport::Sse(_) => "sse",
-        McpClientTransport::Http(_) => "http",
-        McpClientTransport::WebSocket(_) => "ws",
-        McpClientTransport::Sdk(_) => "sdk",
-        McpClientTransport::SimcoeAiProxy(_) => "simcoe-ai-proxy",
-    }
+    mcp_client_transport_display_name(transport)
 }
 
 fn auth_label(auth: &McpClientAuth) -> &'static str {
@@ -2236,49 +2285,9 @@ fn transport_target_summary(transport: &McpClientTransport) -> String {
     }
 }
 
-fn remote_runtime_execution_support(
-    transport: &str,
-    headers_helper: Option<&str>,
-) -> (bool, Option<String>) {
-    match headers_helper {
-        Some(_) => (
-            false,
-            Some(format!(
-                "{transport} transport with headersHelper is not executed by the Rust MCP runtime yet"
-            )),
-        ),
-        None => (true, None),
-    }
-}
-
 fn runtime_execution_support(transport: &McpClientTransport) -> (bool, Option<String>) {
-    match transport {
-        McpClientTransport::Stdio(_) => (true, None),
-        McpClientTransport::Sse(config) => {
-            remote_runtime_execution_support("sse", config.headers_helper.as_deref())
-        }
-        McpClientTransport::Http(config) => {
-            remote_runtime_execution_support("http", config.headers_helper.as_deref())
-        }
-        McpClientTransport::WebSocket(config) => {
-            remote_runtime_execution_support("ws", config.headers_helper.as_deref())
-        }
-        McpClientTransport::Sdk(config) => (
-            false,
-            Some(format!(
-                "sdk transport is not executed by the Rust MCP runtime yet; SDK server `{}` needs the upstream SDK adapter path, which is not present in the Rust port",
-                config.name
-            )),
-        ),
-        McpClientTransport::SimcoeAiProxy(config) => (
-            false,
-            Some(format!(
-                "simcoe-ai-proxy transport is not executed by the Rust MCP runtime yet; proxy `{}` targets `{}`, but the upstream proxy websocket/session adapter path (`remote/SessionsWebSocket.ts` / `remote/sdkMessageAdapter.ts`) is not ported in Rust",
-                config.id,
-                unwrap_ccr_proxy_url(&config.url)
-            )),
-        ),
-    }
+    let detail = unsupported_live_mcp_execution_reason(transport);
+    (detail.is_none(), detail)
 }
 
 fn mcp_server_snapshot(
