@@ -2472,6 +2472,29 @@ fn render_mcp_server_detail(server: &McpServerSnapshot) -> String {
         server.runtime.detail.as_deref().unwrap_or("<none>"),
     ));
 
+    if server.runtime.requires_user_auth {
+        let callback_port = server
+            .runtime
+            .callback_port
+            .map_or_else(|| String::from("<unset>"), |port| port.to_string());
+        let xaa = server.runtime.xaa.map_or_else(
+            || String::from("<unset>"),
+            |value| yes_no(value).to_string(),
+        );
+        lines.push(String::from(""));
+        lines.push(format!(
+            "OAuth\n  Client id         {}\n  Callback port     {}\n  Metadata URL      {}\n  XAA               {}",
+            server.runtime.client_id.as_deref().unwrap_or("<unset>"),
+            callback_port,
+            server
+                .runtime
+                .auth_server_metadata_url
+                .as_deref()
+                .unwrap_or("<unset>"),
+            xaa,
+        ));
+    }
+
     match &server.detail {
         McpServerDetailSnapshot::Stdio {
             command,

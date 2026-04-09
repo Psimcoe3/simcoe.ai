@@ -3542,7 +3542,9 @@ mod tests {
     use api::{MessageResponse, OutputContentBlock, Usage};
     use compat_harness::{load_parity_manifest, ParityStatus, UpstreamPaths};
     use runtime::{
-        ApiRequest, AssistantEvent, ContentBlock, ConversationMessage, MessageRole, PermissionMode,
+        mcp_credentials_key, ApiRequest, AssistantEvent, ConfigSource, ContentBlock,
+        ConversationMessage, McpOAuthConfig, McpRemoteServerConfig, McpServerConfig, MessageRole,
+        PermissionMode, ScopedMcpServerConfig,
     };
     use serde_json::json;
     use std::fs;
@@ -6374,7 +6376,12 @@ mod tests {
                                 "oauth-server": {
                                     "type": "http",
                                     "url": "https://example.test/mcp",
-                                    "oauth": {"clientId": "mcp-client"}
+                                    "oauth": {
+                                        "clientId": "mcp-client",
+                                        "callbackPort": 4545,
+                                        "authServerMetadataUrl": "https://issuer.example/.well-known/oauth-authorization-server",
+                                        "xaa": true
+                                    }
                                 }
                             }
                         }"#,
@@ -6391,6 +6398,12 @@ mod tests {
             assert!(report.contains("Executable        yes"));
             assert!(report.contains("User auth         yes"));
             assert!(report.contains("Stored creds      no"));
+            assert!(report.contains("Client id         mcp-client"));
+            assert!(report.contains("Callback port     4545"));
+            assert!(report.contains(
+                "Metadata URL      https://issuer.example/.well-known/oauth-authorization-server"
+            ));
+            assert!(report.contains("XAA               yes"));
             assert!(report.contains(
                 "stored OAuth credentials are required before this server can be executed"
             ));
@@ -6412,9 +6425,125 @@ mod tests {
                 payload["server"]["runtime"]["stored_credentials"],
                 json!(false)
             );
+            assert_eq!(
+                payload["server"]["runtime"]["client_id"],
+                json!("mcp-client")
+            );
+            assert_eq!(payload["server"]["runtime"]["callback_port"], json!(4545));
+            assert_eq!(
+                payload["server"]["runtime"]["auth_server_metadata_url"],
+                json!("https://issuer.example/.well-known/oauth-authorization-server")
+            );
+            assert_eq!(payload["server"]["runtime"]["xaa"], json!(true));
             assert!(payload["server"]["runtime"]["detail"]
                 .as_str()
                 .is_some_and(|detail| detail.contains("McpAuthTool action `save`")));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn mcp_report_renders_expired_oauth_status() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("mcp-expired");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+        fs::write(
+            config_home.join("settings.json"),
+            r#"{
+                            "mcpServers": {
+                                "expired-server": {
+                                    "type": "http",
+                                    "url": "https://example.test/mcp",
+                                    "oauth": {
+                                        "clientId": "mcp-client",
+                                        "callbackPort": 4545,
+                                        "authServerMetadataUrl": "https://issuer.example/.well-known/oauth-authorization-server",
+                                        "xaa": true
+                                    }
+                                }
+                            }
+                        }"#,
+        )
+        .expect("write settings");
+
+        let server_key = mcp_credentials_key(
+            "expired-server",
+            &ScopedMcpServerConfig {
+                scope: ConfigSource::User,
+                config: McpServerConfig::Http(McpRemoteServerConfig {
+                    url: "https://example.test/mcp".to_string(),
+                    headers: std::collections::BTreeMap::new(),
+                    headers_helper: None,
+                    oauth: Some(McpOAuthConfig {
+                        client_id: Some("mcp-client".to_string()),
+                        callback_port: Some(4545),
+                        auth_server_metadata_url: Some(
+                            "https://issuer.example/.well-known/oauth-authorization-server"
+                                .to_string(),
+                        ),
+                        xaa: Some(true),
+                    }),
+                }),
+            },
+        );
+        fs::write(
+            config_home.join("credentials.json"),
+            serde_json::to_string_pretty(&json!({
+                "mcp": {
+                    server_key: {
+                        "accessToken": "expired-token",
+                        "expiresAt": 1,
+                        "scopes": ["mcp:read"]
+                    }
+                }
+            }))
+            .expect("serialize expired credentials"),
+        )
+        .expect("write expired credentials");
+
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report = render_mcp_report(Some("expired-server"))
+                .expect("selected expired mcp report should render");
+            assert!(report.contains("Status            expired"));
+            assert!(report.contains("Executable        yes"));
+            assert!(report.contains("Stored creds      yes"));
+            assert!(report.contains("Refresh token     no"));
+            assert!(report.contains("Expiry            expired at 1"));
+            assert!(report.contains("Scopes            mcp:read"));
+            assert!(report.contains(
+                "stored OAuth access token is expired and no refresh token is available"
+            ));
+
+            let payload = super::mcp_payload(Some("expired-server".to_string()))
+                .expect("selected expired mcp payload should render");
+            assert_eq!(payload["server"]["supported_execution"], json!(true));
+            assert_eq!(payload["server"]["execution_detail"], json!(null));
+            assert_eq!(payload["server"]["runtime"]["status"], json!("expired"));
+            assert_eq!(
+                payload["server"]["runtime"]["stored_credentials"],
+                json!(true)
+            );
+            assert_eq!(
+                payload["server"]["runtime"]["refresh_token_present"],
+                json!(false)
+            );
+            assert_eq!(payload["server"]["runtime"]["expires_at"], json!(1));
+            assert_eq!(payload["server"]["runtime"]["scopes"], json!(["mcp:read"]));
+            assert!(payload["server"]["runtime"]["detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("expired and no refresh token")));
         }
 
         let _ = fs::remove_dir_all(repo_root);
@@ -6467,6 +6596,112 @@ mod tests {
             assert!(payload["server"]["execution_detail"]
                 .as_str()
                 .is_some_and(|detail| detail.contains("sdkMessageAdapter.ts")));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn doctor_report_surfaces_expired_mcp_auth_attention() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("doctor-mcp-expired");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+        fs::write(
+            config_home.join("settings.json"),
+            r#"{
+    "mcpServers": {
+        "local": {
+            "command": "node",
+            "args": ["server.js"]
+        },
+        "remote-expired": {
+            "type": "http",
+            "url": "https://example.test/mcp",
+            "oauth": {
+                "clientId": "mcp-client",
+                "callbackPort": 4545,
+                "authServerMetadataUrl": "https://issuer.example/.well-known/oauth-authorization-server",
+                "xaa": true
+            }
+        }
+    },
+    "model": "simcoe-sonnet-4-6",
+    "permissionMode": "workspace-write"
+}"#,
+        )
+        .expect("write doctor expired settings");
+
+        let server_key = mcp_credentials_key(
+            "remote-expired",
+            &ScopedMcpServerConfig {
+                scope: ConfigSource::User,
+                config: McpServerConfig::Http(McpRemoteServerConfig {
+                    url: "https://example.test/mcp".to_string(),
+                    headers: std::collections::BTreeMap::new(),
+                    headers_helper: None,
+                    oauth: Some(McpOAuthConfig {
+                        client_id: Some("mcp-client".to_string()),
+                        callback_port: Some(4545),
+                        auth_server_metadata_url: Some(
+                            "https://issuer.example/.well-known/oauth-authorization-server"
+                                .to_string(),
+                        ),
+                        xaa: Some(true),
+                    }),
+                }),
+            },
+        );
+        fs::write(
+            config_home.join("credentials.json"),
+            serde_json::to_string_pretty(&json!({
+                "mcp": {
+                    server_key: {
+                        "accessToken": "expired-token",
+                        "expiresAt": 1,
+                        "scopes": ["mcp:read"]
+                    }
+                }
+            }))
+            .expect("serialize expired doctor credentials"),
+        )
+        .expect("write expired doctor credentials");
+
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report = render_doctor_report().expect("doctor report should render");
+            assert!(report.contains("MCP executable    2"));
+            assert!(report.contains("MCP blocked       0"));
+            assert!(report.contains("MCP statuses      expired=1, ready=1"));
+            assert!(report.contains("MCP attention     remote-expired (expired)"));
+            assert!(report.contains(
+                "MCP server `remote-expired` (http) has expired stored OAuth credentials"
+            ));
+
+            let payload = super::doctor_payload().expect("doctor payload should render");
+            assert_eq!(payload["mcp"]["server_count"], json!(2));
+            assert_eq!(payload["mcp"]["supported_execution_count"], json!(2));
+            assert_eq!(payload["mcp"]["unsupported_execution_count"], json!(0));
+            assert_eq!(payload["mcp"]["status_counts"]["expired"], json!(1));
+            assert_eq!(payload["mcp"]["status_counts"]["ready"], json!(1));
+            assert!(payload["mcp"]["attention_servers"]
+                .as_array()
+                .is_some_and(|servers| servers.iter().any(|server| {
+                    server["name"] == json!("remote-expired")
+                        && server["status"] == json!("expired")
+                        && server["detail"]
+                            .as_str()
+                            .is_some_and(|detail| detail.contains("expired and no refresh token"))
+                })));
         }
 
         let _ = fs::remove_dir_all(repo_root);
