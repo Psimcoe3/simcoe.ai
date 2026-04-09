@@ -107,7 +107,7 @@ pub(crate) struct DoctorMcpSnapshot {
     pub(crate) supported_execution_count: Option<usize>,
     pub(crate) unsupported_execution_count: Option<usize>,
     pub(crate) unsupported_servers: Option<Vec<DoctorBlockedMcpSnapshot>>,
-    pub(crate) attention_servers: Option<Vec<DoctorAttentionMcpSnapshot>>,
+    pub(crate) attention_servers: Option<Vec<McpAttentionSnapshot>>,
 }
 
 #[derive(Debug, Clone)]
@@ -115,14 +115,6 @@ pub(crate) struct DoctorBlockedMcpSnapshot {
     pub(crate) name: String,
     pub(crate) transport: &'static str,
     pub(crate) detail: String,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct DoctorAttentionMcpSnapshot {
-    pub(crate) name: String,
-    pub(crate) transport: &'static str,
-    pub(crate) status: String,
-    pub(crate) detail: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -844,6 +836,12 @@ pub(crate) fn mcp_report_snapshot(
         });
     }
 
+    mcp_collection_snapshot(servers).map_err(Into::into)
+}
+
+fn mcp_collection_snapshot(
+    servers: &BTreeMap<String, runtime::ScopedMcpServerConfig>,
+) -> io::Result<McpReportSnapshot> {
     let servers = mcp_server_snapshots(servers)?;
 
     Ok(McpReportSnapshot {
@@ -1215,53 +1213,8 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
 
             let hooks = runtime_config.hooks();
             let mcp_servers = runtime_config.mcp().servers();
-            let mcp_server_snapshots = mcp_server_snapshots(mcp_servers)?;
-            let mcp_attention_servers = mcp_server_snapshots
-                .iter()
-                .filter(|server| server.runtime.status != "ready")
-                .map(|server| DoctorAttentionMcpSnapshot {
-                    name: server.name.clone(),
-                    transport: server.transport,
-                    status: server.runtime.status.clone(),
-                    detail: server.runtime.detail.clone(),
-                })
-                .collect::<Vec<_>>();
-
-            let unsupported_mcp_servers = mcp_attention_servers
-                .iter()
-                .filter(|server| server.status == "unsupported-transport")
-                .map(|server| DoctorBlockedMcpSnapshot {
-                    name: server.name.clone(),
-                    transport: server.transport,
-                    detail: server
-                        .detail
-                        .clone()
-                        .unwrap_or_else(|| String::from("<unknown>")),
-                })
-                .collect::<Vec<_>>();
-
-            for server in &mcp_attention_servers {
-                let detail = server.detail.as_deref().unwrap_or("<unknown>");
-                let issue = match server.status.as_str() {
-                    "unsupported-transport" => format!(
-                        "MCP server `{}` ({}) is configured but not executable by the Rust runtime: {}",
-                        server.name, server.transport, detail
-                    ),
-                    "user-auth-required" => format!(
-                        "MCP server `{}` ({}) requires stored OAuth credentials before execution: {}",
-                        server.name, server.transport, detail
-                    ),
-                    "expired" => format!(
-                        "MCP server `{}` ({}) has expired stored OAuth credentials: {}",
-                        server.name, server.transport, detail
-                    ),
-                    other => format!(
-                        "MCP server `{}` ({}) is in `{}` state: {}",
-                        server.name, server.transport, other, detail
-                    ),
-                };
-                issues.push(issue);
-            }
+            let (mcp_snapshot, mcp_issues) = doctor_mcp_snapshot(mcp_servers)?;
+            issues.extend(mcp_issues);
 
             Ok(DoctorSnapshot {
                 rust_status: "inspection only",
@@ -1297,20 +1250,7 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
                     pre_count: Some(hooks.pre_tool_use().len()),
                     post_count: Some(hooks.post_tool_use().len()),
                 },
-                mcp: DoctorMcpSnapshot {
-                    server_count: Some(mcp_servers.len()),
-                    transport_counts: Some(mcp_transport_counts(mcp_servers)),
-                    status_counts: Some(mcp_status_counts(&mcp_server_snapshots)),
-                    supported_execution_count: Some(
-                        mcp_server_snapshots
-                            .iter()
-                            .filter(|server| server.supported_execution)
-                            .count(),
-                    ),
-                    unsupported_execution_count: Some(unsupported_mcp_servers.len()),
-                    unsupported_servers: Some(unsupported_mcp_servers),
-                    attention_servers: Some(mcp_attention_servers),
-                },
+                mcp: mcp_snapshot,
                 remote: remote_snapshot,
             })
         }
@@ -1898,6 +1838,71 @@ fn mcp_attention_servers(servers: &[McpServerSnapshot]) -> Vec<McpAttentionSnaps
         .collect()
 }
 
+fn mcp_blocked_servers(
+    attention_servers: &[McpAttentionSnapshot],
+) -> Vec<DoctorBlockedMcpSnapshot> {
+    attention_servers
+        .iter()
+        .filter(|server| server.status == "unsupported-transport")
+        .map(|server| DoctorBlockedMcpSnapshot {
+            name: server.name.clone(),
+            transport: server.transport,
+            detail: server
+                .detail
+                .clone()
+                .unwrap_or_else(|| String::from("<unknown>")),
+        })
+        .collect()
+}
+
+fn doctor_mcp_issues(attention_servers: &[McpAttentionSnapshot]) -> Vec<String> {
+    attention_servers
+        .iter()
+        .map(|server| {
+            let detail = server.detail.as_deref().unwrap_or("<unknown>");
+            match server.status.as_str() {
+                "unsupported-transport" => format!(
+                    "MCP server `{}` ({}) is configured but not executable by the Rust runtime: {}",
+                    server.name, server.transport, detail
+                ),
+                "user-auth-required" => format!(
+                    "MCP server `{}` ({}) requires stored OAuth credentials before execution: {}",
+                    server.name, server.transport, detail
+                ),
+                "expired" => format!(
+                    "MCP server `{}` ({}) has expired stored OAuth credentials: {}",
+                    server.name, server.transport, detail
+                ),
+                other => format!(
+                    "MCP server `{}` ({}) is in `{}` state: {}",
+                    server.name, server.transport, other, detail
+                ),
+            }
+        })
+        .collect()
+}
+
+fn doctor_mcp_snapshot(
+    mcp_servers: &BTreeMap<String, runtime::ScopedMcpServerConfig>,
+) -> io::Result<(DoctorMcpSnapshot, Vec<String>)> {
+    let mcp_snapshot = mcp_collection_snapshot(mcp_servers)?;
+    let attention_servers = mcp_snapshot.attention_servers.clone();
+    let unsupported_servers = mcp_blocked_servers(&attention_servers);
+    let issues = doctor_mcp_issues(&attention_servers);
+    Ok((
+        DoctorMcpSnapshot {
+            server_count: Some(mcp_servers.len()),
+            transport_counts: Some(mcp_transport_counts(mcp_servers)),
+            status_counts: Some(mcp_snapshot.status_counts),
+            supported_execution_count: Some(mcp_snapshot.supported_execution_count),
+            unsupported_execution_count: Some(unsupported_servers.len()),
+            unsupported_servers: Some(unsupported_servers),
+            attention_servers: Some(attention_servers),
+        },
+        issues,
+    ))
+}
+
 fn summarize_recorded_mcp_transports(counts: Option<&BTreeMap<String, usize>>) -> String {
     match counts {
         None => String::from("<unavailable>"),
@@ -1934,9 +1939,7 @@ fn summarize_doctor_mcp_blockers(blocked_servers: Option<&[DoctorBlockedMcpSnaps
     }
 }
 
-fn summarize_doctor_mcp_attention(
-    attention_servers: Option<&[DoctorAttentionMcpSnapshot]>,
-) -> String {
+fn summarize_doctor_mcp_attention(attention_servers: Option<&[McpAttentionSnapshot]>) -> String {
     match attention_servers {
         None => String::from("<unavailable>"),
         Some(attention_servers) if attention_servers.is_empty() => String::from("<none>"),
