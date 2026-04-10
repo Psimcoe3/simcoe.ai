@@ -64,7 +64,8 @@ use session_manager::{
     ManagedSessionSummary, SessionHandle,
 };
 use tools::{
-    execute_tool, mvp_tool_specs, runtime_tool_definitions, tool_name_is_allowed, ToolSpec,
+    execute_tool, mvp_tool_specs, runtime_tool_definitions, tool_name_is_allowed,
+    tool_output_schema, ToolSpec,
 };
 use tui::status_bar::StatusBarHandle;
 
@@ -1153,12 +1154,19 @@ fn rust_tool_summary_payload(spec: &ToolSpec) -> serde_json::Value {
 }
 
 fn rust_tool_detail_payload(spec: &ToolSpec) -> serde_json::Value {
-    json!({
-        "name": spec.name,
-        "description": spec.description,
-        "required_permission": spec.required_permission.as_str(),
-        "input_schema": spec.input_schema.clone(),
-    })
+    let mut payload = serde_json::Map::from_iter([
+        ("name".to_string(), json!(spec.name)),
+        ("description".to_string(), json!(spec.description)),
+        (
+            "required_permission".to_string(),
+            json!(spec.required_permission.as_str()),
+        ),
+        ("input_schema".to_string(), spec.input_schema.clone()),
+    ]);
+    if let Some(output_schema) = tool_output_schema(spec.name) {
+        payload.insert("output_schema".to_string(), output_schema);
+    }
+    serde_json::Value::Object(payload)
 }
 
 fn archived_tool_family_payload(
@@ -5761,6 +5769,49 @@ mod tests {
                 .is_some_and(|hints| hints
                     .iter()
                     .any(|hint| hint == &json!("tools/BashTool/BashTool.tsx"))));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn tools_report_renders_mcp_auth_output_schema() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("tools-mcp-auth-selected");
+        let nested_cwd = repo_root.join("rust");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+
+        {
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report = render_tools_report(Some("McpAuthTool"))
+                .expect("selected MCP auth tools report should render");
+            assert!(report.contains("Tool"));
+            assert!(report.contains("Name             McpAuthTool"));
+            assert!(report.contains("Output schema"));
+            assert!(report.contains("transportCounts"));
+            assert!(report.contains("attentionServers"));
+
+            let payload = super::tools_payload(Some("McpAuthTool".to_string()))
+                .expect("selected MCP auth tools payload should render");
+            assert_eq!(payload["type"], json!("tools"));
+            assert_eq!(payload["requested"], json!("McpAuthTool"));
+            assert_eq!(payload["rust_tool"]["name"], json!("McpAuthTool"));
+            assert_eq!(
+                payload["rust_tool"]["output_schema"]["type"],
+                json!("object")
+            );
+            assert_eq!(
+                payload["rust_tool"]["output_schema"]["properties"]["transportCounts"]["type"],
+                json!("object")
+            );
+            assert_eq!(
+                payload["rust_tool"]["output_schema"]["properties"]["attentionServers"]["type"],
+                json!("array")
+            );
+            assert!(payload["archived_family"].is_null());
         }
 
         let _ = fs::remove_dir_all(repo_root);

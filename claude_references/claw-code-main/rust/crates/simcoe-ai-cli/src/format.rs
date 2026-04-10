@@ -22,8 +22,8 @@ use runtime::{
 };
 use tools::{
     list_agent_profiles, list_agent_tasks, list_skills, load_agent_profile, load_agent_task,
-    load_skill, mvp_tool_specs, AgentTaskSummary, LoadedAgentProfile, LoadedAgentTask, LoadedSkill,
-    SkillSummary, ToolSpec,
+    load_skill, mvp_tool_specs, tool_output_schema, AgentTaskSummary, LoadedAgentProfile,
+    LoadedAgentTask, LoadedSkill, SkillSummary, ToolSpec,
 };
 
 #[derive(Debug, Clone)]
@@ -1979,12 +1979,21 @@ fn summarize_doctor_issues(issues: &[String]) -> String {
 }
 
 fn render_tool_detail(spec: &ToolSpec) -> Result<String, Box<dyn std::error::Error>> {
+    let input_schema = render_json_block(&spec.input_schema)?;
+    let output_schema = tool_output_schema(spec.name)
+        .map(|schema| render_json_block(&schema))
+        .transpose()?;
+    let output_section = output_schema.map_or(String::new(), |schema| {
+        format!("\n\nOutput schema\n{schema}")
+    });
+
     Ok(format!(
-        "Tool\n  Name             {name}\n  Source           rust tool registry\n  Required mode    {required_mode}\n  Description      {description}\n\nInput schema\n{schema}",
+        "Tool\n  Name             {name}\n  Source           rust tool registry\n  Required mode    {required_mode}\n  Description      {description}\n\nInput schema\n{input_schema}{output_section}",
         name = spec.name,
         required_mode = spec.required_permission.as_str(),
         description = spec.description,
-        schema = render_json_block(&spec.input_schema)?,
+        input_schema = input_schema,
+        output_section = output_section,
     ))
 }
 

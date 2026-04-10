@@ -62,6 +62,133 @@ pub struct ToolSpec {
     pub required_permission: PermissionMode,
 }
 
+#[must_use]
+pub fn tool_output_schema(tool_name: &str) -> Option<Value> {
+    match tool_name {
+        "McpAuthTool" => Some(mcp_auth_output_schema()),
+        _ => None,
+    }
+}
+
+fn mcp_auth_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["status", "save", "logout"]
+            },
+            "serverCount": { "type": "integer", "minimum": 0 },
+            "transportCounts": count_map_output_schema(),
+            "supportedExecutionCount": { "type": "integer", "minimum": 0 },
+            "unsupportedExecutionCount": { "type": "integer", "minimum": 0 },
+            "statusCounts": count_map_output_schema(),
+            "unsupportedServers": {
+                "type": "array",
+                "items": mcp_auth_unsupported_server_output_schema()
+            },
+            "attentionServers": {
+                "type": "array",
+                "items": mcp_auth_attention_server_output_schema()
+            },
+            "servers": {
+                "type": "array",
+                "items": mcp_auth_server_status_output_schema()
+            }
+        },
+        "required": [
+            "action",
+            "serverCount",
+            "transportCounts",
+            "supportedExecutionCount",
+            "unsupportedExecutionCount",
+            "statusCounts",
+            "unsupportedServers",
+            "attentionServers",
+            "servers"
+        ],
+        "additionalProperties": false
+    })
+}
+
+fn count_map_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+        }
+    })
+}
+
+fn mcp_auth_unsupported_server_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "server": { "type": "string" },
+            "transport": { "type": "string" },
+            "detail": { "type": "string" }
+        },
+        "required": ["server", "transport", "detail"],
+        "additionalProperties": false
+    })
+}
+
+fn mcp_auth_attention_server_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "server": { "type": "string" },
+            "transport": { "type": "string" },
+            "status": { "type": "string" },
+            "detail": { "type": "string" }
+        },
+        "required": ["server", "transport", "status"],
+        "additionalProperties": false
+    })
+}
+
+fn mcp_auth_server_status_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "server": { "type": "string" },
+            "scope": { "type": "string" },
+            "transport": { "type": "string" },
+            "authKind": { "type": "string" },
+            "requiresUserAuth": { "type": "boolean" },
+            "supportedExecution": { "type": "boolean" },
+            "interactiveSupported": { "type": "boolean" },
+            "status": { "type": "string" },
+            "storedCredentials": { "type": "boolean" },
+            "refreshTokenPresent": { "type": "boolean" },
+            "expiresAt": { "type": "integer", "minimum": 0 },
+            "scopes": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "detail": { "type": "string" },
+            "clientId": { "type": "string" },
+            "callbackPort": { "type": "integer", "minimum": 0, "maximum": 65535 },
+            "authServerMetadataUrl": { "type": "string" },
+            "xaa": { "type": "boolean" }
+        },
+        "required": [
+            "server",
+            "scope",
+            "transport",
+            "authKind",
+            "requiresUserAuth",
+            "supportedExecution",
+            "interactiveSupported",
+            "status",
+            "storedCredentials",
+            "refreshTokenPresent"
+        ],
+        "additionalProperties": false
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SkillSummary {
     pub name: String,
