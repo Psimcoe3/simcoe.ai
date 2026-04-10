@@ -1138,13 +1138,35 @@ struct McpAuthOutput {
     action: String,
     #[serde(rename = "serverCount")]
     server_count: usize,
+    #[serde(rename = "transportCounts")]
+    transport_counts: BTreeMap<String, usize>,
     #[serde(rename = "supportedExecutionCount")]
     supported_execution_count: usize,
     #[serde(rename = "unsupportedExecutionCount")]
     unsupported_execution_count: usize,
     #[serde(rename = "statusCounts")]
     status_counts: BTreeMap<String, usize>,
+    #[serde(rename = "unsupportedServers")]
+    unsupported_servers: Vec<McpAuthUnsupportedServer>,
+    #[serde(rename = "attentionServers")]
+    attention_servers: Vec<McpAuthAttentionServer>,
     servers: Vec<McpServerAuthStatus>,
+}
+
+#[derive(Debug, Serialize)]
+struct McpAuthUnsupportedServer {
+    server: String,
+    transport: String,
+    detail: String,
+}
+
+#[derive(Debug, Serialize)]
+struct McpAuthAttentionServer {
+    server: String,
+    transport: String,
+    status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1201,6 +1223,44 @@ fn mcp_auth_status_counts(servers: &[McpServerAuthStatus]) -> BTreeMap<String, u
         *counts.entry(server.status.clone()).or_default() += 1;
     }
     counts
+}
+
+fn mcp_auth_transport_counts(servers: &[McpServerAuthStatus]) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for server in servers {
+        *counts.entry(server.transport.clone()).or_default() += 1;
+    }
+    counts
+}
+
+fn mcp_auth_attention_servers(servers: &[McpServerAuthStatus]) -> Vec<McpAuthAttentionServer> {
+    servers
+        .iter()
+        .filter(|server| server.status != "ready")
+        .map(|server| McpAuthAttentionServer {
+            server: server.server.clone(),
+            transport: server.transport.clone(),
+            status: server.status.clone(),
+            detail: server.detail.clone(),
+        })
+        .collect()
+}
+
+fn mcp_auth_unsupported_servers(
+    attention_servers: &[McpAuthAttentionServer],
+) -> Vec<McpAuthUnsupportedServer> {
+    attention_servers
+        .iter()
+        .filter(|server| server.status == "unsupported-transport")
+        .map(|server| McpAuthUnsupportedServer {
+            server: server.server.clone(),
+            transport: server.transport.clone(),
+            detail: server
+                .detail
+                .clone()
+                .unwrap_or_else(|| String::from("<unknown>")),
+        })
+        .collect()
 }
 
 fn resolve_mcp_server_name(config: &RuntimeConfig, requested: &str) -> Result<String, String> {
@@ -2667,14 +2727,20 @@ fn execute_mcp_auth(input: McpAuthInput) -> Result<McpAuthOutput, String> {
         .filter(|server| server.supported_execution)
         .count();
     let unsupported_execution_count = servers.len().saturating_sub(supported_execution_count);
+    let transport_counts = mcp_auth_transport_counts(&servers);
     let status_counts = mcp_auth_status_counts(&servers);
+    let attention_servers = mcp_auth_attention_servers(&servers);
+    let unsupported_servers = mcp_auth_unsupported_servers(&attention_servers);
 
     Ok(McpAuthOutput {
         action: action.to_string(),
         server_count: servers.len(),
+        transport_counts,
         supported_execution_count,
         unsupported_execution_count,
         status_counts,
+        unsupported_servers,
+        attention_servers,
         servers,
     })
 }
@@ -5574,10 +5640,22 @@ mod tests {
         let auth = execute_tool("McpAuthTool", &json!({})).expect("inspect MCP auth");
         let auth: serde_json::Value = serde_json::from_str(&auth).expect("valid MCP auth json");
         assert_eq!(auth["serverCount"], json!(2));
+        assert_eq!(auth["transportCounts"]["http"], json!(1));
+        assert_eq!(auth["transportCounts"]["stdio"], json!(1));
         assert_eq!(auth["supportedExecutionCount"], json!(2));
         assert_eq!(auth["unsupportedExecutionCount"], json!(0));
         assert_eq!(auth["statusCounts"]["ready"], json!(1));
         assert_eq!(auth["statusCounts"]["user-auth-required"], json!(1));
+        assert!(auth["unsupportedServers"]
+            .as_array()
+            .is_some_and(|servers| servers.is_empty()));
+        assert!(auth["attentionServers"]
+            .as_array()
+            .is_some_and(|servers| servers.iter().any(|server| {
+                server["server"] == json!("remote")
+                    && server["status"] == json!("user-auth-required")
+                    && server["transport"] == json!("http")
+            })));
         let servers = auth["servers"].as_array().expect("auth server list");
         assert!(servers.iter().any(|server| {
             server["server"] == json!("alpha")
@@ -5648,9 +5726,30 @@ mod tests {
             execute_tool("McpAuthTool", &json!({})).expect("inspect unsupported transports");
         let status: serde_json::Value = serde_json::from_str(&status).expect("valid status json");
         assert_eq!(status["serverCount"], json!(2));
+        assert_eq!(status["transportCounts"]["sdk"], json!(1));
+        assert_eq!(status["transportCounts"]["simcoe-ai-proxy"], json!(1));
         assert_eq!(status["supportedExecutionCount"], json!(0));
         assert_eq!(status["unsupportedExecutionCount"], json!(2));
         assert_eq!(status["statusCounts"]["unsupported-transport"], json!(2));
+        assert!(status["unsupportedServers"]
+            .as_array()
+            .is_some_and(|servers| servers.iter().any(|server| {
+                server["server"] == json!("sdk-server")
+                    && server["transport"] == json!("sdk")
+                    && server["detail"]
+                        .as_str()
+                        .is_some_and(|detail| detail.contains("SDK server `sdk-adapter`"))
+            })));
+        assert!(status["attentionServers"]
+            .as_array()
+            .is_some_and(|servers| servers.iter().any(|server| {
+                server["server"] == json!("proxy-server")
+                    && server["status"] == json!("unsupported-transport")
+                    && server["transport"] == json!("simcoe-ai-proxy")
+                    && server["detail"].as_str().is_some_and(|detail| {
+                        detail.contains("proxy `proxy-123` targets `wss://vendor.example/mcp`")
+                    })
+            })));
 
         let servers = status["servers"].as_array().expect("server status array");
         let sdk = servers

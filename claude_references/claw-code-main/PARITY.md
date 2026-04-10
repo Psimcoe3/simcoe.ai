@@ -39,6 +39,7 @@ Evidence:
 - Current built-ins include shell/file/search/web/todo/skill/agent/config/notebook/repl/powershell primitives plus MCP inspection/auth/resource helpers such as `ListMcpResourcesTool`, `ReadMcpResourceTool`, and `McpAuthTool`.
 - Rust agent tooling now also exposes built-in sub-agent profile inspection via `list_agent_profiles()` and `load_agent_profile()`, alongside persisted task inspection.
 - Rust MCP tooling now supports dynamic per-server MCP tool families and direct list/read/auth flows across `stdio`, `http`, `sse`, and `ws` transports, while surfacing explicit blocker reasons for unsupported `sdk`, `simcoe-ai-proxy`, and remote `headersHelper` execution paths.
+- `McpAuthTool` now returns aggregate MCP runtime summaries beyond the raw per-server `servers` array, including `transportCounts`, `statusCounts`, `supportedExecutionCount`, `unsupportedExecutionCount`, `unsupportedServers`, and `attentionServers` for agent-facing MCP inspection.
 - Runtime execution is wired through `rust/crates/tools/src/lib.rs` and `rust/crates/runtime/src/conversation.rs`.
 - Rust now exposes `/tools [name]` via `rust/crates/compat-harness/src/lib.rs`, `rust/crates/tools/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect both the live Rust tool registry and archived TypeScript tool families from `src/reference_data/tools_snapshot.json`.
 
