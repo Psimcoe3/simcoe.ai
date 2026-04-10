@@ -44,8 +44,8 @@ use format::{
     render_skills_report_from_snapshot, render_tasks_report, render_tasks_report_from_snapshot,
     render_tools_report, render_tools_report_from_snapshot, render_version_report,
     skills_report_snapshot, status_context, tasks_report_snapshot, tools_report_snapshot,
-    DoctorBlockedMcpSnapshot, DoctorMcpSnapshot, McpAttentionSnapshot, McpServerDetailSnapshot,
-    McpServerSnapshot, RemoteEnvReportSnapshot, StatusUsage,
+    DoctorBlockedMcpSnapshot, DoctorMcpSnapshot, McpAttentionSnapshot, McpCollectionSnapshot,
+    McpServerDetailSnapshot, McpServerSnapshot, RemoteEnvReportSnapshot, StatusUsage,
 };
 use init::initialize_repo;
 use render::{MarkdownStreamState, TerminalRenderer};
@@ -738,20 +738,48 @@ fn doctor_blocked_mcp_payloads(servers: &[DoctorBlockedMcpSnapshot]) -> Vec<serd
     servers.iter().map(doctor_blocked_mcp_payload).collect()
 }
 
+fn mcp_collection_payload_fields(
+    collection: Option<&McpCollectionSnapshot>,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut payload = serde_json::Map::new();
+    payload.insert(
+        "transport_counts".to_string(),
+        json!(collection.map(|collection| collection.transport_counts.clone())),
+    );
+    payload.insert(
+        "status_counts".to_string(),
+        json!(collection.map(|collection| collection.status_counts.clone())),
+    );
+    payload.insert(
+        "supported_execution_count".to_string(),
+        json!(collection.map(|collection| collection.supported_execution_count)),
+    );
+    payload.insert(
+        "unsupported_execution_count".to_string(),
+        json!(collection.map(|collection| collection.unsupported_execution_count)),
+    );
+    payload.insert(
+        "attention_servers".to_string(),
+        json!(collection.map(|collection| mcp_attention_payloads(&collection.attention_servers))),
+    );
+    payload
+}
+
 fn doctor_mcp_payload(snapshot: &DoctorMcpSnapshot) -> serde_json::Value {
     let collection = snapshot.collection.as_ref();
-    json!({
-        "server_count": collection.map(|collection| collection.server_count),
-        "transport_counts": collection.map(|collection| collection.transport_counts.clone()),
-        "status_counts": collection.map(|collection| collection.status_counts.clone()),
-        "supported_execution_count": collection.map(|collection| collection.supported_execution_count),
-        "unsupported_execution_count": collection.map(|collection| collection.unsupported_execution_count),
-        "unsupported_servers": snapshot
+    let mut payload = mcp_collection_payload_fields(collection);
+    payload.insert(
+        "server_count".to_string(),
+        json!(collection.map(|collection| collection.server_count)),
+    );
+    payload.insert(
+        "unsupported_servers".to_string(),
+        json!(snapshot
             .unsupported_servers
             .as_deref()
-            .map(doctor_blocked_mcp_payloads),
-        "attention_servers": collection.map(|collection| mcp_attention_payloads(&collection.attention_servers)),
-    })
+            .map(doctor_blocked_mcp_payloads)),
+    );
+    serde_json::Value::Object(payload)
 }
 
 fn mcp_payload(server: Option<String>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
@@ -770,24 +798,11 @@ fn mcp_payload(server: Option<String>) -> Result<serde_json::Value, Box<dyn std:
         .map(mcp_server_payload)
         .collect::<Vec<_>>();
 
-    payload.insert("configured_server_count".to_string(), json!(entries.len()));
+    payload.extend(mcp_collection_payload_fields(Some(&snapshot.collection)));
+
     payload.insert(
-        "supported_execution_count".to_string(),
-        json!(snapshot.collection.supported_execution_count),
-    );
-    payload.insert(
-        "unsupported_execution_count".to_string(),
-        json!(snapshot.collection.unsupported_execution_count),
-    );
-    payload.insert(
-        "status_counts".to_string(),
-        json!(snapshot.collection.status_counts),
-    );
-    payload.insert(
-        "attention_servers".to_string(),
-        json!(mcp_attention_payloads(
-            &snapshot.collection.attention_servers
-        )),
+        "configured_server_count".to_string(),
+        json!(snapshot.collection.server_count),
     );
     payload.insert("servers".to_string(), json!(entries));
     Ok(serde_json::Value::Object(payload))
@@ -6194,6 +6209,7 @@ mod tests {
             let report = render_mcp_report(None).expect("mcp report should render");
             assert!(report.contains("MCP"));
             assert!(report.contains("Configured servers 3"));
+            assert!(report.contains("Transports        http=1, simcoe-ai-proxy=1, stdio=1"));
             assert!(report.contains("Executable now    2"));
             assert!(report.contains("Blocked now       1"));
             assert!(report.contains("Status counts     ready=2, unsupported-transport=1"));
@@ -6211,6 +6227,9 @@ mod tests {
             assert_eq!(payload["configured_server_count"], json!(3));
             assert_eq!(payload["supported_execution_count"], json!(2));
             assert_eq!(payload["unsupported_execution_count"], json!(1));
+            assert_eq!(payload["transport_counts"]["http"], json!(1));
+            assert_eq!(payload["transport_counts"]["simcoe-ai-proxy"], json!(1));
+            assert_eq!(payload["transport_counts"]["stdio"], json!(1));
             assert_eq!(payload["status_counts"]["ready"], json!(2));
             assert_eq!(payload["status_counts"]["unsupported-transport"], json!(1));
             assert_eq!(servers.len(), 3);

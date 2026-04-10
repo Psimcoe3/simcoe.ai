@@ -915,6 +915,8 @@ pub(crate) fn render_mcp_report_from_snapshot(snapshot: &McpReportSnapshot) -> S
         .collect::<Vec<_>>()
         .join("\n");
 
+    let transport_counts =
+        summarize_recorded_mcp_transports(Some(&snapshot.collection.transport_counts));
     let status_counts = summarize_doctor_mcp_statuses(Some(&snapshot.collection.status_counts));
     let attention = snapshot
         .collection
@@ -929,8 +931,9 @@ pub(crate) fn render_mcp_report_from_snapshot(snapshot: &McpReportSnapshot) -> S
     };
 
     format!(
-        "MCP\n  Configured servers {}\n  Executable now    {}\n  Blocked now       {}\n  Status counts     {}\n  Attention         {}\n  Usage             /mcp <server>\n\nServers\n{}",
+        "MCP\n  Configured servers {}\n  Transports        {}\n  Executable now    {}\n  Blocked now       {}\n  Status counts     {}\n  Attention         {}\n  Usage             /mcp <server>\n\nServers\n{}",
         snapshot.collection.server_count,
+        transport_counts,
         snapshot.collection.supported_execution_count,
         snapshot.collection.unsupported_execution_count,
         status_counts,
