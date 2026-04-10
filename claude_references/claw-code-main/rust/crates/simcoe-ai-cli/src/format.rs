@@ -102,11 +102,10 @@ pub(crate) struct DoctorHooksSnapshot {
 #[derive(Debug, Clone)]
 pub(crate) struct DoctorMcpSnapshot {
     pub(crate) collection: Option<McpCollectionSnapshot>,
-    pub(crate) unsupported_servers: Option<Vec<DoctorBlockedMcpSnapshot>>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct DoctorBlockedMcpSnapshot {
+pub(crate) struct McpBlockedServerSnapshot {
     pub(crate) name: String,
     pub(crate) transport: &'static str,
     pub(crate) detail: String,
@@ -162,6 +161,7 @@ pub(crate) struct McpCollectionSnapshot {
     pub(crate) supported_execution_count: usize,
     pub(crate) unsupported_execution_count: usize,
     pub(crate) status_counts: BTreeMap<String, usize>,
+    pub(crate) unsupported_servers: Vec<McpBlockedServerSnapshot>,
     pub(crate) attention_servers: Vec<McpAttentionSnapshot>,
 }
 
@@ -847,6 +847,7 @@ fn mcp_collection_snapshot(
     servers: &BTreeMap<String, runtime::ScopedMcpServerConfig>,
 ) -> io::Result<(McpCollectionSnapshot, Vec<McpServerSnapshot>)> {
     let server_snapshots = mcp_server_snapshots(servers)?;
+    let attention_servers = mcp_attention_servers(&server_snapshots);
 
     Ok((
         McpCollectionSnapshot {
@@ -861,7 +862,8 @@ fn mcp_collection_snapshot(
                 .filter(|server| !server.supported_execution)
                 .count(),
             status_counts: mcp_status_counts(&server_snapshots),
-            attention_servers: mcp_attention_servers(&server_snapshots),
+            unsupported_servers: mcp_blocked_servers(&attention_servers),
+            attention_servers,
         },
         server_snapshots,
     ))
@@ -918,6 +920,7 @@ pub(crate) fn render_mcp_report_from_snapshot(snapshot: &McpReportSnapshot) -> S
     let transport_counts =
         summarize_recorded_mcp_transports(Some(&snapshot.collection.transport_counts));
     let status_counts = summarize_doctor_mcp_statuses(Some(&snapshot.collection.status_counts));
+    let blockers = summarize_mcp_blockers(Some(&snapshot.collection.unsupported_servers));
     let attention = snapshot
         .collection
         .attention_servers
@@ -931,12 +934,13 @@ pub(crate) fn render_mcp_report_from_snapshot(snapshot: &McpReportSnapshot) -> S
     };
 
     format!(
-        "MCP\n  Configured servers {}\n  Transports        {}\n  Executable now    {}\n  Blocked now       {}\n  Status counts     {}\n  Attention         {}\n  Usage             /mcp <server>\n\nServers\n{}",
+        "MCP\n  Configured servers {}\n  Transports        {}\n  Executable now    {}\n  Blocked now       {}\n  Status counts     {}\n  Blockers          {}\n  Attention         {}\n  Usage             /mcp <server>\n\nServers\n{}",
         snapshot.collection.server_count,
         transport_counts,
         snapshot.collection.supported_execution_count,
         snapshot.collection.unsupported_execution_count,
         status_counts,
+        blockers,
         attention,
         entries,
     )
@@ -1291,10 +1295,7 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
                     pre_count: None,
                     post_count: None,
                 },
-                mcp: DoctorMcpSnapshot {
-                    collection: None,
-                    unsupported_servers: None,
-                },
+                mcp: DoctorMcpSnapshot { collection: None },
                 remote: remote_snapshot,
             })
         }
@@ -1372,7 +1373,7 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
             mcp_executable = snapshot.mcp.collection.as_ref().map_or(0, |collection| collection.supported_execution_count),
             mcp_blocked = snapshot.mcp.collection.as_ref().map_or(0, |collection| collection.unsupported_execution_count),
             mcp_statuses = summarize_doctor_mcp_statuses(snapshot.mcp.collection.as_ref().map(|collection| &collection.status_counts)),
-            mcp_blockers = summarize_doctor_mcp_blockers(snapshot.mcp.unsupported_servers.as_deref()),
+            mcp_blockers = summarize_mcp_blockers(snapshot.mcp.collection.as_ref().map(|collection| collection.unsupported_servers.as_slice())),
             mcp_attention = summarize_doctor_mcp_attention(snapshot.mcp.collection.as_ref().map(|collection| collection.attention_servers.as_slice())),
             remote_enabled = yes_no(snapshot.remote.enabled),
             proxy_ready = yes_no(snapshot.remote.proxy_ready),
@@ -1846,11 +1847,11 @@ fn mcp_attention_servers(servers: &[McpServerSnapshot]) -> Vec<McpAttentionSnaps
 
 fn mcp_blocked_servers(
     attention_servers: &[McpAttentionSnapshot],
-) -> Vec<DoctorBlockedMcpSnapshot> {
+) -> Vec<McpBlockedServerSnapshot> {
     attention_servers
         .iter()
         .filter(|server| server.status == "unsupported-transport")
-        .map(|server| DoctorBlockedMcpSnapshot {
+        .map(|server| McpBlockedServerSnapshot {
             name: server.name.clone(),
             transport: server.transport,
             detail: server
@@ -1892,12 +1893,10 @@ fn doctor_mcp_snapshot(
     mcp_servers: &BTreeMap<String, runtime::ScopedMcpServerConfig>,
 ) -> io::Result<(DoctorMcpSnapshot, Vec<String>)> {
     let (collection, _) = mcp_collection_snapshot(mcp_servers)?;
-    let unsupported_servers = mcp_blocked_servers(&collection.attention_servers);
     let issues = doctor_mcp_issues(&collection.attention_servers);
     Ok((
         DoctorMcpSnapshot {
             collection: Some(collection),
-            unsupported_servers: Some(unsupported_servers),
         },
         issues,
     ))
@@ -1927,7 +1926,7 @@ fn summarize_doctor_mcp_statuses(counts: Option<&BTreeMap<String, usize>>) -> St
     }
 }
 
-fn summarize_doctor_mcp_blockers(blocked_servers: Option<&[DoctorBlockedMcpSnapshot]>) -> String {
+fn summarize_mcp_blockers(blocked_servers: Option<&[McpBlockedServerSnapshot]>) -> String {
     match blocked_servers {
         None => String::from("<unavailable>"),
         Some(blocked_servers) if blocked_servers.is_empty() => String::from("<none>"),

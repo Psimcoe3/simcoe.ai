@@ -44,7 +44,7 @@ use format::{
     render_skills_report_from_snapshot, render_tasks_report, render_tasks_report_from_snapshot,
     render_tools_report, render_tools_report_from_snapshot, render_version_report,
     skills_report_snapshot, status_context, tasks_report_snapshot, tools_report_snapshot,
-    DoctorBlockedMcpSnapshot, DoctorMcpSnapshot, McpAttentionSnapshot, McpCollectionSnapshot,
+    DoctorMcpSnapshot, McpAttentionSnapshot, McpBlockedServerSnapshot, McpCollectionSnapshot,
     McpServerDetailSnapshot, McpServerSnapshot, RemoteEnvReportSnapshot, StatusUsage,
 };
 use init::initialize_repo;
@@ -726,7 +726,7 @@ fn mcp_attention_payloads(servers: &[McpAttentionSnapshot]) -> Vec<serde_json::V
     servers.iter().map(mcp_attention_payload).collect()
 }
 
-fn doctor_blocked_mcp_payload(server: &DoctorBlockedMcpSnapshot) -> serde_json::Value {
+fn mcp_blocked_server_payload(server: &McpBlockedServerSnapshot) -> serde_json::Value {
     json!({
         "name": server.name.as_str(),
         "transport": server.transport,
@@ -734,8 +734,8 @@ fn doctor_blocked_mcp_payload(server: &DoctorBlockedMcpSnapshot) -> serde_json::
     })
 }
 
-fn doctor_blocked_mcp_payloads(servers: &[DoctorBlockedMcpSnapshot]) -> Vec<serde_json::Value> {
-    servers.iter().map(doctor_blocked_mcp_payload).collect()
+fn mcp_blocked_server_payloads(servers: &[McpBlockedServerSnapshot]) -> Vec<serde_json::Value> {
+    servers.iter().map(mcp_blocked_server_payload).collect()
 }
 
 fn mcp_collection_payload_fields(
@@ -762,6 +762,11 @@ fn mcp_collection_payload_fields(
         "attention_servers".to_string(),
         json!(collection.map(|collection| mcp_attention_payloads(&collection.attention_servers))),
     );
+    payload.insert(
+        "unsupported_servers".to_string(),
+        json!(collection
+            .map(|collection| mcp_blocked_server_payloads(&collection.unsupported_servers))),
+    );
     payload
 }
 
@@ -771,13 +776,6 @@ fn doctor_mcp_payload(snapshot: &DoctorMcpSnapshot) -> serde_json::Value {
     payload.insert(
         "server_count".to_string(),
         json!(collection.map(|collection| collection.server_count)),
-    );
-    payload.insert(
-        "unsupported_servers".to_string(),
-        json!(snapshot
-            .unsupported_servers
-            .as_deref()
-            .map(doctor_blocked_mcp_payloads)),
     );
     serde_json::Value::Object(payload)
 }
@@ -6213,6 +6211,7 @@ mod tests {
             assert!(report.contains("Executable now    2"));
             assert!(report.contains("Blocked now       1"));
             assert!(report.contains("Status counts     ready=2, unsupported-transport=1"));
+            assert!(report.contains("Blockers          proxy-server (simcoe-ai-proxy)"));
             assert!(report.contains("Attention         proxy-server (unsupported-transport)"));
             assert!(report.contains("stdio-server"));
             assert!(report.contains("remote-server"));
@@ -6233,6 +6232,15 @@ mod tests {
             assert_eq!(payload["status_counts"]["ready"], json!(2));
             assert_eq!(payload["status_counts"]["unsupported-transport"], json!(1));
             assert_eq!(servers.len(), 3);
+            assert!(payload["unsupported_servers"]
+                .as_array()
+                .is_some_and(|servers| servers.iter().any(|server| {
+                    server["name"] == json!("proxy-server")
+                        && server["transport"] == json!("simcoe-ai-proxy")
+                        && server["detail"].as_str().is_some_and(|detail| {
+                            detail.contains("proxy `proxy-123` targets `wss://vendor.example/mcp`")
+                        })
+                })));
             assert!(payload["attention_servers"]
                 .as_array()
                 .is_some_and(|servers| servers.iter().any(|server| {
