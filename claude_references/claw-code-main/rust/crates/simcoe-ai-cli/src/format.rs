@@ -58,7 +58,7 @@ pub(crate) struct DoctorSnapshot {
     pub(crate) config: DoctorConfigSnapshot,
     pub(crate) auth: DoctorAuthSnapshot,
     pub(crate) hooks: DoctorHooksSnapshot,
-    pub(crate) mcp: DoctorMcpSnapshot,
+    pub(crate) mcp: Option<McpCollectionSnapshot>,
     pub(crate) remote: DoctorRemoteSnapshot,
 }
 
@@ -97,11 +97,6 @@ pub(crate) struct DoctorAuthSnapshot {
 pub(crate) struct DoctorHooksSnapshot {
     pub(crate) pre_count: Option<usize>,
     pub(crate) post_count: Option<usize>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct DoctorMcpSnapshot {
-    pub(crate) collection: Option<McpCollectionSnapshot>,
 }
 
 #[derive(Debug, Clone)]
@@ -1265,7 +1260,7 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
                     pre_count: Some(hooks.pre_tool_use().len()),
                     post_count: Some(hooks.post_tool_use().len()),
                 },
-                mcp: mcp_snapshot,
+                mcp: Some(mcp_snapshot),
                 remote: remote_snapshot,
             })
         }
@@ -1295,7 +1290,7 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
                     pre_count: None,
                     post_count: None,
                 },
-                mcp: DoctorMcpSnapshot { collection: None },
+                mcp: None,
                 remote: remote_snapshot,
             })
         }
@@ -1368,13 +1363,13 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
             scopes = scopes,
             pre_hooks = snapshot.hooks.pre_count.unwrap_or_default(),
             post_hooks = snapshot.hooks.post_count.unwrap_or_default(),
-            mcp_servers = snapshot.mcp.collection.as_ref().map_or(0, |collection| collection.server_count),
-            mcp_transports = summarize_recorded_mcp_transports(snapshot.mcp.collection.as_ref().map(|collection| &collection.transport_counts)),
-            mcp_executable = snapshot.mcp.collection.as_ref().map_or(0, |collection| collection.supported_execution_count),
-            mcp_blocked = snapshot.mcp.collection.as_ref().map_or(0, |collection| collection.unsupported_execution_count),
-            mcp_statuses = summarize_doctor_mcp_statuses(snapshot.mcp.collection.as_ref().map(|collection| &collection.status_counts)),
-            mcp_blockers = summarize_mcp_blockers(snapshot.mcp.collection.as_ref().map(|collection| collection.unsupported_servers.as_slice())),
-            mcp_attention = summarize_doctor_mcp_attention(snapshot.mcp.collection.as_ref().map(|collection| collection.attention_servers.as_slice())),
+            mcp_servers = snapshot.mcp.as_ref().map_or(0, |collection| collection.server_count),
+            mcp_transports = summarize_recorded_mcp_transports(snapshot.mcp.as_ref().map(|collection| &collection.transport_counts)),
+            mcp_executable = snapshot.mcp.as_ref().map_or(0, |collection| collection.supported_execution_count),
+            mcp_blocked = snapshot.mcp.as_ref().map_or(0, |collection| collection.unsupported_execution_count),
+            mcp_statuses = summarize_doctor_mcp_statuses(snapshot.mcp.as_ref().map(|collection| &collection.status_counts)),
+            mcp_blockers = summarize_mcp_blockers(snapshot.mcp.as_ref().map(|collection| collection.unsupported_servers.as_slice())),
+            mcp_attention = summarize_doctor_mcp_attention(snapshot.mcp.as_ref().map(|collection| collection.attention_servers.as_slice())),
             remote_enabled = yes_no(snapshot.remote.enabled),
             proxy_ready = yes_no(snapshot.remote.proxy_ready),
             session_id = session_id,
@@ -1891,15 +1886,10 @@ fn doctor_mcp_issues(attention_servers: &[McpAttentionSnapshot]) -> Vec<String> 
 
 fn doctor_mcp_snapshot(
     mcp_servers: &BTreeMap<String, runtime::ScopedMcpServerConfig>,
-) -> io::Result<(DoctorMcpSnapshot, Vec<String>)> {
+) -> io::Result<(McpCollectionSnapshot, Vec<String>)> {
     let (collection, _) = mcp_collection_snapshot(mcp_servers)?;
     let issues = doctor_mcp_issues(&collection.attention_servers);
-    Ok((
-        DoctorMcpSnapshot {
-            collection: Some(collection),
-        },
-        issues,
-    ))
+    Ok((collection, issues))
 }
 
 fn summarize_recorded_mcp_transports(counts: Option<&BTreeMap<String, usize>>) -> String {
