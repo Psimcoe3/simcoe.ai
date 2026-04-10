@@ -5818,6 +5818,76 @@ mod tests {
     }
 
     #[test]
+    fn tools_report_renders_mcp_tool_family_output_schemas() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("tools-mcp-family-selected");
+        let nested_cwd = repo_root.join("rust");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+
+        {
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let mcp_tool_report = render_tools_report(Some("MCPTool"))
+                .expect("selected MCP tool report should render");
+            assert!(mcp_tool_report.contains("Name             MCPTool"));
+            assert!(mcp_tool_report.contains("Output schema"));
+            assert!(mcp_tool_report.contains("list_tools"));
+            assert!(mcp_tool_report.contains("call_tool"));
+
+            let mcp_tool_payload = super::tools_payload(Some("MCPTool".to_string()))
+                .expect("selected MCP tool payload should render");
+            assert_eq!(mcp_tool_payload["rust_tool"]["name"], json!("MCPTool"));
+            assert!(mcp_tool_payload["rust_tool"]["output_schema"]["oneOf"]
+                .as_array()
+                .is_some_and(|variants| variants.len() == 2));
+
+            let list_resources_report = render_tools_report(Some("ListMcpResourcesTool"))
+                .expect("selected list resources report should render");
+            assert!(list_resources_report.contains("Name             ListMcpResourcesTool"));
+            assert!(list_resources_report.contains("resourceCount"));
+            assert!(list_resources_report.contains("nextCursor"));
+
+            let list_resources_payload =
+                super::tools_payload(Some("ListMcpResourcesTool".to_string()))
+                    .expect("selected list resources payload should render");
+            assert_eq!(
+                list_resources_payload["rust_tool"]["output_schema"]["properties"]["resourceCount"]
+                    ["type"],
+                json!("integer")
+            );
+            assert_eq!(
+                list_resources_payload["rust_tool"]["output_schema"]["properties"]["resources"]
+                    ["type"],
+                json!("array")
+            );
+
+            let read_resource_report = render_tools_report(Some("ReadMcpResourceTool"))
+                .expect("selected read resource report should render");
+            assert!(read_resource_report.contains("Name             ReadMcpResourceTool"));
+            assert!(read_resource_report.contains("contentCount"));
+            assert!(read_resource_report.contains("mimeType"));
+
+            let read_resource_payload =
+                super::tools_payload(Some("ReadMcpResourceTool".to_string()))
+                    .expect("selected read resource payload should render");
+            assert_eq!(
+                read_resource_payload["rust_tool"]["output_schema"]["properties"]["contentCount"]
+                    ["type"],
+                json!("integer")
+            );
+            assert_eq!(
+                read_resource_payload["rust_tool"]["output_schema"]["properties"]["contents"]
+                    ["type"],
+                json!("array")
+            );
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
     fn doctor_report_summarizes_runtime_health() {
         let _guard = env_lock()
             .lock()

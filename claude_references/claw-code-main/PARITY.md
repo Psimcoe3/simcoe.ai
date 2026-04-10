@@ -42,7 +42,7 @@ Evidence:
 - `McpAuthTool` now returns aggregate MCP runtime summaries beyond the raw per-server `servers` array, including `transportCounts`, `statusCounts`, `supportedExecutionCount`, `unsupportedExecutionCount`, `unsupportedServers`, and `attentionServers` for agent-facing MCP inspection.
 - Runtime execution is wired through `rust/crates/tools/src/lib.rs` and `rust/crates/runtime/src/conversation.rs`.
 - Rust now exposes `/tools [name]` via `rust/crates/compat-harness/src/lib.rs`, `rust/crates/tools/src/lib.rs`, `rust/crates/simcoe-ai-cli/src/format.rs`, `rust/crates/simcoe-ai-cli/src/app.rs`, and `rust/crates/simcoe-ai-cli/src/main.rs` to inspect both the live Rust tool registry and archived TypeScript tool families from `src/reference_data/tools_snapshot.json`.
-- Selected live Rust tool inspection now also includes explicit output-schema metadata when the Rust implementation defines one, so `/tools McpAuthTool` can advertise the aggregate MCP fields it returns instead of only its input contract.
+- Selected live Rust tool inspection now also includes explicit output-schema metadata when the Rust implementation defines one, so `/tools` can advertise the native MCP tool-family result contracts (`ListMcpResourcesTool`, `ReadMcpResourceTool`, `MCPTool`, `McpAuthTool`) instead of only their input schemas.
 
 ### Missing or broken in Rust
 - No Rust equivalents for major TS tools such as `AskUserQuestionTool`, `LSPTool`, `RemoteTriggerTool`, `ScheduleCronTool`, `Task*`, `Team*`, and several workflow/system tools.

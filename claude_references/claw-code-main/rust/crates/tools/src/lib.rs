@@ -65,9 +65,128 @@ pub struct ToolSpec {
 #[must_use]
 pub fn tool_output_schema(tool_name: &str) -> Option<Value> {
     match tool_name {
+        "ListMcpResourcesTool" => Some(list_mcp_resources_output_schema()),
+        "ReadMcpResourceTool" => Some(read_mcp_resource_output_schema()),
+        "MCPTool" => Some(mcp_tool_output_schema()),
         "McpAuthTool" => Some(mcp_auth_output_schema()),
         _ => None,
     }
+}
+
+fn list_mcp_resources_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "server": { "type": "string" },
+            "transport": { "type": "string" },
+            "resourceCount": { "type": "integer", "minimum": 0 },
+            "resources": {
+                "type": "array",
+                "items": mcp_resource_output_schema()
+            },
+            "nextCursor": { "type": "string" }
+        },
+        "required": ["server", "transport", "resourceCount", "resources"],
+        "additionalProperties": false
+    })
+}
+
+fn read_mcp_resource_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "server": { "type": "string" },
+            "transport": { "type": "string" },
+            "uri": { "type": "string" },
+            "contentCount": { "type": "integer", "minimum": 0 },
+            "contents": {
+                "type": "array",
+                "items": mcp_resource_contents_output_schema()
+            }
+        },
+        "required": ["server", "transport", "uri", "contentCount", "contents"],
+        "additionalProperties": false
+    })
+}
+
+fn mcp_tool_output_schema() -> Value {
+    json!({
+        "oneOf": [mcp_tool_catalog_output_schema(), mcp_tool_call_output_schema()]
+    })
+}
+
+fn mcp_tool_catalog_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "server": { "type": "string" },
+            "transport": { "type": "string" },
+            "action": { "type": "string", "enum": ["list_tools"] },
+            "toolCount": { "type": "integer", "minimum": 0 },
+            "tools": {
+                "type": "array",
+                "items": mcp_tool_descriptor_output_schema()
+            },
+            "nextCursor": { "type": "string" }
+        },
+        "required": ["server", "transport", "action", "toolCount", "tools"],
+        "additionalProperties": false
+    })
+}
+
+fn mcp_tool_call_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "server": { "type": "string" },
+            "transport": { "type": "string" },
+            "action": { "type": "string", "enum": ["call_tool"] },
+            "tool": { "type": "string" },
+            "qualifiedToolName": { "type": "string" },
+            "content": {
+                "type": "array",
+                "items": mcp_tool_call_content_output_schema()
+            },
+            "structuredContent": {},
+            "isError": { "type": "boolean" },
+            "_meta": {}
+        },
+        "required": [
+            "server",
+            "transport",
+            "action",
+            "tool",
+            "qualifiedToolName",
+            "content"
+        ],
+        "additionalProperties": false
+    })
+}
+
+fn mcp_tool_descriptor_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "inputSchema": {},
+            "annotations": {},
+            "_meta": {}
+        },
+        "required": ["name"],
+        "additionalProperties": false
+    })
+}
+
+fn mcp_tool_call_content_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "type": { "type": "string" }
+        },
+        "required": ["type"],
+        "additionalProperties": true
+    })
 }
 
 fn mcp_auth_output_schema() -> Value {
@@ -185,6 +304,37 @@ fn mcp_auth_server_status_output_schema() -> Value {
             "storedCredentials",
             "refreshTokenPresent"
         ],
+        "additionalProperties": false
+    })
+}
+
+fn mcp_resource_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "uri": { "type": "string" },
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "mimeType": { "type": "string" },
+            "annotations": {},
+            "_meta": {}
+        },
+        "required": ["uri"],
+        "additionalProperties": false
+    })
+}
+
+fn mcp_resource_contents_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "uri": { "type": "string" },
+            "mimeType": { "type": "string" },
+            "text": { "type": "string" },
+            "blob": { "type": "string" },
+            "_meta": {}
+        },
+        "required": ["uri"],
         "additionalProperties": false
     })
 }
