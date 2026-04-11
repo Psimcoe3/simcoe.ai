@@ -78,8 +78,12 @@ pub use prompt::{
 };
 pub use remote::{
     inherited_upstream_proxy_env, no_proxy_list, read_token, upstream_proxy_ws_url,
-    RemoteSessionContext, UpstreamProxyBootstrap, UpstreamProxyState, DEFAULT_SESSION_TOKEN_PATH,
+    upstream_proxy_live_transport_status,
+    upstream_proxy_websocket_probe, upstream_proxy_websocket_probe_from_env_map,
+    RemoteSessionContext, UpstreamProxyBootstrap, UpstreamProxyLiveTransportStatus,
+    UpstreamProxyState, UpstreamProxyWebSocketProbe, DEFAULT_SESSION_TOKEN_PATH,
     DEFAULT_SYSTEM_CA_BUNDLE, NO_PROXY_HOSTS, UPSTREAM_PROXY_ENV_KEYS,
+    UPSTREAM_PROXY_PROBE_ENV_VAR,
 };
 pub use session::{ContentBlock, ConversationMessage, MessageRole, Session, SessionError};
 pub use usage::{

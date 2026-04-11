@@ -112,6 +112,7 @@ pub(crate) enum CliAction {
     Prompt {
         prompt: String,
         model: String,
+        provider: Option<String>,
         output_format: CliOutputFormat,
         allowed_tools: Option<AllowedToolSet>,
         permission_mode: PermissionMode,
@@ -127,6 +128,7 @@ pub(crate) enum CliAction {
     },
     Repl {
         model: String,
+        provider: Option<String>,
         allowed_tools: Option<AllowedToolSet>,
         permission_mode: PermissionMode,
     },
@@ -160,6 +162,7 @@ pub(crate) fn named_cli_subcommands() -> &'static [&'static str] {
 #[allow(clippy::too_many_lines)]
 pub(crate) fn parse_args(args: &[String]) -> Result<CliAction, String> {
     let mut model = crate::DEFAULT_MODEL.to_string();
+    let mut provider = None;
     let mut output_format = CliOutputFormat::Text;
     let mut permission_mode = default_permission_mode();
     let mut wants_version = false;
@@ -182,6 +185,17 @@ pub(crate) fn parse_args(args: &[String]) -> Result<CliAction, String> {
             }
             flag if flag.starts_with("--model=") => {
                 model = resolve_model_alias(&flag[8..]).to_string();
+                index += 1;
+            }
+            "--provider" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "missing value for --provider".to_string())?;
+                provider = Some(value.clone());
+                index += 2;
+            }
+            flag if flag.starts_with("--provider=") => {
+                provider = Some(flag[11..].to_string());
                 index += 1;
             }
             "--output-format" => {
@@ -218,6 +232,7 @@ pub(crate) fn parse_args(args: &[String]) -> Result<CliAction, String> {
                 return Ok(CliAction::Prompt {
                     prompt,
                     model: resolve_model_alias(&model).to_string(),
+                    provider,
                     output_format,
                     allowed_tools: normalize_allowed_tools(&allowed_tool_values)?,
                     permission_mode,
@@ -258,6 +273,7 @@ pub(crate) fn parse_args(args: &[String]) -> Result<CliAction, String> {
     if rest.is_empty() {
         return Ok(CliAction::Repl {
             model,
+            provider,
             allowed_tools,
             permission_mode,
         });
@@ -299,6 +315,7 @@ pub(crate) fn parse_args(args: &[String]) -> Result<CliAction, String> {
             Ok(CliAction::Prompt {
                 prompt,
                 model,
+                provider,
                 output_format,
                 allowed_tools,
                 permission_mode,
@@ -307,6 +324,7 @@ pub(crate) fn parse_args(args: &[String]) -> Result<CliAction, String> {
         other if !other.starts_with('/') => Ok(CliAction::Prompt {
             prompt: rest.join(" "),
             model,
+            provider,
             output_format,
             allowed_tools,
             permission_mode,

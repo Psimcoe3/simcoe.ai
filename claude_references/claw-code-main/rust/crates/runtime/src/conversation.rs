@@ -331,6 +331,11 @@ where
     }
 
     #[must_use]
+    pub fn api_client(&self) -> &C {
+        &self.api_client
+    }
+
+    #[must_use]
     pub fn into_session(self) -> Session {
         self.session
     }

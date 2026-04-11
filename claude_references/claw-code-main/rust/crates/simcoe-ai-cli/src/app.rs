@@ -29,6 +29,7 @@ use crate::{CliPermissionPrompter, CliToolExecutor, SimcoeRuntimeClient};
 
 pub(crate) struct LiveCli {
     pub(crate) model: String,
+    pub(crate) provider: String,
     pub(crate) allowed_tools: Option<AllowedToolSet>,
     pub(crate) permission_mode: PermissionMode,
     pub(crate) system_prompt: Vec<String>,
@@ -38,16 +39,106 @@ pub(crate) struct LiveCli {
     track_active_session: bool,
 }
 
+fn structured_turn_payload(
+    summary: &runtime::TurnSummary,
+    model: &str,
+    provider: &str,
+    delivery_mode: Option<&str>,
+) -> serde_json::Value {
+    json!({
+        "message": crate::final_assistant_text(summary),
+        "model": model,
+        "provider": provider,
+        "iterations": summary.iterations,
+        "auto_compaction": summary.auto_compaction.map(|event| json!({
+            "removed_messages": event.removed_message_count,
+            "notice": format_auto_compaction_notice(event.removed_message_count),
+        })),
+        "tool_uses": crate::collect_tool_uses(summary),
+        "tool_results": crate::collect_tool_results(summary),
+        "transport": structured_turn_transport(summary, provider, delivery_mode),
+        "usage": {
+            "input_tokens": summary.usage.input_tokens,
+            "output_tokens": summary.usage.output_tokens,
+            "cache_creation_input_tokens": summary.usage.cache_creation_input_tokens,
+            "cache_read_input_tokens": summary.usage.cache_read_input_tokens,
+        }
+    })
+}
+
+fn structured_turn_ndjson_records(
+    summary: &runtime::TurnSummary,
+    model: &str,
+    provider: &str,
+    delivery_mode: Option<&str>,
+) -> Vec<serde_json::Value> {
+    let metadata = structured_turn_transport_metadata(provider, delivery_mode);
+    let events = crate::transport::build_turn_transport_events(summary)
+        .into_iter()
+        .map(|event| {
+            json!({
+                "type": "transport_event",
+                "event": event,
+            })
+        });
+    let summary_record = json!({
+        "type": "turn_summary",
+        "summary": structured_turn_payload(summary, model, provider, delivery_mode),
+    });
+
+    std::iter::once(json!({
+        "type": "transport",
+        "transport": metadata,
+    }))
+    .chain(events)
+    .chain(std::iter::once(summary_record))
+    .collect()
+}
+
+fn structured_turn_transport(
+    summary: &runtime::TurnSummary,
+    provider: &str,
+    delivery_mode: Option<&str>,
+) -> serde_json::Value {
+    let mut transport = crate::transport::build_turn_transport(summary, provider);
+    annotate_delivery_mode(&mut transport, delivery_mode);
+    transport
+}
+
+fn structured_turn_transport_metadata(
+    provider: &str,
+    delivery_mode: Option<&str>,
+) -> serde_json::Value {
+    let mut metadata = crate::transport::build_turn_transport_metadata(provider);
+    annotate_delivery_mode(&mut metadata, delivery_mode);
+    metadata
+}
+
+fn annotate_delivery_mode(payload: &mut serde_json::Value, delivery_mode: Option<&str>) {
+    let Some(provider_runtime) = payload
+        .get_mut("provider_runtime")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return;
+    };
+    provider_runtime.insert(
+        "delivery_mode".to_string(),
+        delivery_mode.map_or(serde_json::Value::Null, |mode| json!(mode)),
+    );
+}
+
 #[allow(clippy::too_many_lines)]
 impl LiveCli {
     pub(crate) fn new(
         model: String,
+        provider_override: Option<String>,
         enable_tools: bool,
         allowed_tools: Option<AllowedToolSet>,
         permission_mode: PermissionMode,
         track_active_session: bool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let system_prompt = crate::build_system_prompt()?;
+        let provider = crate::active_runtime_provider_label(provider_override.as_deref())?;
         let (session, restored_session) = if track_active_session {
             match load_active_session_handle()? {
                 Some(session) => {
@@ -63,6 +154,7 @@ impl LiveCli {
         let runtime = crate::build_runtime(
             restored_session,
             model.clone(),
+            Some(provider.clone()),
             system_prompt.clone(),
             enable_tools,
             true,
@@ -72,6 +164,7 @@ impl LiveCli {
         )?;
         let cli = Self {
             model,
+            provider,
             allowed_tools,
             permission_mode,
             system_prompt,
@@ -98,11 +191,13 @@ impl LiveCli {
 ██║     ██║     ██╔══██║██║███╗██║\n\
 ╚██████╗███████╗██║  ██║╚███╔███╔╝\n\
  ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝\x1b[0m \x1b[38;5;208mCode\x1b[0m 🦞\n\n\
+    \x1b[2mProvider\x1b[0m         {}\n\
   \x1b[2mModel\x1b[0m            {}\n\
   \x1b[2mPermissions\x1b[0m      {}\n\
   \x1b[2mDirectory\x1b[0m        {}\n\
   \x1b[2mSession\x1b[0m          {}\n\n\
   Type \x1b[1m/help\x1b[0m for commands · \x1b[2mShift+Enter\x1b[0m for newline",
+            self.provider,
             brand_model_name(&self.model),
             self.permission_mode.as_str(),
             cwd,
@@ -204,6 +299,7 @@ impl LiveCli {
         let mut runtime = crate::build_runtime(
             session,
             self.model.clone(),
+            Some(self.provider.clone()),
             self.system_prompt.clone(),
             true,
             false,
@@ -219,48 +315,21 @@ impl LiveCli {
     }
 
     fn turn_output_payload(&self, summary: &runtime::TurnSummary) -> serde_json::Value {
-        json!({
-            "message": crate::final_assistant_text(summary),
-            "model": self.model,
-            "iterations": summary.iterations,
-            "auto_compaction": summary.auto_compaction.map(|event| json!({
-                "removed_messages": event.removed_message_count,
-                "notice": format_auto_compaction_notice(event.removed_message_count),
-            })),
-            "tool_uses": crate::collect_tool_uses(summary),
-            "tool_results": crate::collect_tool_results(summary),
-            "transport": crate::transport::build_turn_transport(summary),
-            "usage": {
-                "input_tokens": summary.usage.input_tokens,
-                "output_tokens": summary.usage.output_tokens,
-                "cache_creation_input_tokens": summary.usage.cache_creation_input_tokens,
-                "cache_read_input_tokens": summary.usage.cache_read_input_tokens,
-            }
-        })
+        structured_turn_payload(
+            summary,
+            &self.model,
+            &self.provider,
+            self.runtime.api_client().last_delivery_mode(),
+        )
     }
 
     fn turn_output_ndjson_records(&self, summary: &runtime::TurnSummary) -> Vec<serde_json::Value> {
-        let metadata = crate::transport::build_turn_transport_metadata();
-        let events = crate::transport::build_turn_transport_events(summary)
-            .into_iter()
-            .map(|event| {
-                json!({
-                    "type": "transport_event",
-                    "event": event,
-                })
-            });
-        let summary_record = json!({
-            "type": "turn_summary",
-            "summary": self.turn_output_payload(summary),
-        });
-
-        std::iter::once(json!({
-            "type": "transport",
-            "transport": metadata,
-        }))
-        .chain(events)
-        .chain(std::iter::once(summary_record))
-        .collect()
+        structured_turn_ndjson_records(
+            summary,
+            &self.model,
+            &self.provider,
+            self.runtime.api_client().last_delivery_mode(),
+        )
     }
 
     pub(crate) fn handle_repl_command(
@@ -441,6 +510,9 @@ impl LiveCli {
     fn print_status(&self) {
         let cumulative = self.runtime.usage().cumulative_usage();
         let latest = self.runtime.usage().current_turn_usage();
+        let mut context =
+            status_context(Some(&self.session.path)).expect("status context should load");
+        context.provider = self.provider.clone();
         println!(
             "{}",
             format_status_report(
@@ -453,7 +525,7 @@ impl LiveCli {
                     estimated_tokens: self.runtime.estimated_tokens(),
                 },
                 self.permission_mode.as_str(),
-                &status_context(Some(&self.session.path)).expect("status context should load"),
+                &context,
             )
         );
     }
@@ -586,6 +658,7 @@ impl LiveCli {
         Ok(crate::build_runtime(
             session,
             model,
+            Some(self.provider.clone()),
             self.system_prompt.clone(),
             true,
             true,
@@ -802,6 +875,7 @@ impl LiveCli {
         let mut runtime = crate::build_runtime(
             session,
             self.model.clone(),
+            Some(self.provider.clone()),
             self.system_prompt.clone(),
             enable_tools,
             false,
@@ -1031,5 +1105,116 @@ impl LiveCli {
 
         println!("Issue draft\n  Title            {title}\n\n{body}");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{structured_turn_ndjson_records, structured_turn_payload};
+    use runtime::{
+        AssistantEvent, AssistantTurnTrace, ContentBlock, ConversationMessage, TokenUsage,
+        TurnSummary,
+    };
+    use serde_json::json;
+
+    fn sample_turn_summary() -> TurnSummary {
+        TurnSummary {
+            assistant_messages: vec![ConversationMessage::assistant_with_usage(
+                vec![ContentBlock::Text {
+                    text: "Done".to_string(),
+                }],
+                Some(TokenUsage {
+                    input_tokens: 5,
+                    output_tokens: 3,
+                    cache_creation_input_tokens: 0,
+                    cache_read_input_tokens: 0,
+                }),
+            )],
+            tool_results: Vec::new(),
+            transport_trace: vec![AssistantTurnTrace {
+                events: vec![
+                    AssistantEvent::TextDelta("Done".to_string()),
+                    AssistantEvent::Usage(TokenUsage {
+                        input_tokens: 5,
+                        output_tokens: 3,
+                        cache_creation_input_tokens: 0,
+                        cache_read_input_tokens: 0,
+                    }),
+                    AssistantEvent::MessageStop,
+                ],
+                tool_results: Vec::new(),
+            }],
+            iterations: 1,
+            usage: TokenUsage {
+                input_tokens: 5,
+                output_tokens: 3,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            },
+            auto_compaction: None,
+        }
+    }
+
+    #[test]
+    fn structured_turn_payload_includes_provider_runtime_metadata() {
+        let payload = structured_turn_payload(
+            &sample_turn_summary(),
+            "simcoe-opus-4-6",
+            "openai",
+            Some("streaming-sse"),
+        );
+
+        assert_eq!(payload["provider"], json!("openai"));
+        assert_eq!(payload["transport"]["kind"], json!("provider-direct"));
+        assert_eq!(payload["transport"]["provider_runtime"]["provider"], json!("openai"));
+        assert_eq!(
+            payload["transport"]["provider_runtime"]["family"],
+            json!("openai-compatible")
+        );
+        assert_eq!(
+            payload["transport"]["provider_runtime"]["request_format"],
+            json!("chat-completions")
+        );
+        assert_eq!(
+            payload["transport"]["provider_runtime"]["buffered_fallback_supported"],
+            json!(true)
+        );
+        assert_eq!(
+            payload["transport"]["provider_runtime"]["delivery_mode"],
+            json!("streaming-sse")
+        );
+        assert_eq!(
+            payload["transport"]["capabilities"]["live_remote_transport_ready"],
+            json!(false)
+        );
+    }
+
+    #[test]
+    fn structured_turn_ndjson_records_include_provider_metadata() {
+        let records = structured_turn_ndjson_records(
+            &sample_turn_summary(),
+            "simcoe-opus-4-6",
+            "anthropic",
+            Some("buffered-json-fallback"),
+        );
+
+        assert_eq!(records[0]["type"], json!("transport"));
+        assert_eq!(
+            records[0]["transport"]["provider_runtime"]["provider"],
+            json!("anthropic")
+        );
+        assert_eq!(
+            records[0]["transport"]["provider_runtime"]["family"],
+            json!("anthropic-compatible")
+        );
+        assert_eq!(
+            records[0]["transport"]["provider_runtime"]["delivery_mode"],
+            json!("buffered-json-fallback")
+        );
+        assert_eq!(records.last().expect("summary record")["type"], json!("turn_summary"));
+        assert_eq!(
+            records.last().expect("summary record")["summary"]["provider"],
+            json!("anthropic")
+        );
     }
 }

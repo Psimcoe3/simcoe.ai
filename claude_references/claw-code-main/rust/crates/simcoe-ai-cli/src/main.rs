@@ -8,6 +8,7 @@ mod session_manager;
 mod transport;
 mod tui;
 
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::io::{self, Read, Write};
@@ -57,6 +58,7 @@ use runtime::{
     OAuthTokenExchangeRequest, PermissionMode, PermissionPolicy, RuntimeError, Session, TokenUsage,
     ToolError, ToolExecutor, UsageTracker,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use session_manager::{
     list_managed_sessions, load_active_session_handle, render_session_list,
@@ -70,6 +72,9 @@ use tools::{
 use tui::status_bar::StatusBarHandle;
 
 const DEFAULT_MODEL: &str = "simcoe-opus-4-6";
+const DEFAULT_ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com";
+const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
+const DEFAULT_OLLAMA_BASE_URL: &str = "http://localhost:11434/v1";
 fn max_tokens_for_model(model: &str) -> u32 {
     if model.contains("opus") {
         32_000
@@ -212,12 +217,14 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         CliAction::Prompt {
             prompt,
             model,
+            provider,
             output_format,
             allowed_tools,
             permission_mode,
         } => {
-            let mut cli = LiveCli::new(model, true, allowed_tools, permission_mode, false)
-                .map_err(|error| with_cli_error_context(error, 1, Some("prompt"), None))?;
+            let mut cli =
+                LiveCli::new(model, provider, true, allowed_tools, permission_mode, false)
+                    .map_err(|error| with_cli_error_context(error, 1, Some("prompt"), None))?;
             cli.run_turn_with_output(&prompt, output_format)
                 .map_err(|error| with_cli_error_context(error, 1, Some("prompt"), None))?;
         }
@@ -229,9 +236,10 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             .map_err(|error| with_cli_error_context(error, 1, Some("init"), None))?,
         CliAction::Repl {
             model,
+            provider,
             allowed_tools,
             permission_mode,
-        } => run_repl(model, allowed_tools, permission_mode)?,
+        } => run_repl(model, provider, allowed_tools, permission_mode)?,
         CliAction::Help => print_help(),
     }
     Ok(())
@@ -283,8 +291,8 @@ fn inferred_error_metadata(args: &[String]) -> (Option<String>, Option<String>) 
                     .cloned();
                 return (Some("resume".to_string()), command);
             }
-            "--model" | "--output-format" | "--permission-mode" | "--allowedTools"
-            | "--allowed-tools" | "--cwd" | "--date" => {
+            "--model" | "--provider" | "--output-format" | "--permission-mode"
+            | "--allowedTools" | "--allowed-tools" | "--cwd" | "--date" => {
                 index += 2;
             }
             arg if arg.starts_with("--") => {
@@ -332,18 +340,267 @@ fn with_cli_error_context(
     Box::new(cli_error)
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
+struct StructuredCliErrorContext {
+    operation: Option<String>,
+    command: Option<String>,
+    model: Option<String>,
+    provider: Option<String>,
+}
+
+fn resolved_error_provider_label(provider_override: Option<&str>) -> Option<String> {
+    normalize_provider_override(provider_override)
+        .map(str::to_string)
+        .or_else(|| active_runtime_provider_label(None).ok())
+}
+
+fn structured_error_context_from_action(action: CliAction) -> StructuredCliErrorContext {
+    match action {
+        CliAction::DumpManifests { .. } => StructuredCliErrorContext {
+            operation: Some("dump-manifests".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::BootstrapPlan { .. } => StructuredCliErrorContext {
+            operation: Some("bootstrap-plan".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::PrintSystemPrompt { .. } => StructuredCliErrorContext {
+            operation: Some("system-prompt".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Config { .. } => StructuredCliErrorContext {
+            operation: Some("config".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Hooks { .. } => StructuredCliErrorContext {
+            operation: Some("hooks".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Mcp { .. } => StructuredCliErrorContext {
+            operation: Some("mcp".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Memory { .. } => StructuredCliErrorContext {
+            operation: Some("memory".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Agents { .. } => StructuredCliErrorContext {
+            operation: Some("agents".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Plugin { .. } => StructuredCliErrorContext {
+            operation: Some("plugin".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::ReloadPlugins { .. } => StructuredCliErrorContext {
+            operation: Some("reload-plugins".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::RemoteEnv { .. } => StructuredCliErrorContext {
+            operation: Some("remote-env".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::RemoteSetup { .. } => StructuredCliErrorContext {
+            operation: Some("remote-setup".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Tools { .. } => StructuredCliErrorContext {
+            operation: Some("tools".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Doctor { .. } => StructuredCliErrorContext {
+            operation: Some("doctor".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Skills { .. } => StructuredCliErrorContext {
+            operation: Some("skills".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Tasks { .. } => StructuredCliErrorContext {
+            operation: Some("tasks".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Export { .. } => StructuredCliErrorContext {
+            operation: Some("export".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Session { .. } => StructuredCliErrorContext {
+            operation: Some("session".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Version { .. } => StructuredCliErrorContext {
+            operation: Some("version".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::ResumeSession { commands, .. } => StructuredCliErrorContext {
+            operation: Some("resume".to_string()),
+            command: commands.first().filter(|command| command.starts_with('/')).cloned(),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Prompt {
+            model, provider, ..
+        } => StructuredCliErrorContext {
+            operation: Some("prompt".to_string()),
+            model: Some(model),
+            provider: resolved_error_provider_label(provider.as_deref()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Login { .. } => StructuredCliErrorContext {
+            operation: Some("login".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Logout { .. } => StructuredCliErrorContext {
+            operation: Some("logout".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Init { .. } => StructuredCliErrorContext {
+            operation: Some("init".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Repl {
+            model, provider, ..
+        } => StructuredCliErrorContext {
+            operation: Some("repl".to_string()),
+            model: Some(model),
+            provider: resolved_error_provider_label(provider.as_deref()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Help => StructuredCliErrorContext {
+            operation: Some("help".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+    }
+}
+
+fn inferred_error_context_from_raw_args(args: &[String]) -> StructuredCliErrorContext {
+    if args.is_empty() {
+        return StructuredCliErrorContext {
+            operation: Some("repl".to_string()),
+            model: Some(DEFAULT_MODEL.to_string()),
+            provider: resolved_error_provider_label(None),
+            ..StructuredCliErrorContext::default()
+        };
+    }
+
+    let mut index = 0;
+    let mut model = None;
+    let mut provider = None;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--version" | "-V" => {
+                return StructuredCliErrorContext {
+                    operation: Some("version".to_string()),
+                    ..StructuredCliErrorContext::default()
+                };
+            }
+            "--resume" => {
+                let command = args
+                    .get(index + 2)
+                    .filter(|value| value.starts_with('/'))
+                    .cloned();
+                return StructuredCliErrorContext {
+                    operation: Some("resume".to_string()),
+                    command,
+                    ..StructuredCliErrorContext::default()
+                };
+            }
+            "--model" => {
+                if let Some(value) = args.get(index + 1) {
+                    model = Some(args::resolve_model_alias(value).to_string());
+                }
+                index += 2;
+            }
+            flag if flag.starts_with("--model=") => {
+                model = Some(args::resolve_model_alias(&flag[8..]).to_string());
+                index += 1;
+            }
+            "--provider" => {
+                if let Some(value) = args.get(index + 1) {
+                    provider = Some(value.clone());
+                }
+                index += 2;
+            }
+            flag if flag.starts_with("--provider=") => {
+                provider = Some(flag[11..].to_string());
+                index += 1;
+            }
+            "--output-format" | "--permission-mode" | "--allowedTools" | "--allowed-tools"
+            | "--cwd" | "--date" => {
+                index += 2;
+            }
+            arg if arg.starts_with("--") => {
+                index += 1;
+            }
+            "dump-manifests" | "bootstrap-plan" | "system-prompt" | "config" | "hooks"
+            | "mcp" | "memory" | "agents" | "plugin" | "reload-plugins"
+            | "remote-env" | "remote-setup" | "tools" | "doctor" | "skills"
+            | "tasks" | "export" | "session" | "login" | "logout" | "init" => {
+                return StructuredCliErrorContext {
+                    operation: Some(args[index].clone()),
+                    ..StructuredCliErrorContext::default()
+                };
+            }
+            "prompt" => {
+                return StructuredCliErrorContext {
+                    operation: Some("prompt".to_string()),
+                    model: Some(model.unwrap_or_else(|| DEFAULT_MODEL.to_string())),
+                    provider: provider.or_else(|| resolved_error_provider_label(None)),
+                    ..StructuredCliErrorContext::default()
+                };
+            }
+            arg if !arg.starts_with('/') => {
+                return StructuredCliErrorContext {
+                    operation: Some("prompt".to_string()),
+                    model: Some(model.unwrap_or_else(|| DEFAULT_MODEL.to_string())),
+                    provider: provider.or_else(|| resolved_error_provider_label(None)),
+                    ..StructuredCliErrorContext::default()
+                };
+            }
+            _ => {
+                index += 1;
+            }
+        }
+    }
+
+    StructuredCliErrorContext {
+        operation: Some("repl".to_string()),
+        model: Some(model.unwrap_or_else(|| DEFAULT_MODEL.to_string())),
+        provider: provider.or_else(|| resolved_error_provider_label(None)),
+        ..StructuredCliErrorContext::default()
+    }
+}
+
+fn inferred_error_context(args: &[String]) -> StructuredCliErrorContext {
+    parse_args(args)
+        .map(structured_error_context_from_action)
+        .unwrap_or_else(|_| inferred_error_context_from_raw_args(args))
+}
+
+fn structured_error_transport_metadata(provider: &str) -> serde_json::Value {
+    let mut metadata = crate::transport::build_turn_transport_metadata(provider);
+    let Some(provider_runtime) = metadata
+        .get_mut("provider_runtime")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return metadata;
+    };
+    provider_runtime.insert("delivery_mode".to_string(), serde_json::Value::Null);
+    metadata
+}
+
 fn cli_error_payload(
     args: &[String],
     error: &(dyn std::error::Error + 'static),
 ) -> serde_json::Value {
     let cli_error = error.downcast_ref::<CliExitError>();
-    let (inferred_operation, inferred_command) = inferred_error_metadata(args);
+    let inferred = inferred_error_context(args);
     let operation = cli_error
         .and_then(|error| error.operation.clone())
-        .or(inferred_operation);
+        .or(inferred.operation);
     let command = cli_error
         .and_then(|error| error.command.clone())
-        .or(inferred_command);
+        .or(inferred.command);
 
     let mut payload = serde_json::Map::from_iter([
         ("type".to_string(), json!("error")),
@@ -359,6 +616,16 @@ fn cli_error_payload(
     }
     if let Some(command) = command {
         payload.insert("command".to_string(), json!(command));
+    }
+    if let Some(model) = inferred.model {
+        payload.insert("model".to_string(), json!(model));
+    }
+    if let Some(provider) = inferred.provider {
+        payload.insert("provider".to_string(), json!(provider));
+        payload.insert(
+            "transport".to_string(),
+            structured_error_transport_metadata(&provider),
+        );
     }
 
     serde_json::Value::Object(payload)
@@ -581,7 +848,7 @@ fn config_payload(
         );
         payload.insert(
             "supported_sections".to_string(),
-            json!(["env", "hooks", "model"]),
+            json!(["env", "hooks", "model", "provider"]),
         );
         payload.insert(
             "section_value".to_string(),
@@ -813,6 +1080,10 @@ fn mcp_payload(server: Option<String>) -> Result<serde_json::Value, Box<dyn std:
 
 fn remote_transport_metadata_payload(snapshot: &RemoteEnvReportSnapshot) -> serde_json::Value {
     let ready = snapshot.bootstrap.should_enable();
+    let live_remote_transport = runtime::upstream_proxy_live_transport_status(
+        &snapshot.bootstrap,
+        &snapshot.websocket_probe,
+    );
     let ws_url = (!snapshot.remote.base_url.is_empty()).then(|| snapshot.bootstrap.ws_url());
 
     json!({
@@ -821,6 +1092,12 @@ fn remote_transport_metadata_payload(snapshot: &RemoteEnvReportSnapshot) -> serd
         "capabilities": {
             "structured_local_events": true,
             "live_remote_transport": false,
+            "live_remote_transport_kind": "upstream-proxy-websocket",
+            "live_remote_transport_ready": live_remote_transport.ready,
+            "live_remote_transport_path_ready": live_remote_transport.path_ready,
+            "live_remote_transport_selected": false,
+            "live_remote_transport_blocker_kind": live_remote_transport.blocker_kind,
+            "live_remote_transport_blocker_detail": live_remote_transport.blocker_detail,
         },
         "bootstrap": {
             "remote_enabled": snapshot.remote.enabled,
@@ -829,6 +1106,13 @@ fn remote_transport_metadata_payload(snapshot: &RemoteEnvReportSnapshot) -> serd
             "upstream_proxy_enabled": snapshot.bootstrap.upstream_proxy_enabled,
             "ready": ready,
             "ws_url": ws_url,
+            "websocket_probe": {
+                "requested": snapshot.websocket_probe.requested,
+                "attempted": snapshot.websocket_probe.attempted,
+                "reachable": snapshot.websocket_probe.reachable,
+                "status": snapshot.websocket_probe.status,
+                "detail": snapshot.websocket_probe.detail.clone(),
+            },
             "token_path": snapshot.bootstrap.token_path.display().to_string(),
             "token_present": snapshot.bootstrap.token.is_some(),
             "ca_bundle_path": snapshot.bootstrap.ca_bundle_path.display().to_string(),
@@ -1115,6 +1399,7 @@ fn doctor_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
             "discovered_file_count": snapshot.config.discovered_file_count,
             "loaded_file_count": snapshot.config.loaded_file_count,
             "error": snapshot.config.error,
+            "provider": snapshot.config.provider,
             "model": snapshot.config.model,
             "permission_mode": snapshot.config.permission_mode,
             "sandbox": sandbox,
@@ -1147,6 +1432,16 @@ fn doctor_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         json!({
             "enabled": snapshot.remote.enabled,
             "proxy_ready": snapshot.remote.proxy_ready,
+            "ws_path_ready": snapshot.remote.ws_path_ready,
+            "live_blocker_kind": snapshot.remote.live_blocker_kind,
+            "live_blocker_detail": snapshot.remote.live_blocker_detail,
+            "websocket_probe": {
+                "requested": snapshot.remote.websocket_probe.requested,
+                "attempted": snapshot.remote.websocket_probe.attempted,
+                "reachable": snapshot.remote.websocket_probe.reachable,
+                "status": snapshot.remote.websocket_probe.status,
+                "detail": snapshot.remote.websocket_probe.detail,
+            },
             "session_id": snapshot.remote.session_id,
             "base_url": snapshot.remote.base_url,
             "missing_requirements": snapshot.remote.missing_requirements,
@@ -1270,10 +1565,11 @@ fn tools_payload(tool: Option<String>) -> Result<serde_json::Value, Box<dyn std:
 
 fn run_repl(
     model: String,
+    provider: Option<String>,
     allowed_tools: Option<AllowedToolSet>,
     permission_mode: PermissionMode,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut cli = LiveCli::new(model, true, allowed_tools, permission_mode, true)?;
+    let mut cli = LiveCli::new(model, provider, true, allowed_tools, permission_mode, true)?;
     let mut editor = input::LineEditor::new("> ", slash_command_completion_candidates());
     println!("{}", cli.startup_banner());
     let _ = cli.render_status_bar();
@@ -2576,9 +2872,24 @@ fn build_runtime_feature_config(
     Ok(loader.load()?.feature_config().clone())
 }
 
+fn normalize_provider_override(provider: Option<&str>) -> Option<&str> {
+    provider.map(str::trim).filter(|value| !value.is_empty())
+}
+
+fn active_runtime_provider_label(
+    provider_override: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let feature_config = build_runtime_feature_config()?;
+    let provider = resolve_runtime_provider(
+        normalize_provider_override(provider_override).or(feature_config.provider()),
+    )?;
+    Ok(provider.as_str().to_string())
+}
+
 fn build_runtime(
     session: Session,
     model: String,
+    provider_override: Option<String>,
     system_prompt: Vec<String>,
     enable_tools: bool,
     emit_output: bool,
@@ -2586,10 +2897,15 @@ fn build_runtime(
     permission_mode: PermissionMode,
     status_bar: Option<StatusBarHandle>,
 ) -> Result<ConversationRuntime<SimcoeRuntimeClient, CliToolExecutor>, Box<dyn std::error::Error>> {
+    let feature_config = build_runtime_feature_config()?;
+    let provider = resolve_runtime_provider(
+        normalize_provider_override(provider_override.as_deref()).or(feature_config.provider()),
+    )?;
     Ok(ConversationRuntime::new_with_features(
         session,
-        SimcoeRuntimeClient::new(
+        SimcoeRuntimeClient::new_with_provider(
             model,
+            provider,
             enable_tools,
             emit_output,
             allowed_tools.clone(),
@@ -2598,8 +2914,666 @@ fn build_runtime(
         CliToolExecutor::new(allowed_tools, emit_output),
         permission_policy(permission_mode),
         system_prompt,
-        build_runtime_feature_config()?,
+        feature_config,
     ))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeProvider {
+    Simcoe,
+    Anthropic,
+    OpenAi,
+    Ollama,
+}
+
+impl RuntimeProvider {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Simcoe => "simcoe",
+            Self::Anthropic => "anthropic",
+            Self::OpenAi => "openai",
+            Self::Ollama => "ollama",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProviderDeliveryMode {
+    StreamingSse,
+    BufferedJsonFallback,
+}
+
+impl ProviderDeliveryMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::StreamingSse => "streaming-sse",
+            Self::BufferedJsonFallback => "buffered-json-fallback",
+        }
+    }
+}
+
+fn resolve_runtime_provider(provider: Option<&str>) -> Result<RuntimeProvider, RuntimeError> {
+    let Some(provider) = provider.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(RuntimeProvider::Simcoe);
+    };
+    let normalized = provider.to_ascii_lowercase();
+    match normalized.as_str() {
+        "simcoe" | "simcoe-ai" => Ok(RuntimeProvider::Simcoe),
+        "anthropic" | "claude" => Ok(RuntimeProvider::Anthropic),
+        "openai" | "chatgpt" => Ok(RuntimeProvider::OpenAi),
+        "ollama" | "local" => Ok(RuntimeProvider::Ollama),
+        _ => Err(RuntimeError::new(format!(
+            "unsupported provider '{provider}'; expected simcoe, anthropic, openai, or ollama"
+        ))),
+    }
+}
+
+fn read_optional_env_non_empty(key: &str) -> Result<Option<String>, RuntimeError> {
+    match env::var(key) {
+        Ok(value) if !value.trim().is_empty() => Ok(Some(value)),
+        Ok(_) | Err(env::VarError::NotPresent) => Ok(None),
+        Err(error) => Err(RuntimeError::new(format!("failed to read {key}: {error}"))),
+    }
+}
+
+fn read_required_env_non_empty(key: &str) -> Result<String, RuntimeError> {
+    read_optional_env_non_empty(key)?.ok_or_else(|| {
+        RuntimeError::new(format!(
+            "{key} is not set; configure it before using this provider"
+        ))
+    })
+}
+
+fn anthropic_api_key() -> Result<String, RuntimeError> {
+    read_required_env_non_empty("ANTHROPIC_API_KEY")
+}
+
+fn anthropic_base_url() -> Result<String, RuntimeError> {
+    Ok(read_optional_env_non_empty("ANTHROPIC_BASE_URL")?
+        .unwrap_or_else(|| DEFAULT_ANTHROPIC_BASE_URL.to_string()))
+}
+
+fn openai_api_key() -> Result<String, RuntimeError> {
+    read_required_env_non_empty("OPENAI_API_KEY")
+}
+
+fn openai_base_url() -> Result<String, RuntimeError> {
+    Ok(read_optional_env_non_empty("OPENAI_BASE_URL")?
+        .unwrap_or_else(|| DEFAULT_OPENAI_BASE_URL.to_string()))
+}
+
+fn ollama_api_key() -> Result<String, RuntimeError> {
+    Ok(read_optional_env_non_empty("OLLAMA_API_KEY")?.unwrap_or_else(|| "ollama".to_string()))
+}
+
+fn ollama_base_url() -> Result<String, RuntimeError> {
+    Ok(read_optional_env_non_empty("OLLAMA_BASE_URL")?
+        .unwrap_or_else(|| DEFAULT_OLLAMA_BASE_URL.to_string()))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OpenAiCompatibleTransportConfig {
+    provider: RuntimeProvider,
+    api_key: String,
+    base_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+struct OpenAiChatCompletionRequest {
+    model: String,
+    messages: Vec<OpenAiChatMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<OpenAiToolDefinition>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream_options: Option<OpenAiStreamOptions>,
+    stream: bool,
+}
+
+impl OpenAiChatCompletionRequest {
+    #[must_use]
+    fn with_streaming(mut self) -> Self {
+        self.stream = true;
+        self.stream_options = Some(OpenAiStreamOptions {
+            include_usage: true,
+        });
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+struct OpenAiStreamOptions {
+    include_usage: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+struct OpenAiChatMessage {
+    role: String,
+    content: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<OpenAiToolCall>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_call_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct OpenAiToolCall {
+    id: String,
+    #[serde(rename = "type")]
+    kind: String,
+    function: OpenAiToolFunctionCall,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct OpenAiToolFunctionCall {
+    name: String,
+    arguments: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+struct OpenAiToolDefinition {
+    #[serde(rename = "type")]
+    kind: String,
+    function: OpenAiFunctionDefinition,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+struct OpenAiFunctionDefinition {
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    parameters: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+struct OpenAiChatCompletionResponse {
+    id: String,
+    choices: Vec<OpenAiChatCompletionChoice>,
+    #[serde(default)]
+    usage: Option<OpenAiChatCompletionUsage>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+struct OpenAiChatCompletionChoice {
+    message: OpenAiAssistantMessage,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+struct OpenAiAssistantMessage {
+    #[serde(default)]
+    content: Option<serde_json::Value>,
+    #[serde(default)]
+    tool_calls: Option<Vec<OpenAiToolCall>>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+struct OpenAiChatCompletionUsage {
+    prompt_tokens: u32,
+    completion_tokens: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+struct OpenAiChatCompletionChunk {
+    #[serde(default)]
+    choices: Vec<OpenAiChatCompletionChunkChoice>,
+    #[serde(default)]
+    usage: Option<OpenAiChatCompletionUsage>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+struct OpenAiChatCompletionChunkChoice {
+    index: usize,
+    #[serde(default)]
+    delta: OpenAiChatCompletionChunkDelta,
+    #[serde(default)]
+    finish_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+struct OpenAiChatCompletionChunkDelta {
+    #[serde(default)]
+    content: Option<String>,
+    #[serde(default)]
+    tool_calls: Option<Vec<OpenAiToolCallDelta>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+struct OpenAiToolCallDelta {
+    index: usize,
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(rename = "type", default)]
+    kind: Option<String>,
+    #[serde(default)]
+    function: Option<OpenAiToolFunctionDelta>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+struct OpenAiToolFunctionDelta {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    arguments: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum OpenAiSseFrame {
+    Chunk(OpenAiChatCompletionChunk),
+    Done,
+}
+
+#[derive(Debug, Default)]
+struct OpenAiSseParser {
+    buffer: Vec<u8>,
+}
+
+impl OpenAiSseParser {
+    #[must_use]
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn push(&mut self, chunk: &[u8]) -> Result<Vec<OpenAiSseFrame>, RuntimeError> {
+        self.buffer.extend_from_slice(chunk);
+        let mut frames = Vec::new();
+
+        while let Some(frame) = self.next_frame() {
+            if let Some(parsed) = parse_openai_sse_frame(&frame)? {
+                frames.push(parsed);
+            }
+        }
+
+        Ok(frames)
+    }
+
+    fn finish(&mut self) -> Result<Vec<OpenAiSseFrame>, RuntimeError> {
+        if self.buffer.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let trailing = std::mem::take(&mut self.buffer);
+        match parse_openai_sse_frame(&String::from_utf8_lossy(&trailing))? {
+            Some(frame) => Ok(vec![frame]),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    fn next_frame(&mut self) -> Option<String> {
+        let separator = self
+            .buffer
+            .windows(2)
+            .position(|window| window == b"\n\n")
+            .map(|position| (position, 2))
+            .or_else(|| {
+                self.buffer
+                    .windows(4)
+                    .position(|window| window == b"\r\n\r\n")
+                    .map(|position| (position, 4))
+            })?;
+
+        let (position, separator_len) = separator;
+        let frame = self
+            .buffer
+            .drain(..position + separator_len)
+            .collect::<Vec<_>>();
+        let frame_len = frame.len().saturating_sub(separator_len);
+        Some(String::from_utf8_lossy(&frame[..frame_len]).into_owned())
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct PendingOpenAiToolCall {
+    id: String,
+    name: String,
+    arguments: String,
+}
+
+fn openai_compatible_transport_config(
+    provider: RuntimeProvider,
+) -> Result<OpenAiCompatibleTransportConfig, RuntimeError> {
+    match provider {
+        RuntimeProvider::OpenAi => Ok(OpenAiCompatibleTransportConfig {
+            provider,
+            api_key: openai_api_key()?,
+            base_url: openai_base_url()?,
+        }),
+        RuntimeProvider::Ollama => Ok(OpenAiCompatibleTransportConfig {
+            provider,
+            api_key: ollama_api_key()?,
+            base_url: ollama_base_url()?,
+        }),
+        RuntimeProvider::Simcoe | RuntimeProvider::Anthropic => Err(RuntimeError::new(format!(
+            "provider '{}' uses the Anthropic-compatible transport and cannot use the OpenAI-compatible adapter",
+            provider.as_str()
+        ))),
+    }
+}
+
+fn openai_chat_completion_url(base_url: &str) -> String {
+    let trimmed = base_url.trim().trim_end_matches('/');
+    if trimmed.ends_with("/chat/completions") {
+        trimmed.to_string()
+    } else if trimmed.ends_with("/v1") {
+        format!("{trimmed}/chat/completions")
+    } else {
+        format!("{trimmed}/v1/chat/completions")
+    }
+}
+
+fn normalize_openai_tool_arguments(arguments: &str) -> Result<String, RuntimeError> {
+    let trimmed = arguments.trim();
+    if trimmed.is_empty() {
+        return Ok("{}".to_string());
+    }
+    let value = serde_json::from_str::<serde_json::Value>(trimmed).map_err(|error| {
+        RuntimeError::new(format!("tool call arguments were not valid JSON: {error}"))
+    })?;
+    serde_json::to_string(&value).map_err(|error| RuntimeError::new(error.to_string()))
+}
+
+fn joined_text_blocks(blocks: &[ContentBlock]) -> String {
+    blocks
+        .iter()
+        .filter_map(|block| match block {
+            ContentBlock::Text { text } if !text.trim().is_empty() => Some(text.as_str()),
+            ContentBlock::Text { .. }
+            | ContentBlock::ToolUse { .. }
+            | ContentBlock::ToolResult { .. } => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn openai_tool_calls_from_blocks(
+    blocks: &[ContentBlock],
+) -> Result<Option<Vec<OpenAiToolCall>>, RuntimeError> {
+    let tool_calls = blocks
+        .iter()
+        .filter_map(|block| match block {
+            ContentBlock::ToolUse { id, name, input } => Some((id, name, input)),
+            ContentBlock::Text { .. } | ContentBlock::ToolResult { .. } => None,
+        })
+        .map(|(id, name, input)| {
+            Ok(OpenAiToolCall {
+                id: id.clone(),
+                kind: "function".to_string(),
+                function: OpenAiToolFunctionCall {
+                    name: name.clone(),
+                    arguments: normalize_openai_tool_arguments(input)?,
+                },
+            })
+        })
+        .collect::<Result<Vec<_>, RuntimeError>>()?;
+    Ok((!tool_calls.is_empty()).then_some(tool_calls))
+}
+
+fn build_openai_chat_messages(
+    request: &ApiRequest,
+) -> Result<Vec<OpenAiChatMessage>, RuntimeError> {
+    let mut messages = Vec::new();
+
+    if !request.system_prompt.is_empty() {
+        messages.push(OpenAiChatMessage {
+            role: "system".to_string(),
+            content: json!(request.system_prompt.join("\n\n")),
+            tool_calls: None,
+            tool_call_id: None,
+        });
+    }
+
+    for message in &request.messages {
+        match message.role {
+            MessageRole::System => {
+                let text = joined_text_blocks(&message.blocks);
+                if !text.is_empty() {
+                    messages.push(OpenAiChatMessage {
+                        role: "system".to_string(),
+                        content: json!(text),
+                        tool_calls: None,
+                        tool_call_id: None,
+                    });
+                }
+            }
+            MessageRole::User => {
+                let text = joined_text_blocks(&message.blocks);
+                if !text.is_empty() {
+                    messages.push(OpenAiChatMessage {
+                        role: "user".to_string(),
+                        content: json!(text),
+                        tool_calls: None,
+                        tool_call_id: None,
+                    });
+                }
+            }
+            MessageRole::Assistant => {
+                let text = joined_text_blocks(&message.blocks);
+                let tool_calls = openai_tool_calls_from_blocks(&message.blocks)?;
+                if !text.is_empty() || tool_calls.is_some() {
+                    messages.push(OpenAiChatMessage {
+                        role: "assistant".to_string(),
+                        content: if text.is_empty() {
+                            serde_json::Value::Null
+                        } else {
+                            json!(text)
+                        },
+                        tool_calls,
+                        tool_call_id: None,
+                    });
+                }
+            }
+            MessageRole::Tool => {
+                for block in &message.blocks {
+                    if let ContentBlock::ToolResult {
+                        tool_use_id,
+                        output,
+                        ..
+                    } = block
+                    {
+                        messages.push(OpenAiChatMessage {
+                            role: "tool".to_string(),
+                            content: json!(output),
+                            tool_calls: None,
+                            tool_call_id: Some(tool_use_id.clone()),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(messages)
+}
+
+fn build_openai_tool_definitions(
+    allowed_tools: Option<&AllowedToolSet>,
+) -> Vec<OpenAiToolDefinition> {
+    runtime_tool_definitions(allowed_tools)
+        .into_iter()
+        .map(|definition| OpenAiToolDefinition {
+            kind: "function".to_string(),
+            function: OpenAiFunctionDefinition {
+                name: definition.name,
+                description: definition.description,
+                parameters: definition.input_schema,
+            },
+        })
+        .collect()
+}
+
+fn build_openai_chat_completion_request(
+    request: &ApiRequest,
+    model: &str,
+    enable_tools: bool,
+    allowed_tools: Option<&AllowedToolSet>,
+) -> Result<OpenAiChatCompletionRequest, RuntimeError> {
+    let tools = enable_tools.then(|| build_openai_tool_definitions(allowed_tools));
+    Ok(OpenAiChatCompletionRequest {
+        model: model.to_string(),
+        messages: build_openai_chat_messages(request)?,
+        tools: tools.filter(|definitions| !definitions.is_empty()),
+        tool_choice: enable_tools.then(|| "auto".to_string()),
+        max_tokens: Some(max_tokens_for_model(model)),
+        stream_options: None,
+        stream: false,
+    })
+}
+
+fn openai_message_text(content: Option<serde_json::Value>) -> String {
+    match content {
+        None | Some(serde_json::Value::Null) => String::new(),
+        Some(serde_json::Value::String(text)) => text,
+        Some(serde_json::Value::Array(parts)) => parts
+            .into_iter()
+            .filter_map(|part| {
+                part.get("text")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+            })
+            .collect::<Vec<_>>()
+            .join(""),
+        Some(other) => other.to_string(),
+    }
+}
+
+fn parse_openai_sse_frame(frame: &str) -> Result<Option<OpenAiSseFrame>, RuntimeError> {
+    let trimmed = frame.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let mut data_lines = Vec::new();
+
+    for line in trimmed.lines() {
+        if line.starts_with(':') {
+            continue;
+        }
+        if let Some(data) = line.strip_prefix("data:") {
+            data_lines.push(data.trim_start());
+        }
+    }
+
+    if data_lines.is_empty() {
+        return Ok(None);
+    }
+
+    let payload = data_lines.join("\n");
+    if payload == "[DONE]" {
+        return Ok(Some(OpenAiSseFrame::Done));
+    }
+
+    serde_json::from_str::<OpenAiChatCompletionChunk>(&payload)
+        .map(OpenAiSseFrame::Chunk)
+        .map(Some)
+        .map_err(|error| RuntimeError::new(format!("failed to parse OpenAI SSE frame: {error}")))
+}
+
+fn update_pending_openai_tool_call(
+    delta: OpenAiToolCallDelta,
+    pending_tool_calls: &mut BTreeMap<usize, PendingOpenAiToolCall>,
+) {
+    let entry = pending_tool_calls.entry(delta.index).or_default();
+    if let Some(id) = delta.id {
+        entry.id = id;
+    }
+    if let Some(function) = delta.function {
+        if let Some(name) = function.name {
+            entry.name = name;
+        }
+        if let Some(arguments) = function.arguments {
+            entry.arguments.push_str(&arguments);
+        }
+    }
+}
+
+fn flush_openai_stream_buffers(
+    renderer: &TerminalRenderer,
+    markdown_stream: &mut MarkdownStreamState,
+    pending_tool_calls: &mut BTreeMap<usize, PendingOpenAiToolCall>,
+    events: &mut Vec<AssistantEvent>,
+    out: &mut dyn Write,
+) -> Result<(), RuntimeError> {
+    if let Some(rendered) = markdown_stream.flush(renderer) {
+        write!(out, "{rendered}")
+            .and_then(|()| out.flush())
+            .map_err(|error| RuntimeError::new(error.to_string()))?;
+    }
+
+    let pending = std::mem::take(pending_tool_calls);
+    for (_, tool_call) in pending {
+        let input = normalize_openai_tool_arguments(&tool_call.arguments)?;
+        writeln!(out, "\n{}", format_tool_call_start(&tool_call.name, &input))
+            .and_then(|()| out.flush())
+            .map_err(|error| RuntimeError::new(error.to_string()))?;
+        events.push(AssistantEvent::ToolUse {
+            id: tool_call.id,
+            name: tool_call.name,
+            input,
+        });
+    }
+
+    Ok(())
+}
+
+fn apply_openai_stream_chunk(
+    chunk: OpenAiChatCompletionChunk,
+    renderer: &TerminalRenderer,
+    markdown_stream: &mut MarkdownStreamState,
+    pending_tool_calls: &mut BTreeMap<usize, PendingOpenAiToolCall>,
+    events: &mut Vec<AssistantEvent>,
+    out: &mut dyn Write,
+    status_bar: Option<&StatusBarHandle>,
+) -> Result<bool, RuntimeError> {
+    let mut saw_finish_reason = false;
+
+    for choice in chunk.choices {
+        if let Some(content) = choice.delta.content.filter(|text| !text.is_empty()) {
+            if let Some(rendered) = markdown_stream.push(renderer, &content) {
+                write!(out, "{rendered}")
+                    .and_then(|()| out.flush())
+                    .map_err(|error| RuntimeError::new(error.to_string()))?;
+            }
+            events.push(AssistantEvent::TextDelta(content));
+            if let Some(status_bar) = status_bar {
+                let _ = status_bar.render();
+            }
+        }
+
+        if let Some(tool_calls) = choice.delta.tool_calls {
+            for tool_call in tool_calls {
+                update_pending_openai_tool_call(tool_call, pending_tool_calls);
+            }
+        }
+
+        if choice.finish_reason.is_some() {
+            saw_finish_reason = true;
+            flush_openai_stream_buffers(
+                renderer,
+                markdown_stream,
+                pending_tool_calls,
+                events,
+                out,
+            )?;
+        }
+    }
+
+    if let Some(usage) = chunk.usage {
+        let usage = TokenUsage {
+            input_tokens: usage.prompt_tokens,
+            output_tokens: usage.completion_tokens,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+        };
+        if let Some(status_bar) = status_bar {
+            status_bar.update_turn_usage(usage);
+            let _ = status_bar.render();
+        }
+        events.push(AssistantEvent::Usage(usage));
+    }
+
+    Ok(saw_finish_reason)
 }
 
 struct CliPermissionPrompter {
@@ -2650,6 +3624,8 @@ impl runtime::PermissionPrompter for CliPermissionPrompter {
 
 struct SimcoeRuntimeClient {
     runtime: tokio::runtime::Runtime,
+    provider: RuntimeProvider,
+    last_delivery_mode: Option<ProviderDeliveryMode>,
     model: String,
     enable_tools: bool,
     emit_output: bool,
@@ -2665,8 +3641,28 @@ impl SimcoeRuntimeClient {
         allowed_tools: Option<AllowedToolSet>,
         status_bar: Option<StatusBarHandle>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::new_with_provider(
+            model,
+            RuntimeProvider::Simcoe,
+            enable_tools,
+            emit_output,
+            allowed_tools,
+            status_bar,
+        )
+    }
+
+    fn new_with_provider(
+        model: String,
+        provider: RuntimeProvider,
+        enable_tools: bool,
+        emit_output: bool,
+        allowed_tools: Option<AllowedToolSet>,
+        status_bar: Option<StatusBarHandle>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             runtime: tokio::runtime::Runtime::new()?,
+            provider,
+            last_delivery_mode: None,
             model,
             enable_tools,
             emit_output,
@@ -2675,12 +3671,17 @@ impl SimcoeRuntimeClient {
         })
     }
 
-    fn stream_with_writer(
+    fn last_delivery_mode(&self) -> Option<&'static str> {
+        self.last_delivery_mode.map(ProviderDeliveryMode::as_str)
+    }
+
+    fn stream_anthropic_with_writer(
         &mut self,
         request: ApiRequest,
         out: &mut dyn Write,
     ) -> Result<Vec<AssistantEvent>, RuntimeError> {
-        let client = build_runtime_api_client()?;
+        self.last_delivery_mode = None;
+        let client = build_runtime_api_client_for_provider(self.provider)?;
         let message_request = MessageRequest {
             model: self.model.clone(),
             max_tokens: max_tokens_for_model(&self.model),
@@ -2693,7 +3694,7 @@ impl SimcoeRuntimeClient {
             stream: true,
         };
 
-        self.runtime.block_on(async {
+        let (events, delivery_mode) = self.runtime.block_on(async {
             let mut stream = client
                 .stream_message(&message_request)
                 .await
@@ -2806,7 +3807,7 @@ impl SimcoeRuntimeClient {
                 .iter()
                 .any(|event| matches!(event, AssistantEvent::MessageStop))
             {
-                return Ok(events);
+                return Ok((events, ProviderDeliveryMode::StreamingSse));
             }
 
             let response = client
@@ -2817,8 +3818,257 @@ impl SimcoeRuntimeClient {
                 .await
                 .map_err(|error| RuntimeError::new(error.to_string()))?;
             response_to_events(response, render_out)
-        })
+                .map(|events| (events, ProviderDeliveryMode::BufferedJsonFallback))
+        })?;
+        self.last_delivery_mode = Some(delivery_mode);
+        Ok(events)
     }
+
+    fn stream_openai_compatible_with_writer(
+        &mut self,
+        request: ApiRequest,
+        out: &mut dyn Write,
+    ) -> Result<Vec<AssistantEvent>, RuntimeError> {
+        self.last_delivery_mode = None;
+        let transport = openai_compatible_transport_config(self.provider)?;
+        let request = build_openai_chat_completion_request(
+            &request,
+            &self.model,
+            self.enable_tools,
+            self.allowed_tools.as_ref(),
+        )?;
+
+        let (events, delivery_mode) = self.runtime.block_on(async {
+            let mut sink = io::sink();
+            let render_out: &mut dyn Write = if self.emit_output { out } else { &mut sink };
+            let streaming_request = request.clone().with_streaming();
+            let mut response =
+                send_openai_chat_completion_raw(&transport, &streaming_request).await?;
+            let content_type = response
+                .headers()
+                .get("content-type")
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+
+            if !content_type.contains("text/event-stream") {
+                let response =
+                    decode_openai_chat_completion_response(response, transport.provider).await?;
+                return render_openai_chat_completion_response(
+                    response,
+                    render_out,
+                    self.status_bar.as_ref(),
+                )
+                .map(|events| (events, ProviderDeliveryMode::BufferedJsonFallback));
+            }
+
+            let renderer = TerminalRenderer::new();
+            let mut markdown_stream = MarkdownStreamState::default();
+            let mut parser = OpenAiSseParser::new();
+            let mut pending_tool_calls = BTreeMap::new();
+            let mut events = Vec::new();
+            let mut saw_done = false;
+            let mut saw_finish_reason = false;
+
+            while let Some(chunk) = response.chunk().await.map_err(|error| {
+                RuntimeError::new(format!(
+                    "failed to read {} provider stream: {error}",
+                    transport.provider.as_str()
+                ))
+            })? {
+                for frame in parser.push(&chunk)? {
+                    match frame {
+                        OpenAiSseFrame::Chunk(chunk) => {
+                            saw_finish_reason |= apply_openai_stream_chunk(
+                                chunk,
+                                &renderer,
+                                &mut markdown_stream,
+                                &mut pending_tool_calls,
+                                &mut events,
+                                render_out,
+                                self.status_bar.as_ref(),
+                            )?;
+                        }
+                        OpenAiSseFrame::Done => {
+                            saw_done = true;
+                        }
+                    }
+                }
+                if saw_done {
+                    break;
+                }
+            }
+
+            for frame in parser.finish()? {
+                match frame {
+                    OpenAiSseFrame::Chunk(chunk) => {
+                        saw_finish_reason |= apply_openai_stream_chunk(
+                            chunk,
+                            &renderer,
+                            &mut markdown_stream,
+                            &mut pending_tool_calls,
+                            &mut events,
+                            render_out,
+                            self.status_bar.as_ref(),
+                        )?;
+                    }
+                    OpenAiSseFrame::Done => {
+                        saw_done = true;
+                    }
+                }
+            }
+
+            flush_openai_stream_buffers(
+                &renderer,
+                &mut markdown_stream,
+                &mut pending_tool_calls,
+                &mut events,
+                render_out,
+            )?;
+            if let Some(status_bar) = self.status_bar.as_ref() {
+                let _ = status_bar.render();
+            }
+
+            if saw_done
+                || saw_finish_reason
+                || events.iter().any(|event| {
+                    matches!(event, AssistantEvent::TextDelta(text) if !text.is_empty())
+                        || matches!(event, AssistantEvent::ToolUse { .. })
+                        || matches!(event, AssistantEvent::Usage(_))
+                })
+            {
+                events.push(AssistantEvent::MessageStop);
+            }
+
+            Ok((events, ProviderDeliveryMode::StreamingSse))
+        })?;
+        self.last_delivery_mode = Some(delivery_mode);
+        Ok(events)
+    }
+
+    fn stream_with_writer(
+        &mut self,
+        request: ApiRequest,
+        out: &mut dyn Write,
+    ) -> Result<Vec<AssistantEvent>, RuntimeError> {
+        match self.provider {
+            RuntimeProvider::Simcoe | RuntimeProvider::Anthropic => {
+                self.stream_anthropic_with_writer(request, out)
+            }
+            RuntimeProvider::OpenAi | RuntimeProvider::Ollama => {
+                self.stream_openai_compatible_with_writer(request, out)
+            }
+        }
+    }
+}
+
+async fn send_openai_chat_completion_raw(
+    transport: &OpenAiCompatibleTransportConfig,
+    request: &OpenAiChatCompletionRequest,
+) -> Result<reqwest::Response, RuntimeError> {
+    let request_url = openai_chat_completion_url(&transport.base_url);
+    let mut request_builder = reqwest::Client::new()
+        .post(&request_url)
+        .header("content-type", "application/json");
+    if !transport.api_key.trim().is_empty() {
+        request_builder = request_builder.bearer_auth(&transport.api_key);
+    }
+
+    let response = request_builder
+        .json(request)
+        .send()
+        .await
+        .map_err(|error| {
+            RuntimeError::new(format!(
+                "failed to call {} provider: {error}",
+                transport.provider.as_str()
+            ))
+        })?;
+
+    Ok(response)
+}
+
+async fn decode_openai_chat_completion_response(
+    response: reqwest::Response,
+    provider: RuntimeProvider,
+) -> Result<OpenAiChatCompletionResponse, RuntimeError> {
+    let status = response.status();
+    if !status.is_success() {
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "<failed to read response body>".to_string());
+        return Err(RuntimeError::new(format!(
+            "{} provider request failed with {status}: {}",
+            provider.as_str(),
+            body.trim()
+        )));
+    }
+
+    response
+        .json::<OpenAiChatCompletionResponse>()
+        .await
+        .map_err(|error| {
+            RuntimeError::new(format!(
+                "failed to decode {} provider response: {error}",
+                provider.as_str()
+            ))
+        })
+}
+
+fn render_openai_chat_completion_response(
+    response: OpenAiChatCompletionResponse,
+    out: &mut dyn Write,
+    status_bar: Option<&StatusBarHandle>,
+) -> Result<Vec<AssistantEvent>, RuntimeError> {
+    let choice = response.choices.into_iter().next().ok_or_else(|| {
+        RuntimeError::new("OpenAI-compatible provider response did not include any choices")
+    })?;
+
+    let mut events = Vec::new();
+    let text = openai_message_text(choice.message.content);
+    if !text.is_empty() {
+        let rendered = TerminalRenderer::new().markdown_to_ansi(&text);
+        write!(out, "{rendered}")
+            .and_then(|()| out.flush())
+            .map_err(|error| RuntimeError::new(error.to_string()))?;
+        events.push(AssistantEvent::TextDelta(text));
+    }
+
+    if let Some(tool_calls) = choice.message.tool_calls {
+        for tool_call in tool_calls {
+            let input = normalize_openai_tool_arguments(&tool_call.function.arguments)?;
+            writeln!(
+                out,
+                "\n{}",
+                format_tool_call_start(&tool_call.function.name, &input)
+            )
+            .and_then(|()| out.flush())
+            .map_err(|error| RuntimeError::new(error.to_string()))?;
+            events.push(AssistantEvent::ToolUse {
+                id: tool_call.id,
+                name: tool_call.function.name,
+                input,
+            });
+        }
+    }
+
+    if let Some(usage) = response.usage {
+        let usage = TokenUsage {
+            input_tokens: usage.prompt_tokens,
+            output_tokens: usage.completion_tokens,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+        };
+        if let Some(status_bar) = status_bar {
+            status_bar.update_turn_usage(usage);
+            let _ = status_bar.render();
+        }
+        events.push(AssistantEvent::Usage(usage));
+    }
+
+    events.push(AssistantEvent::MessageStop);
+    Ok(events)
 }
 
 fn resolve_cli_auth_source() -> Result<AuthSource, Box<dyn std::error::Error>> {
@@ -2831,10 +4081,25 @@ fn resolve_cli_auth_source() -> Result<AuthSource, Box<dyn std::error::Error>> {
     })?)
 }
 
-fn build_runtime_api_client() -> Result<SimcoeApiClient, RuntimeError> {
-    let auth = resolve_cli_auth_source().map_err(|error| RuntimeError::new(error.to_string()))?;
-    let base_url = api::read_base_url().map_err(|error| RuntimeError::new(error.to_string()))?;
-    Ok(SimcoeApiClient::from_auth(auth).with_base_url(base_url))
+fn build_runtime_api_client_for_provider(
+    provider: RuntimeProvider,
+) -> Result<SimcoeApiClient, RuntimeError> {
+    match provider {
+        RuntimeProvider::Simcoe => {
+            let auth =
+                resolve_cli_auth_source().map_err(|error| RuntimeError::new(error.to_string()))?;
+            let base_url = api::read_base_url().map_err(|error| RuntimeError::new(error.to_string()))?;
+            Ok(SimcoeApiClient::from_auth(auth).with_base_url(base_url))
+        }
+        RuntimeProvider::Anthropic => Ok(SimcoeApiClient::from_auth(AuthSource::ApiKey(
+            anthropic_api_key()?,
+        ))
+        .with_base_url(anthropic_base_url()?)),
+        RuntimeProvider::OpenAi | RuntimeProvider::Ollama => Err(RuntimeError::new(format!(
+            "provider '{}' uses the OpenAI-compatible transport and should not be constructed with the Anthropic client builder",
+            provider.as_str()
+        ))),
+    }
 }
 
 impl ApiClient for SimcoeRuntimeClient {
@@ -4352,17 +5617,17 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     writeln!(out, "Usage:")?;
     writeln!(
         out,
-        "  claw [--model MODEL] [--allowedTools TOOL[,TOOL...]]"
+        "  claw [--model MODEL] [--provider PROVIDER] [--allowedTools TOOL[,TOOL...]]"
     )?;
     writeln!(out, "      Start the interactive REPL")?;
     writeln!(
         out,
-        "  claw [--model MODEL] [--output-format text|json|ndjson] prompt TEXT"
+        "  claw [--model MODEL] [--provider PROVIDER] [--output-format text|json|ndjson] prompt TEXT"
     )?;
     writeln!(out, "      Send one prompt and exit")?;
     writeln!(
         out,
-        "  claw [--model MODEL] [--output-format text|json|ndjson] TEXT"
+        "  claw [--model MODEL] [--provider PROVIDER] [--output-format text|json|ndjson] TEXT"
     )?;
     writeln!(out, "      Shorthand non-interactive prompt mode")?;
     writeln!(
@@ -4376,7 +5641,7 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     writeln!(out, "  claw dump-manifests")?;
     writeln!(out, "  claw bootstrap-plan")?;
     writeln!(out, "  claw system-prompt [--cwd PATH] [--date YYYY-MM-DD]")?;
-    writeln!(out, "  claw config [env|hooks|model]")?;
+    writeln!(out, "  claw config [env|hooks|model|provider]")?;
     writeln!(out, "  claw hooks [pre|post]")?;
     writeln!(out, "  claw mcp [server]")?;
     writeln!(out, "  claw memory")?;
@@ -4404,6 +5669,10 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     writeln!(
         out,
         "  --model MODEL              Override the active model"
+    )?;
+    writeln!(
+        out,
+        "  --provider PROVIDER        Override the active provider (simcoe, anthropic, openai, ollama)"
     )?;
     writeln!(
         out,
@@ -4490,14 +5759,25 @@ mod tests {
         render_version_report, status_context, StatusContext, StatusUsage,
     };
     use super::{
-        bootstrap_plan_payload, build_resume_command_record, build_resume_json_payload,
-        build_resume_start_record, build_resume_summary_record, filter_tool_specs,
+        active_runtime_provider_label, apply_openai_stream_chunk, bootstrap_plan_payload,
+        build_openai_chat_completion_request, build_resume_command_record,
+        build_resume_json_payload, build_resume_start_record, build_resume_summary_record,
+        build_runtime_api_client_for_provider, filter_tool_specs, flush_openai_stream_buffers,
         format_tool_call_start, format_tool_result, inferred_error_metadata,
-        inferred_error_output_format, oauth_config_for_login, parse_args,
-        parse_git_status_metadata, print_help_to, push_output_block, response_to_events,
+        inferred_error_output_format, oauth_config_for_login, openai_chat_completion_url,
+        openai_compatible_transport_config, parse_args, parse_git_status_metadata,
+        parse_openai_sse_frame, print_help_to, push_output_block,
+        render_openai_chat_completion_response, resolve_runtime_provider, response_to_events,
         resume_supported_slash_commands, run_resume_command, slash_command_specs, version_payload,
-        CliAction, CliExitError, CliToolExecutor, SimcoeRuntimeClient, SlashCommand, DEFAULT_MODEL,
+        CliAction, CliExitError, CliToolExecutor, OpenAiAssistantMessage,
+        OpenAiChatCompletionChoice, OpenAiChatCompletionChunk, OpenAiChatCompletionChunkChoice,
+        OpenAiChatCompletionChunkDelta, OpenAiChatCompletionResponse, OpenAiChatCompletionUsage,
+        OpenAiSseFrame, OpenAiSseParser, OpenAiToolCall, OpenAiToolCallDelta,
+        OpenAiToolFunctionCall, OpenAiToolFunctionDelta, PendingOpenAiToolCall, RuntimeProvider,
+        SimcoeRuntimeClient, SlashCommand, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL,
+        DEFAULT_OLLAMA_BASE_URL, DEFAULT_OPENAI_BASE_URL,
     };
+    use crate::render::{MarkdownStreamState, TerminalRenderer};
     use api::{MessageResponse, OutputContentBlock, Usage};
     use compat_harness::{load_parity_manifest, ParityStatus, UpstreamPaths};
     use runtime::{
@@ -4506,6 +5786,7 @@ mod tests {
         PermissionMode, ScopedMcpServerConfig,
     };
     use serde_json::json;
+    use std::collections::BTreeMap;
     use std::fs;
     use std::io::{Read, Write};
     use std::net::TcpListener;
@@ -4521,6 +5802,7 @@ mod tests {
             parse_args(&[]).expect("args should parse"),
             CliAction::Repl {
                 model: DEFAULT_MODEL.to_string(),
+                provider: None,
                 allowed_tools: None,
                 permission_mode: PermissionMode::DangerFullAccess,
             }
@@ -4582,6 +5864,367 @@ mod tests {
         assert!(
             SimcoeRuntimeClient::new(DEFAULT_MODEL.to_string(), true, false, None, None,).is_ok()
         );
+    }
+
+    #[test]
+    fn resolve_runtime_provider_accepts_supported_aliases() {
+        assert_eq!(
+            resolve_runtime_provider(None).expect("default provider"),
+            RuntimeProvider::Simcoe
+        );
+        assert_eq!(
+            resolve_runtime_provider(Some("simcoe")).expect("simcoe provider"),
+            RuntimeProvider::Simcoe
+        );
+        assert_eq!(
+            resolve_runtime_provider(Some("claude")).expect("claude provider"),
+            RuntimeProvider::Anthropic
+        );
+        assert_eq!(
+            resolve_runtime_provider(Some("chatgpt")).expect("chatgpt provider"),
+            RuntimeProvider::OpenAi
+        );
+        assert_eq!(
+            resolve_runtime_provider(Some("local")).expect("local provider"),
+            RuntimeProvider::Ollama
+        );
+    }
+
+    #[test]
+    fn resolve_runtime_provider_rejects_unknown_values() {
+        let error =
+            resolve_runtime_provider(Some("mystery")).expect_err("unknown provider should fail");
+        assert!(error.to_string().contains("unsupported provider 'mystery'"));
+    }
+
+    #[test]
+    fn active_runtime_provider_label_prefers_cli_override() {
+        let label =
+            active_runtime_provider_label(Some(" claude ")).expect("provider label should resolve");
+        assert_eq!(label, "anthropic");
+    }
+
+    #[test]
+    fn runtime_api_client_supports_anthropic_provider() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _anthropic_key_guard = ScopedEnvVar::set("ANTHROPIC_API_KEY", "anthropic-test-key");
+        let _anthropic_base_guard =
+            ScopedEnvVar::set("ANTHROPIC_BASE_URL", "https://anthropic.test");
+        let _simcoe_key_guard = ScopedEnvVar::remove("SIMCOE_AI_API_KEY");
+        let _simcoe_auth_guard = ScopedEnvVar::remove("SIMCOE_AI_AUTH_TOKEN");
+        let _simcoe_base_guard = ScopedEnvVar::remove("SIMCOE_AI_BASE_URL");
+
+        let client = build_runtime_api_client_for_provider(RuntimeProvider::Anthropic)
+            .expect("anthropic client should build");
+        assert_eq!(client.auth_source().api_key(), Some("anthropic-test-key"));
+        assert_eq!(client.auth_source().bearer_token(), None);
+        assert_eq!(client.base_url(), "https://anthropic.test");
+    }
+
+    #[test]
+    fn runtime_api_client_uses_default_anthropic_base_url() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _anthropic_key_guard = ScopedEnvVar::set("ANTHROPIC_API_KEY", "anthropic-test-key");
+        let _anthropic_base_guard = ScopedEnvVar::remove("ANTHROPIC_BASE_URL");
+
+        let client = build_runtime_api_client_for_provider(RuntimeProvider::Anthropic)
+            .expect("anthropic client should build");
+        assert_eq!(client.base_url(), DEFAULT_ANTHROPIC_BASE_URL);
+    }
+
+    #[test]
+    fn runtime_api_client_builder_rejects_openai_compatible_providers() {
+        let error = build_runtime_api_client_for_provider(RuntimeProvider::OpenAi)
+            .expect_err("openai provider should use the OpenAI-compatible adapter");
+        assert!(error
+            .to_string()
+            .contains("provider 'openai' uses the OpenAI-compatible transport"));
+    }
+
+    #[test]
+    fn openai_transport_config_reads_api_overrides() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _openai_key_guard = ScopedEnvVar::set("OPENAI_API_KEY", "openai-test-key");
+        let _openai_base_guard = ScopedEnvVar::set("OPENAI_BASE_URL", "https://openai.test/v1");
+
+        let config = openai_compatible_transport_config(RuntimeProvider::OpenAi)
+            .expect("openai transport config should resolve");
+        assert_eq!(config.api_key, "openai-test-key");
+        assert_eq!(config.base_url, "https://openai.test/v1");
+        assert_eq!(
+            openai_chat_completion_url(&config.base_url),
+            "https://openai.test/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn ollama_transport_config_defaults_to_local_openai_compat_endpoint() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ollama_key_guard = ScopedEnvVar::remove("OLLAMA_API_KEY");
+        let _ollama_base_guard = ScopedEnvVar::remove("OLLAMA_BASE_URL");
+
+        let config = openai_compatible_transport_config(RuntimeProvider::Ollama)
+            .expect("ollama transport config should resolve");
+        assert_eq!(config.api_key, "ollama");
+        assert_eq!(config.base_url, DEFAULT_OLLAMA_BASE_URL);
+        assert_eq!(
+            openai_chat_completion_url(DEFAULT_OPENAI_BASE_URL),
+            "https://api.openai.com/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn openai_request_builder_preserves_tool_history() {
+        let request = ApiRequest {
+            system_prompt: vec!["System guidance".to_string()],
+            messages: vec![
+                ConversationMessage::user_text("Read the repo"),
+                ConversationMessage::assistant_with_usage(
+                    vec![
+                        ContentBlock::Text {
+                            text: "Checking files".to_string(),
+                        },
+                        ContentBlock::ToolUse {
+                            id: "toolu_123".to_string(),
+                            name: "read_file".to_string(),
+                            input: "{\"path\":\"README.md\"}".to_string(),
+                        },
+                    ],
+                    None,
+                ),
+                ConversationMessage::tool_result("toolu_123", "read_file", "# Readme", false),
+            ],
+        };
+
+        let request = build_openai_chat_completion_request(&request, DEFAULT_MODEL, true, None)
+            .expect("openai request should build");
+        assert_eq!(request.model, DEFAULT_MODEL);
+        assert_eq!(request.messages[0].role, "system");
+        assert_eq!(request.messages[0].content, json!("System guidance"));
+        assert_eq!(request.messages[1].role, "user");
+        assert_eq!(request.messages[1].content, json!("Read the repo"));
+        assert_eq!(request.messages[2].role, "assistant");
+        assert_eq!(request.messages[2].content, json!("Checking files"));
+        assert_eq!(
+            request.messages[2].tool_calls.as_ref().expect("tool calls")[0]
+                .function
+                .name,
+            "read_file"
+        );
+        assert_eq!(
+            request.messages[2].tool_calls.as_ref().expect("tool calls")[0]
+                .function
+                .arguments,
+            "{\"path\":\"README.md\"}"
+        );
+        assert_eq!(request.messages[3].role, "tool");
+        assert_eq!(
+            request.messages[3].tool_call_id.as_deref(),
+            Some("toolu_123")
+        );
+        assert_eq!(request.messages[3].content, json!("# Readme"));
+        assert!(request
+            .tools
+            .as_ref()
+            .is_some_and(|tools| !tools.is_empty()));
+        assert_eq!(request.tool_choice.as_deref(), Some("auto"));
+    }
+
+    #[test]
+    fn openai_response_rendering_emits_text_tool_use_and_usage() {
+        let response = OpenAiChatCompletionResponse {
+            id: "chatcmpl_123".to_string(),
+            choices: vec![OpenAiChatCompletionChoice {
+                message: OpenAiAssistantMessage {
+                    content: Some(json!("Need file contents.")),
+                    tool_calls: Some(vec![OpenAiToolCall {
+                        id: "call_123".to_string(),
+                        kind: "function".to_string(),
+                        function: OpenAiToolFunctionCall {
+                            name: "read_file".to_string(),
+                            arguments: "{\"path\":\"README.md\"}".to_string(),
+                        },
+                    }]),
+                },
+            }],
+            usage: Some(OpenAiChatCompletionUsage {
+                prompt_tokens: 11,
+                completion_tokens: 7,
+            }),
+        };
+
+        let mut output = Vec::new();
+        let events = render_openai_chat_completion_response(response, &mut output, None)
+            .expect("openai response should render");
+
+        assert_eq!(
+            events,
+            vec![
+                AssistantEvent::TextDelta("Need file contents.".to_string()),
+                AssistantEvent::ToolUse {
+                    id: "call_123".to_string(),
+                    name: "read_file".to_string(),
+                    input: "{\"path\":\"README.md\"}".to_string(),
+                },
+                AssistantEvent::Usage(runtime::TokenUsage {
+                    input_tokens: 11,
+                    output_tokens: 7,
+                    cache_creation_input_tokens: 0,
+                    cache_read_input_tokens: 0,
+                }),
+                AssistantEvent::MessageStop,
+            ]
+        );
+
+        let rendered = String::from_utf8(output).expect("rendered output should be utf8");
+        assert!(rendered.contains("Need file contents."));
+        assert!(rendered.contains("read_file"));
+    }
+
+    #[test]
+    fn openai_sse_parser_handles_chunked_frames_and_done() {
+        let mut parser = OpenAiSseParser::new();
+        assert!(parser
+            .push(b"data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hel")
+            .expect("first chunk should buffer")
+            .is_empty());
+
+        let frames = parser
+            .push(b"lo\"},\"finish_reason\":null}]}\n\n")
+            .expect("second chunk should parse");
+        assert_eq!(
+            frames,
+            vec![OpenAiSseFrame::Chunk(OpenAiChatCompletionChunk {
+                choices: vec![OpenAiChatCompletionChunkChoice {
+                    index: 0,
+                    delta: OpenAiChatCompletionChunkDelta {
+                        content: Some("Hello".to_string()),
+                        tool_calls: None,
+                    },
+                    finish_reason: None,
+                }],
+                usage: None,
+            })]
+        );
+        assert_eq!(
+            parse_openai_sse_frame("data: [DONE]\n\n").expect("done should parse"),
+            Some(OpenAiSseFrame::Done)
+        );
+    }
+
+    #[test]
+    fn openai_stream_chunk_application_accumulates_tool_calls_until_finish() {
+        let renderer = TerminalRenderer::new();
+        let mut markdown_stream = MarkdownStreamState::default();
+        let mut pending_tool_calls: BTreeMap<usize, PendingOpenAiToolCall> = BTreeMap::new();
+        let mut events = Vec::new();
+        let mut output = Vec::new();
+
+        let first_chunk = OpenAiChatCompletionChunk {
+            choices: vec![OpenAiChatCompletionChunkChoice {
+                index: 0,
+                delta: OpenAiChatCompletionChunkDelta {
+                    content: Some("Need ".to_string()),
+                    tool_calls: Some(vec![OpenAiToolCallDelta {
+                        index: 0,
+                        id: Some("call_123".to_string()),
+                        kind: Some("function".to_string()),
+                        function: Some(OpenAiToolFunctionDelta {
+                            name: Some("read_file".to_string()),
+                            arguments: Some("{\"path\":".to_string()),
+                        }),
+                    }]),
+                },
+                finish_reason: None,
+            }],
+            usage: None,
+        };
+
+        let second_chunk = OpenAiChatCompletionChunk {
+            choices: vec![OpenAiChatCompletionChunkChoice {
+                index: 0,
+                delta: OpenAiChatCompletionChunkDelta {
+                    content: Some("repo.".to_string()),
+                    tool_calls: Some(vec![OpenAiToolCallDelta {
+                        index: 0,
+                        id: None,
+                        kind: None,
+                        function: Some(OpenAiToolFunctionDelta {
+                            name: None,
+                            arguments: Some("\"README.md\"}".to_string()),
+                        }),
+                    }]),
+                },
+                finish_reason: Some("tool_calls".to_string()),
+            }],
+            usage: Some(OpenAiChatCompletionUsage {
+                prompt_tokens: 9,
+                completion_tokens: 5,
+            }),
+        };
+
+        assert!(!apply_openai_stream_chunk(
+            first_chunk,
+            &renderer,
+            &mut markdown_stream,
+            &mut pending_tool_calls,
+            &mut events,
+            &mut output,
+            None,
+        )
+        .expect("first chunk should apply"));
+        assert_eq!(pending_tool_calls.len(), 1);
+
+        assert!(apply_openai_stream_chunk(
+            second_chunk,
+            &renderer,
+            &mut markdown_stream,
+            &mut pending_tool_calls,
+            &mut events,
+            &mut output,
+            None,
+        )
+        .expect("second chunk should apply"));
+        flush_openai_stream_buffers(
+            &renderer,
+            &mut markdown_stream,
+            &mut pending_tool_calls,
+            &mut events,
+            &mut output,
+        )
+        .expect("final flush should succeed");
+
+        assert!(pending_tool_calls.is_empty());
+        assert_eq!(
+            events,
+            vec![
+                AssistantEvent::TextDelta("Need ".to_string()),
+                AssistantEvent::TextDelta("repo.".to_string()),
+                AssistantEvent::ToolUse {
+                    id: "call_123".to_string(),
+                    name: "read_file".to_string(),
+                    input: "{\"path\":\"README.md\"}".to_string(),
+                },
+                AssistantEvent::Usage(runtime::TokenUsage {
+                    input_tokens: 9,
+                    output_tokens: 5,
+                    cache_creation_input_tokens: 0,
+                    cache_read_input_tokens: 0,
+                }),
+            ]
+        );
+
+        let rendered = String::from_utf8(output).expect("rendered output should be utf8");
+        assert!(rendered.contains("Need repo."));
+        assert!(rendered.contains("read_file"));
     }
 
     #[test]
@@ -4696,7 +6339,7 @@ mod tests {
 
         assert!(message.contains("Resume-compatible slash commands"));
         assert!(message.contains("/help"));
-        assert!(message.contains("/config [env|hooks|model]"));
+        assert!(message.contains("/config [env|hooks|model|provider]"));
         assert!(message.contains("/session [list|switch <session-id>]"));
         assert!(!message.contains("/review [context]"));
         assert!(!message.contains("/login"));
@@ -4721,6 +6364,7 @@ mod tests {
             CliAction::Prompt {
                 prompt: "hello world".to_string(),
                 model: DEFAULT_MODEL.to_string(),
+                provider: None,
                 output_format: CliOutputFormat::Text,
                 allowed_tools: None,
                 permission_mode: PermissionMode::DangerFullAccess,
@@ -4742,6 +6386,7 @@ mod tests {
             CliAction::Prompt {
                 prompt: "explain this".to_string(),
                 model: "simcoe-opus-4-6".to_string(),
+                provider: None,
                 output_format: CliOutputFormat::Json,
                 allowed_tools: None,
                 permission_mode: PermissionMode::DangerFullAccess,
@@ -4761,6 +6406,7 @@ mod tests {
             CliAction::Prompt {
                 prompt: "trace this".to_string(),
                 model: DEFAULT_MODEL.to_string(),
+                provider: None,
                 output_format: CliOutputFormat::Ndjson,
                 allowed_tools: None,
                 permission_mode: PermissionMode::DangerFullAccess,
@@ -4781,7 +6427,39 @@ mod tests {
             CliAction::Prompt {
                 prompt: "explain this".to_string(),
                 model: "simcoe-opus-4-6".to_string(),
+                provider: None,
                 output_format: CliOutputFormat::Text,
+                allowed_tools: None,
+                permission_mode: PermissionMode::DangerFullAccess,
+            }
+        );
+    }
+
+    #[test]
+    fn parses_provider_flag_for_prompt_and_repl() {
+        let prompt_args = vec![
+            "--provider=anthropic".to_string(),
+            "prompt".to_string(),
+            "hello".to_string(),
+        ];
+        assert_eq!(
+            parse_args(&prompt_args).expect("prompt args should parse"),
+            CliAction::Prompt {
+                prompt: "hello".to_string(),
+                model: DEFAULT_MODEL.to_string(),
+                provider: Some("anthropic".to_string()),
+                output_format: CliOutputFormat::Text,
+                allowed_tools: None,
+                permission_mode: PermissionMode::DangerFullAccess,
+            }
+        );
+
+        let repl_args = vec!["--provider".to_string(), "local".to_string()];
+        assert_eq!(
+            parse_args(&repl_args).expect("repl args should parse"),
+            CliAction::Repl {
+                model: DEFAULT_MODEL.to_string(),
+                provider: Some("local".to_string()),
                 allowed_tools: None,
                 permission_mode: PermissionMode::DangerFullAccess,
             }
@@ -4829,6 +6507,7 @@ mod tests {
             parse_args(&args).expect("args should parse"),
             CliAction::Repl {
                 model: DEFAULT_MODEL.to_string(),
+                provider: None,
                 allowed_tools: None,
                 permission_mode: PermissionMode::ReadOnly,
             }
@@ -4846,6 +6525,7 @@ mod tests {
             parse_args(&args).expect("args should parse"),
             CliAction::Repl {
                 model: DEFAULT_MODEL.to_string(),
+                provider: None,
                 allowed_tools: Some(
                     ["glob_search", "read_file", "write_file"]
                         .into_iter()
@@ -5252,6 +6932,47 @@ mod tests {
     }
 
     #[test]
+    fn infers_structured_error_context_for_empty_args_as_repl() {
+        let context = super::inferred_error_context(&[]);
+
+        assert_eq!(context.operation, Some("repl".to_string()));
+        assert_eq!(context.model, Some(DEFAULT_MODEL.to_string()));
+    }
+
+    #[test]
+    fn infers_structured_error_context_for_prompt_includes_model_and_provider() {
+        let context = super::inferred_error_context(&[
+            "--model".to_string(),
+            DEFAULT_MODEL.to_string(),
+            "--provider".to_string(),
+            "openai".to_string(),
+            "prompt".to_string(),
+            "hello".to_string(),
+        ]);
+
+        assert_eq!(context.operation, Some("prompt".to_string()));
+        assert_eq!(context.model, Some(DEFAULT_MODEL.to_string()));
+        assert_eq!(context.provider, Some("openai".to_string()));
+    }
+
+    #[test]
+    fn infers_structured_error_context_from_raw_prompt_args_when_parse_fails() {
+        let context = super::inferred_error_context(&[
+            "--output-format=unsupported".to_string(),
+            "--model".to_string(),
+            DEFAULT_MODEL.to_string(),
+            "--provider".to_string(),
+            "anthropic".to_string(),
+            "prompt".to_string(),
+            "hello".to_string(),
+        ]);
+
+        assert_eq!(context.operation, Some("prompt".to_string()));
+        assert_eq!(context.model, Some(DEFAULT_MODEL.to_string()));
+        assert_eq!(context.provider, Some("anthropic".to_string()));
+    }
+
+    #[test]
     fn structured_error_payload_includes_exit_code_help_hint_and_metadata() {
         let args = vec![
             "--output-format".to_string(),
@@ -5271,6 +6992,46 @@ mod tests {
         assert_eq!(payload["help_hint"], json!("Run `claw --help` for usage."),);
         assert_eq!(payload["operation"], json!("resume"));
         assert_eq!(payload["command"], json!("/status"));
+    }
+
+    #[test]
+    fn structured_error_payload_includes_prompt_provider_and_model_context() {
+        let args = vec![
+            "--output-format".to_string(),
+            "json".to_string(),
+            "--model".to_string(),
+            DEFAULT_MODEL.to_string(),
+            "--provider".to_string(),
+            "ollama".to_string(),
+            "prompt".to_string(),
+            "hello".to_string(),
+        ];
+        let error = CliExitError::new("request failed", 1).with_operation("prompt");
+
+        let payload = super::cli_error_payload(&args, &error);
+
+        assert_eq!(payload["type"], json!("error"));
+        assert_eq!(payload["operation"], json!("prompt"));
+        assert_eq!(payload["model"], json!(DEFAULT_MODEL));
+        assert_eq!(payload["provider"], json!("ollama"));
+        assert_eq!(payload["transport"]["active_transport_kind"], json!("api-stream"));
+        assert_eq!(
+            payload["transport"]["provider_runtime"]["provider"],
+            json!("ollama")
+        );
+        assert_eq!(
+            payload["transport"]["provider_runtime"]["family"],
+            json!("openai-compatible")
+        );
+        assert_eq!(
+            payload["transport"]["capabilities"]["live_remote_transport_ready"],
+            json!(false)
+        );
+        assert_eq!(
+            payload["transport"]["capabilities"]["live_remote_transport_selected"],
+            json!(false)
+        );
+        assert!(payload["transport"]["provider_runtime"]["delivery_mode"].is_null());
     }
 
     #[test]
@@ -5425,7 +7186,7 @@ mod tests {
         assert!(help.contains("/logout"));
         assert!(help.contains("/resume <session-path>"));
         assert!(help.contains("/system-prompt [--cwd PATH] [--date YYYY-MM-DD]"));
-        assert!(help.contains("/config [env|hooks|model]"));
+        assert!(help.contains("/config [env|hooks|model|provider]"));
         assert!(help.contains("/hooks [pre|post]"));
         assert!(help.contains("/mcp [server]"));
         assert!(help.contains("/memory"));
@@ -5794,6 +7555,7 @@ mod tests {
         "tokenUrl": "https://console.test/oauth/token",
         "scopes": ["openid", "profile"]
     },
+    "provider": "simcoe",
     "model": "simcoe-sonnet-4-6",
     "permissionMode": "workspace-write",
     "sandbox": {
@@ -6172,7 +7934,7 @@ mod tests {
         let help = String::from_utf8(help).expect("help should be utf8");
         assert!(help.contains("claw init"));
         assert!(help.contains("text, json, or ndjson"));
-        assert!(help.contains("claw config [env|hooks|model]"));
+        assert!(help.contains("claw config [env|hooks|model|provider]"));
         assert!(help.contains("claw hooks [pre|post]"));
         assert!(help.contains("claw mcp [server]"));
         assert!(help.contains("claw memory"));
@@ -6651,8 +8413,11 @@ mod tests {
             assert!(report.contains("Base URL         https://remote.test"));
             assert!(report.contains("Upstream proxy   yes"));
             assert!(report.contains("Proxy ready      yes"));
+            assert!(report.contains("WS path ready    yes"));
+            assert!(report.contains("Live blocker     adapter-not-ported ("));
             assert!(report.contains("Token present    yes"));
             assert!(report.contains("WS target        wss://remote.test/v1/code/upstreamproxy/ws"));
+            assert!(report.contains("WS probe         skipped"));
             assert!(report.contains("Missing          <none>"));
 
             let payload = super::remote_env_payload().expect("remote env payload should render");
@@ -6666,7 +8431,34 @@ mod tests {
                 payload["transport"]["capabilities"]["live_remote_transport"],
                 json!(false)
             );
+            assert_eq!(
+                payload["transport"]["capabilities"]["live_remote_transport_kind"],
+                json!("upstream-proxy-websocket")
+            );
+            assert_eq!(
+                payload["transport"]["capabilities"]["live_remote_transport_ready"],
+                json!(false)
+            );
+            assert_eq!(
+                payload["transport"]["capabilities"]["live_remote_transport_path_ready"],
+                json!(true)
+            );
+            assert_eq!(
+                payload["transport"]["capabilities"]["live_remote_transport_selected"],
+                json!(false)
+            );
+            assert_eq!(
+                payload["transport"]["capabilities"]["live_remote_transport_blocker_kind"],
+                json!("adapter-not-ported")
+            );
+            assert!(payload["transport"]["capabilities"]["live_remote_transport_blocker_detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("not ported in Rust")));
             assert_eq!(payload["transport"]["bootstrap"]["ready"], json!(true));
+            assert_eq!(
+                payload["transport"]["bootstrap"]["websocket_probe"]["status"],
+                json!("skipped")
+            );
             assert_eq!(
                 payload["transport"]["bootstrap"]["token_present"],
                 json!(true)
@@ -6706,13 +8498,16 @@ mod tests {
             let report = render_remote_setup_report().expect("remote setup report should render");
             assert!(report.contains("Remote setup"));
             assert!(report.contains("Rust status       bootstrap foundation only"));
-            assert!(report.contains("Remote ready      yes"));
+            assert!(report.contains("Proxy ready       yes"));
+            assert!(report.contains("WS path ready     yes"));
+            assert!(report.contains("Live blocker      adapter-not-ported ("));
             assert!(report.contains("Remote enabled    yes"));
             assert!(report.contains("Session id        session-setup"));
             assert!(report.contains("Archive           cli"));
             assert!(report.contains("Archived files    3"));
             assert!(report.contains("Transport files   5"));
             assert!(report.contains("Summary           remote setup flow"));
+            assert!(report.contains("WS probe          skipped"));
             assert!(report.contains("Missing           <none>"));
             assert!(report.contains("commands/remote-setup/api.ts"));
             assert!(report.contains("cli/structuredIO.ts"));
@@ -6721,6 +8516,33 @@ mod tests {
                 super::remote_setup_payload().expect("remote setup payload should render");
             assert_eq!(payload["type"], json!("remote_setup"));
             assert_eq!(payload["transport"]["kind"], json!("upstream-proxy"));
+            assert_eq!(
+                payload["transport"]["capabilities"]["live_remote_transport_kind"],
+                json!("upstream-proxy-websocket")
+            );
+            assert_eq!(
+                payload["transport"]["capabilities"]["live_remote_transport_ready"],
+                json!(false)
+            );
+            assert_eq!(
+                payload["transport"]["capabilities"]["live_remote_transport_path_ready"],
+                json!(true)
+            );
+            assert_eq!(
+                payload["transport"]["capabilities"]["live_remote_transport_selected"],
+                json!(false)
+            );
+            assert_eq!(
+                payload["transport"]["capabilities"]["live_remote_transport_blocker_kind"],
+                json!("adapter-not-ported")
+            );
+            assert!(payload["transport"]["capabilities"]["live_remote_transport_blocker_detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("not ported in Rust")));
+            assert_eq!(
+                payload["transport"]["bootstrap"]["websocket_probe"]["status"],
+                json!("skipped")
+            );
             assert_eq!(payload["snapshot"]["archive_name"], json!("cli"));
             assert_eq!(payload["snapshot"]["package_name"], json!("cli"));
             assert_eq!(payload["snapshot"]["module_count"], json!(6));
@@ -6752,6 +8574,65 @@ mod tests {
         }
 
         let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn remote_env_payload_reports_failed_websocket_probe_when_requested() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let root = temp_path("remote-env-probe-failure");
+        let token_path = root.join("session_token");
+        let ca_bundle = root.join("ca-bundle.crt");
+        fs::create_dir_all(&root).expect("create temp dir");
+        fs::write(&token_path, "secret-token\n").expect("write token");
+        fs::write(&ca_bundle, "ca").expect("write ca bundle");
+        let unused_port = std::net::TcpListener::bind("127.0.0.1:0")
+            .expect("bind port")
+            .local_addr()
+            .expect("local addr")
+            .port();
+
+        {
+            let _remote_guard = ScopedEnvVar::set("SIMCOE_AI_REMOTE", "1");
+            let _session_guard = ScopedEnvVar::set("SIMCOE_AI_REMOTE_SESSION_ID", "session-123");
+            let _base_guard = ScopedEnvVar::set(
+                "SIMCOE_AI_BASE_URL",
+                &format!("http://127.0.0.1:{unused_port}"),
+            );
+            let _proxy_guard = ScopedEnvVar::set("CCR_UPSTREAM_PROXY_ENABLED", "true");
+            let _token_path_guard = ScopedEnvVar::set("CCR_SESSION_TOKEN_PATH", &token_path);
+            let _ca_bundle_guard = ScopedEnvVar::set("CCR_CA_BUNDLE_PATH", &ca_bundle);
+            let _probe_guard = ScopedEnvVar::set("CCR_UPSTREAM_PROXY_PROBE", "1");
+
+            let report = render_remote_env_report().expect("remote env report should render");
+            assert!(report.contains("WS path ready    no"));
+            assert!(report.contains("Live blocker     probe-failed ("));
+            assert!(report.contains("WS probe         failed"));
+
+            let payload = super::remote_env_payload().expect("remote env payload should render");
+            assert_eq!(
+                payload["transport"]["bootstrap"]["websocket_probe"]["status"],
+                json!("failed")
+            );
+            assert_eq!(
+                payload["transport"]["capabilities"]["live_remote_transport_ready"],
+                json!(false)
+            );
+            assert_eq!(
+                payload["transport"]["capabilities"]["live_remote_transport_path_ready"],
+                json!(false)
+            );
+            assert_eq!(
+                payload["transport"]["capabilities"]["live_remote_transport_blocker_kind"],
+                json!("probe-failed")
+            );
+            assert!(payload["transport"]["capabilities"]["live_remote_transport_blocker_detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("failed to connect")));
+        }
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
@@ -7149,6 +9030,7 @@ mod tests {
             let report = render_doctor_report().expect("doctor report should render");
             assert!(report.contains("Doctor"));
             assert!(report.contains("Status            ok"));
+            assert!(report.contains("Provider          simcoe"));
             assert!(report.contains("Permission mode   workspace-write"));
             assert!(report.contains("OAuth config      yes"));
             assert!(report.contains("Stored creds      yes"));
@@ -7163,6 +9045,7 @@ mod tests {
             assert!(report.contains("Pre hooks         1"));
             assert!(report.contains("Post hooks        1"));
             assert!(report.contains("Filesystem mode   workspace-only"));
+            assert!(report.contains("Live blocker      disabled ("));
             assert!(report.contains("no instruction files discovered"));
             assert!(report.contains(
                 "MCP server `remote` (http) is configured but not executable by the Rust runtime"
@@ -7171,6 +9054,7 @@ mod tests {
             let payload = super::doctor_payload().expect("doctor payload should render");
             assert_eq!(payload["type"], json!("doctor"));
             assert_eq!(payload["config"]["status"], json!("ok"));
+            assert_eq!(payload["config"]["provider"], json!("simcoe"));
             assert_eq!(
                 payload["config"]["permission_mode"],
                 json!("workspace-write")
@@ -7181,6 +9065,12 @@ mod tests {
             assert_eq!(payload["auth"]["scopes"], json!(["openid", "profile"]));
             assert_eq!(payload["hooks"]["pre_count"], json!(1));
             assert_eq!(payload["hooks"]["post_count"], json!(1));
+            assert_eq!(payload["remote"]["proxy_ready"], json!(false));
+            assert_eq!(payload["remote"]["ws_path_ready"], json!(false));
+            assert_eq!(payload["remote"]["live_blocker_kind"], json!("disabled"));
+            assert!(payload["remote"]["live_blocker_detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("SIMCOE_AI_REMOTE disabled")));
             assert_eq!(payload["mcp"]["server_count"], json!(2));
             assert_eq!(payload["mcp"]["supported_execution_count"], json!(1));
             assert_eq!(payload["mcp"]["unsupported_execution_count"], json!(1));
@@ -7345,6 +9235,113 @@ mod tests {
                     issue
                         .as_str()
                         .is_some_and(|text| text.contains("config load failed"))
+                })));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn doctor_report_surfaces_failed_remote_websocket_probe() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("doctor-remote-websocket-probe");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        let session_token_path = repo_root.join("session-token.txt");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        write_doctor_settings(&config_home);
+        fs::write(&session_token_path, "probe-token").expect("write session token");
+
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _remote_guard = ScopedEnvVar::set("SIMCOE_AI_REMOTE", "1");
+            let _session_id_guard = ScopedEnvVar::set("SIMCOE_AI_REMOTE_SESSION_ID", "session-123");
+            let _base_url_guard = ScopedEnvVar::set("SIMCOE_AI_BASE_URL", "http://127.0.0.1:9");
+            let _proxy_enabled_guard = ScopedEnvVar::set("CCR_UPSTREAM_PROXY_ENABLED", "1");
+            let _token_path_guard = ScopedEnvVar::set("CCR_SESSION_TOKEN_PATH", &session_token_path);
+            let _probe_guard = ScopedEnvVar::set("CCR_UPSTREAM_PROXY_PROBE", "1");
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report = render_doctor_report().expect("doctor report should render");
+            assert!(report.contains("Proxy ready       yes"));
+            assert!(report.contains("WS path ready     no"));
+            assert!(report.contains("Live blocker      probe-failed ("));
+            assert!(report.contains("WS probe          failed ("));
+            assert!(report.contains("remote websocket probe failed:"));
+
+            let payload = super::doctor_payload().expect("doctor payload should render");
+            assert_eq!(payload["remote"]["proxy_ready"], json!(true));
+            assert_eq!(payload["remote"]["ws_path_ready"], json!(false));
+            assert_eq!(payload["remote"]["live_blocker_kind"], json!("probe-failed"));
+            assert!(payload["remote"]["live_blocker_detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("failed to connect")));
+            assert_eq!(payload["remote"]["websocket_probe"]["requested"], json!(true));
+            assert_eq!(payload["remote"]["websocket_probe"]["attempted"], json!(true));
+            assert_eq!(payload["remote"]["websocket_probe"]["reachable"], json!(false));
+            assert_eq!(payload["remote"]["websocket_probe"]["status"], json!("failed"));
+            assert!(payload["issues"]
+                .as_array()
+                .is_some_and(|issues| issues.iter().any(|issue| {
+                    issue.as_str().is_some_and(|text| {
+                        text.starts_with("remote websocket probe failed:")
+                    })
+                })));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn doctor_report_surfaces_unported_remote_adapter_blocker() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("doctor-remote-adapter-blocker");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        let session_token_path = repo_root.join("session-token.txt");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        write_doctor_settings(&config_home);
+        fs::write(&session_token_path, "adapter-token").expect("write session token");
+
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _remote_guard = ScopedEnvVar::set("SIMCOE_AI_REMOTE", "1");
+            let _session_id_guard = ScopedEnvVar::set("SIMCOE_AI_REMOTE_SESSION_ID", "session-456");
+            let _base_url_guard = ScopedEnvVar::set("SIMCOE_AI_BASE_URL", "https://remote.test");
+            let _proxy_enabled_guard = ScopedEnvVar::set("CCR_UPSTREAM_PROXY_ENABLED", "1");
+            let _token_path_guard = ScopedEnvVar::set("CCR_SESSION_TOKEN_PATH", &session_token_path);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report = render_doctor_report().expect("doctor report should render");
+            assert!(report.contains("Proxy ready       yes"));
+            assert!(report.contains("WS path ready     yes"));
+            assert!(report.contains("Live blocker      adapter-not-ported ("));
+            assert!(report.contains("remote live transport blocked:"));
+
+            let payload = super::doctor_payload().expect("doctor payload should render");
+            assert_eq!(payload["remote"]["proxy_ready"], json!(true));
+            assert_eq!(payload["remote"]["ws_path_ready"], json!(true));
+            assert_eq!(payload["remote"]["live_blocker_kind"], json!("adapter-not-ported"));
+            assert!(payload["remote"]["live_blocker_detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("not ported in Rust")));
+            assert!(payload["issues"]
+                .as_array()
+                .is_some_and(|issues| issues.iter().any(|issue| {
+                    issue.as_str().is_some_and(|text| {
+                        text.starts_with("remote live transport blocked:")
+                            && text.contains("not ported in Rust")
+                    })
                 })));
         }
 
@@ -8172,6 +10169,122 @@ mod tests {
         }
     }
 
+    fn live_smoke_request(token: &str) -> ApiRequest {
+        ApiRequest {
+            system_prompt: Vec::new(),
+            messages: vec![ConversationMessage::user_text(format!(
+                "Reply with exactly {token} and no other text."
+            ))],
+        }
+    }
+
+    fn live_smoke_text(events: &[AssistantEvent]) -> String {
+        events
+            .iter()
+            .filter_map(|event| match event {
+                AssistantEvent::TextDelta(text) => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<String>()
+    }
+
+    fn should_run_live_provider_smoke(flag: &str, required_env: &[&str]) -> bool {
+        if std::env::var_os(flag).is_none() {
+            eprintln!("skipping live smoke test because {flag} is not set");
+            return false;
+        }
+
+        for key in required_env {
+            if std::env::var_os(key).is_none() {
+                eprintln!("skipping live smoke test because {key} is not set");
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn run_live_provider_smoke(provider: RuntimeProvider, model_env: &str, default_model: &str) {
+        let token = format!("SMOKE_OK_{}", provider.as_str().to_ascii_uppercase());
+        let model = std::env::var(model_env).unwrap_or_else(|_| default_model.to_string());
+        let mut client = SimcoeRuntimeClient::new_with_provider(
+            model,
+            provider,
+            false,
+            false,
+            None,
+            None,
+        )
+        .expect("live runtime client should initialize");
+        let mut out = Vec::new();
+        let events = client
+            .stream_with_writer(live_smoke_request(&token), &mut out)
+            .expect("live provider request should succeed");
+        let text = live_smoke_text(&events);
+
+        assert!(out.is_empty());
+        assert!(
+            text.to_ascii_uppercase().contains(&token),
+            "expected live provider response to include {token}, got {text:?}"
+        );
+        assert!(events.iter().any(|event| matches!(event, AssistantEvent::MessageStop)));
+        assert!(client.last_delivery_mode().is_some());
+    }
+
+    #[test]
+    #[ignore = "requires live provider credentials and network"]
+    fn live_anthropic_provider_smoke_test() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !should_run_live_provider_smoke(
+            "CLAW_LIVE_ANTHROPIC_SMOKE",
+            &["ANTHROPIC_API_KEY"],
+        ) {
+            return;
+        }
+
+        run_live_provider_smoke(
+            RuntimeProvider::Anthropic,
+            "CLAW_LIVE_ANTHROPIC_MODEL",
+            "claude-3-5-haiku-latest",
+        );
+    }
+
+    #[test]
+    #[ignore = "requires live provider credentials and network"]
+    fn live_openai_provider_smoke_test() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !should_run_live_provider_smoke("CLAW_LIVE_OPENAI_SMOKE", &["OPENAI_API_KEY"]) {
+            return;
+        }
+
+        run_live_provider_smoke(
+            RuntimeProvider::OpenAi,
+            "CLAW_LIVE_OPENAI_MODEL",
+            "gpt-4o-mini",
+        );
+    }
+
+    #[test]
+    #[ignore = "requires live provider credentials and network"]
+    fn live_ollama_provider_smoke_test() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !should_run_live_provider_smoke("CLAW_LIVE_OLLAMA_SMOKE", &[]) {
+            return;
+        }
+
+        run_live_provider_smoke(
+            RuntimeProvider::Ollama,
+            "CLAW_LIVE_OLLAMA_MODEL",
+            "llama3.2",
+        );
+    }
+
     #[test]
     fn tool_executor_suppresses_rendering_when_output_disabled() {
         let mut executor = CliToolExecutor::new(None, false);
@@ -8218,6 +10331,7 @@ mod tests {
             "workspace-write",
             &StatusContext {
                 cwd: PathBuf::from("/tmp/project"),
+                provider: "anthropic".to_string(),
                 session_path: Some(PathBuf::from("session.json")),
                 loaded_config_files: 2,
                 discovered_config_files: 3,
@@ -8227,6 +10341,7 @@ mod tests {
             },
         );
         assert!(status.contains("Status"));
+        assert!(status.contains("Provider         anthropic"));
         assert!(status.contains("Model            simcoe-sonnet"));
         assert!(status.contains("Permission mode  workspace-write"));
         assert!(status.contains("Messages         7"));
@@ -8255,11 +10370,53 @@ mod tests {
         assert_eq!(payload["section_supported"], json!(true));
         assert_eq!(
             payload["supported_sections"],
-            json!(["env", "hooks", "model"])
+            json!(["env", "hooks", "model", "provider"])
         );
         assert!(payload["content"]
             .as_str()
             .is_some_and(|content| content.contains("Merged section: env")));
+    }
+
+    #[test]
+    fn config_report_supports_provider_section_views() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("config-provider-report");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+        fs::write(
+            config_home.join("settings.json"),
+            r#"{
+    "provider": "openai",
+    "model": "gpt-5.4"
+}"#,
+        )
+        .expect("write provider settings");
+
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report =
+                render_config_report(Some("provider")).expect("config report should render");
+            assert!(report.contains("Merged section: provider"));
+            assert!(report.contains("openai"));
+
+            let payload = super::config_payload(Some("provider".to_string()))
+                .expect("config payload should render");
+            assert_eq!(payload["type"], json!("config"));
+            assert_eq!(payload["section"], json!("provider"));
+            assert_eq!(payload["section_supported"], json!(true));
+            assert_eq!(payload["section_value"], json!("openai"));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
     }
 
     #[test]
@@ -8334,6 +10491,7 @@ mod tests {
     fn status_context_reads_real_workspace_metadata() {
         let context = status_context(None).expect("status context should load");
         assert!(context.cwd.is_absolute());
+        assert!(!context.provider.is_empty());
         assert!(context.discovered_config_files >= 5);
         assert!(context.loaded_config_files <= context.discovered_config_files);
     }

@@ -44,6 +44,7 @@ pub struct RuntimeFeatureConfig {
     hooks: RuntimeHookConfig,
     mcp: McpConfigCollection,
     oauth: Option<OAuthConfig>,
+    provider: Option<String>,
     model: Option<String>,
     permission_mode: Option<ResolvedPermissionMode>,
     sandbox: SandboxConfig,
@@ -233,6 +234,7 @@ impl ConfigLoader {
                 servers: mcp_servers,
             },
             oauth: parse_optional_oauth_config(&merged_value, "merged settings.oauth")?,
+            provider: parse_optional_provider(&merged_value),
             model: parse_optional_model(&merged_value),
             permission_mode: parse_optional_permission_mode(&merged_value)?,
             sandbox: parse_optional_sandbox_config(&merged_value)?,
@@ -297,6 +299,11 @@ impl RuntimeConfig {
     }
 
     #[must_use]
+    pub fn provider(&self) -> Option<&str> {
+        self.feature_config.provider.as_deref()
+    }
+
+    #[must_use]
     pub fn model(&self) -> Option<&str> {
         self.feature_config.model.as_deref()
     }
@@ -332,6 +339,11 @@ impl RuntimeFeatureConfig {
     #[must_use]
     pub fn oauth(&self) -> Option<&OAuthConfig> {
         self.oauth.as_ref()
+    }
+
+    #[must_use]
+    pub fn provider(&self) -> Option<&str> {
+        self.provider.as_deref()
     }
 
     #[must_use]
@@ -476,6 +488,13 @@ fn merge_mcp_servers(
 fn parse_optional_model(root: &JsonValue) -> Option<String> {
     root.as_object()
         .and_then(|object| object.get("model"))
+        .and_then(JsonValue::as_str)
+        .map(ToOwned::to_owned)
+}
+
+fn parse_optional_provider(root: &JsonValue) -> Option<String> {
+    root.as_object()
+        .and_then(|object| object.get("provider"))
         .and_then(JsonValue::as_str)
         .map(ToOwned::to_owned)
 }
@@ -850,17 +869,17 @@ mod tests {
 
         fs::write(
             home.parent().expect("home parent").join(".simcoe.json"),
-            r#"{"model":"haiku","env":{"A":"1"},"mcpServers":{"home":{"command":"uvx","args":["home"]}}}"#,
+            r#"{"provider":"anthropic","model":"haiku","env":{"A":"1"},"mcpServers":{"home":{"command":"uvx","args":["home"]}}}"#,
         )
         .expect("write user compat config");
         fs::write(
             home.join("settings.json"),
-            r#"{"model":"sonnet","env":{"A2":"1"},"hooks":{"PreToolUse":["base"]},"permissions":{"defaultMode":"plan"}}"#,
+            r#"{"provider":"openai","model":"sonnet","env":{"A2":"1"},"hooks":{"PreToolUse":["base"]},"permissions":{"defaultMode":"plan"}}"#,
         )
         .expect("write user settings");
         fs::write(
             cwd.join(".simcoe.json"),
-            r#"{"model":"project-compat","env":{"B":"2"}}"#,
+            r#"{"provider":"simcoe","model":"project-compat","env":{"B":"2"}}"#,
         )
         .expect("write project compat config");
         fs::write(
@@ -870,7 +889,7 @@ mod tests {
         .expect("write project settings");
         fs::write(
             cwd.join(".simcoe").join("settings.local.json"),
-            r#"{"model":"opus","permissionMode":"acceptEdits"}"#,
+            r#"{"provider":"ollama","model":"opus","permissionMode":"acceptEdits"}"#,
         )
         .expect("write local settings");
 
@@ -881,6 +900,11 @@ mod tests {
         assert_eq!(SIMCOE_AI_SETTINGS_SCHEMA_NAME, "SettingsSchema");
         assert_eq!(loaded.loaded_entries().len(), 5);
         assert_eq!(loaded.loaded_entries()[0].source, ConfigSource::User);
+        assert_eq!(
+            loaded.get("provider"),
+            Some(&JsonValue::String("ollama".to_string()))
+        );
+        assert_eq!(loaded.provider(), Some("ollama"));
         assert_eq!(
             loaded.get("model"),
             Some(&JsonValue::String("opus".to_string()))

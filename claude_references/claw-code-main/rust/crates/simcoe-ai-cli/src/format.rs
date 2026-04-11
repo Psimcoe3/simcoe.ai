@@ -19,6 +19,7 @@ use runtime::{
     mcp_transport_display_name, ConfigSource, ContentBlock, McpClientAuth, McpClientBootstrap,
     McpClientTransport, McpServerAuthStatusSnapshot, ProjectContext, RemoteSessionContext,
     ResolvedPermissionMode, Session, TokenUsage, UpstreamProxyBootstrap,
+    UpstreamProxyWebSocketProbe,
 };
 use tools::{
     inspectable_tool_catalog, list_agent_profiles, list_agent_tasks, list_skills,
@@ -30,6 +31,7 @@ use tools::{
 #[derive(Debug, Clone)]
 pub(crate) struct StatusContext {
     pub(crate) cwd: PathBuf,
+    pub(crate) provider: String,
     pub(crate) session_path: Option<PathBuf>,
     pub(crate) loaded_config_files: usize,
     pub(crate) discovered_config_files: usize,
@@ -69,6 +71,7 @@ pub(crate) struct DoctorConfigSnapshot {
     pub(crate) discovered_file_count: usize,
     pub(crate) loaded_file_count: usize,
     pub(crate) error: Option<String>,
+    pub(crate) provider: Option<String>,
     pub(crate) model: Option<String>,
     pub(crate) permission_mode: Option<String>,
     pub(crate) sandbox: Option<DoctorSandboxSnapshot>,
@@ -112,6 +115,10 @@ pub(crate) struct McpBlockedServerSnapshot {
 pub(crate) struct DoctorRemoteSnapshot {
     pub(crate) enabled: bool,
     pub(crate) proxy_ready: bool,
+    pub(crate) ws_path_ready: bool,
+    pub(crate) live_blocker_kind: String,
+    pub(crate) live_blocker_detail: Option<String>,
+    pub(crate) websocket_probe: UpstreamProxyWebSocketProbe,
     pub(crate) session_id: Option<String>,
     pub(crate) base_url: Option<String>,
     pub(crate) missing_requirements: Vec<String>,
@@ -285,6 +292,7 @@ pub(crate) struct ReloadPluginsReportSnapshot {
 pub(crate) struct RemoteEnvReportSnapshot {
     pub(crate) remote: RemoteSessionContext,
     pub(crate) bootstrap: UpstreamProxyBootstrap,
+    pub(crate) websocket_probe: UpstreamProxyWebSocketProbe,
     pub(crate) inherited_proxy_env_keys: Vec<String>,
 }
 
@@ -486,6 +494,7 @@ pub(crate) fn status_context(
         crate::parse_git_status_metadata(project_context.git_status.as_deref());
     Ok(StatusContext {
         cwd,
+        provider: runtime_config.provider().unwrap_or("simcoe").to_string(),
         session_path: session_path.map(Path::to_path_buf),
         loaded_config_files: runtime_config.loaded_entries().len(),
         discovered_config_files,
@@ -504,6 +513,7 @@ pub(crate) fn format_status_report(
     [
         format!(
             "Status
+  Provider         {provider}
   Model            {model}
   Permission mode  {permission_mode}
   Messages         {}
@@ -512,6 +522,7 @@ pub(crate) fn format_status_report(
             usage.message_count,
             usage.turns,
             usage.estimated_tokens,
+            provider = context.provider,
             model = brand_model_name(model),
         ),
         format!(
@@ -591,6 +602,10 @@ pub(crate) fn config_report_snapshot(
                 section_supported = true;
                 runtime_config.get("hooks")
             }
+            "provider" => {
+                section_supported = true;
+                runtime_config.get("provider")
+            }
             "model" => {
                 section_supported = true;
                 runtime_config.get("model")
@@ -644,7 +659,7 @@ pub(crate) fn render_config_report_from_snapshot(snapshot: &ConfigReportSnapshot
         lines.push(format!("Merged section: {section}"));
         if !snapshot.section_supported {
             lines.push(format!(
-                "  Unsupported config section '{section}'. Use env, hooks, or model."
+                "  Unsupported config section '{section}'. Use env, hooks, model, or provider."
             ));
             return lines.join("\n");
         }
@@ -1121,6 +1136,7 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
     let env_map = env::vars().collect::<BTreeMap<String, String>>();
     let remote = RemoteSessionContext::from_env_map(&env_map);
     let bootstrap = UpstreamProxyBootstrap::from_env_map(&env_map);
+    let websocket_probe = runtime::upstream_proxy_websocket_probe_from_env_map(&env_map);
 
     let mut issues = Vec::new();
     if instruction_file_count == 0 {
@@ -1190,6 +1206,25 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
             }
         ));
     }
+    if websocket_probe.requested && websocket_probe.attempted && !websocket_probe.reachable {
+        issues.push(format!(
+            "remote websocket probe failed: {}",
+            websocket_probe
+                .detail
+                .clone()
+                .unwrap_or_else(|| String::from("probe failed"))
+        ));
+    }
+    let live_remote_transport = runtime::upstream_proxy_live_transport_status(&bootstrap, &websocket_probe);
+    if remote.enabled && live_remote_transport.blocker_kind == "adapter-not-ported" {
+        issues.push(format!(
+            "remote live transport blocked: {}",
+            live_remote_transport
+                .blocker_detail
+                .clone()
+                .unwrap_or_else(|| live_remote_transport.blocker_kind.to_string())
+        ));
+    }
 
     let auth = DoctorAuthSnapshot {
         oauth_configured: None,
@@ -1204,6 +1239,10 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
     let remote_snapshot = DoctorRemoteSnapshot {
         enabled: remote.enabled,
         proxy_ready: bootstrap.should_enable(),
+        ws_path_ready: live_remote_transport.path_ready,
+        live_blocker_kind: live_remote_transport.blocker_kind.to_string(),
+        live_blocker_detail: live_remote_transport.blocker_detail,
+        websocket_probe,
         session_id: remote.session_id.clone(),
         base_url: if remote.base_url.is_empty() {
             None
@@ -1252,6 +1291,7 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
                     discovered_file_count: discovered.len(),
                     loaded_file_count: runtime_config.loaded_entries().len(),
                     error: None,
+                    provider: runtime_config.provider().map(str::to_string),
                     model: runtime_config.model().map(str::to_string),
                     permission_mode: runtime_config
                         .permission_mode()
@@ -1294,6 +1334,7 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
                     discovered_file_count: discovered.len(),
                     loaded_file_count: 0,
                     error: Some(config_error),
+                    provider: None,
                     model: None,
                     permission_mode: None,
                     sandbox: None,
@@ -1315,6 +1356,11 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
     let git_branch = snapshot.git_branch.as_deref().unwrap_or("unknown");
     let session_id = snapshot.remote.session_id.as_deref().unwrap_or("<unset>");
     let base_url = snapshot.remote.base_url.as_deref().unwrap_or("<unset>");
+    let remote_ws_probe = format_upstream_proxy_probe(&snapshot.remote.websocket_probe);
+    let live_remote_blocker = snapshot.remote.live_blocker_detail.as_deref().map_or_else(
+        || snapshot.remote.live_blocker_kind.clone(),
+        |detail| format!("{} ({detail})", snapshot.remote.live_blocker_kind),
+    );
     let remote_missing = if !snapshot.remote.enabled {
         String::from("<disabled>")
     } else if snapshot.remote.missing_requirements.is_empty() {
@@ -1350,7 +1396,7 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
         );
 
         return format!(
-            "Doctor\n  Rust status       {rust_status}\n  Working directory {cwd}\n  Project root      {project_root}\n  Git branch        {git_branch}\n  Instruction files {instruction_files}\n  Issues            {issue_count}\n\nConfig\n  Status            ok\n  Discovered files  {discovered_files}\n  Loaded files      {loaded_files}\n  Model             {model}\n  Permission mode   {permission_mode}\n  Sandbox enabled   {sandbox_enabled}\n  Sandbox active    {sandbox_active}\n  Filesystem mode   {filesystem_mode}\n  Network isolation {network_isolation}\n  Detail            {sandbox_detail}\n\nAuth\n  OAuth config      {oauth_config}\n  Credentials path  {credentials_path}\n  Stored creds      {stored_creds}\n  Refresh token     {refresh_token}\n  Expiry            {expiry}\n  Scopes            {scopes}\n\nHooks + MCP\n  Pre hooks         {pre_hooks}\n  Post hooks        {post_hooks}\n  MCP servers       {mcp_servers}\n  MCP transports    {mcp_transports}\n  MCP executable    {mcp_executable}\n  MCP blocked       {mcp_blocked}\n  MCP statuses      {mcp_statuses}\n  MCP blockers      {mcp_blockers}\n  MCP attention     {mcp_attention}\n\nRemote\n  Enabled           {remote_enabled}\n  Proxy ready       {proxy_ready}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Missing           {remote_missing}\n\nIssues\n{issue_lines}",
+            "Doctor\n  Rust status       {rust_status}\n  Working directory {cwd}\n  Project root      {project_root}\n  Git branch        {git_branch}\n  Instruction files {instruction_files}\n  Issues            {issue_count}\n\nConfig\n  Status            ok\n  Discovered files  {discovered_files}\n  Loaded files      {loaded_files}\n  Provider          {provider}\n  Model             {model}\n  Permission mode   {permission_mode}\n  Sandbox enabled   {sandbox_enabled}\n  Sandbox active    {sandbox_active}\n  Filesystem mode   {filesystem_mode}\n  Network isolation {network_isolation}\n  Detail            {sandbox_detail}\n\nAuth\n  OAuth config      {oauth_config}\n  Credentials path  {credentials_path}\n  Stored creds      {stored_creds}\n  Refresh token     {refresh_token}\n  Expiry            {expiry}\n  Scopes            {scopes}\n\nHooks + MCP\n  Pre hooks         {pre_hooks}\n  Post hooks        {post_hooks}\n  MCP servers       {mcp_servers}\n  MCP transports    {mcp_transports}\n  MCP executable    {mcp_executable}\n  MCP blocked       {mcp_blocked}\n  MCP statuses      {mcp_statuses}\n  MCP blockers      {mcp_blockers}\n  MCP attention     {mcp_attention}\n\nRemote\n  Enabled           {remote_enabled}\n  Proxy ready       {proxy_ready}\n  WS path ready     {ws_path_ready}\n  Live blocker      {live_remote_blocker}\n  WS probe          {remote_ws_probe}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Missing           {remote_missing}\n\nIssues\n{issue_lines}",
             rust_status = snapshot.rust_status,
             cwd = snapshot.working_directory.as_str(),
             project_root = project_root,
@@ -1359,6 +1405,7 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
             issue_count = snapshot.issue_count,
             discovered_files = snapshot.config.discovered_file_count,
             loaded_files = snapshot.config.loaded_file_count,
+            provider = snapshot.config.provider.as_deref().unwrap_or("<unset>"),
             model = snapshot.config.model.as_deref().unwrap_or("<unset>"),
             permission_mode = snapshot.config.permission_mode.as_deref().unwrap_or("<unset>"),
             sandbox_enabled = sandbox.map_or("<unavailable>", |value| yes_no(value.enabled)),
@@ -1385,6 +1432,9 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
             mcp_attention = summarize_doctor_mcp_attention(snapshot.mcp.as_ref().map(|collection| collection.attention_servers.as_slice())),
             remote_enabled = yes_no(snapshot.remote.enabled),
             proxy_ready = yes_no(snapshot.remote.proxy_ready),
+            ws_path_ready = yes_no(snapshot.remote.ws_path_ready),
+            live_remote_blocker = live_remote_blocker,
+            remote_ws_probe = remote_ws_probe,
             session_id = session_id,
             base_url = base_url,
             remote_missing = remote_missing,
@@ -1402,7 +1452,7 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
     );
 
     format!(
-        "Doctor\n  Rust status       {rust_status}\n  Working directory {cwd}\n  Project root      {project_root}\n  Git branch        {git_branch}\n  Instruction files {instruction_files}\n  Issues            {issue_count}\n\nConfig\n  Status            error\n  Discovered files  {discovered_files}\n  Loaded files      0\n  Model             <unavailable>\n  Permission mode   <unavailable>\n  Sandbox enabled   <unavailable>\n  Sandbox active    <unavailable>\n  Filesystem mode   <unavailable>\n  Network isolation <unavailable>\n  Detail            {config_error}\n\nAuth\n  OAuth config      <unavailable>\n  Credentials path  {credentials_path}\n  Stored creds      {stored_creds}\n  Refresh token     <unavailable>\n  Expiry            {expiry}\n  Scopes            {scopes}\n\nHooks + MCP\n  Pre hooks         <unavailable>\n  Post hooks        <unavailable>\n  MCP servers       <unavailable>\n  MCP transports    <unavailable>\n  MCP executable    <unavailable>\n  MCP blocked       <unavailable>\n  MCP statuses      <unavailable>\n  MCP blockers      <unavailable>\n  MCP attention     <unavailable>\n\nRemote\n  Enabled           {remote_enabled}\n  Proxy ready       {proxy_ready}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Missing           {remote_missing}\n\nIssues\n{issue_lines}",
+        "Doctor\n  Rust status       {rust_status}\n  Working directory {cwd}\n  Project root      {project_root}\n  Git branch        {git_branch}\n  Instruction files {instruction_files}\n  Issues            {issue_count}\n\nConfig\n  Status            error\n  Discovered files  {discovered_files}\n  Loaded files      0\n  Provider          <unavailable>\n  Model             <unavailable>\n  Permission mode   <unavailable>\n  Sandbox enabled   <unavailable>\n  Sandbox active    <unavailable>\n  Filesystem mode   <unavailable>\n  Network isolation <unavailable>\n  Detail            {config_error}\n\nAuth\n  OAuth config      <unavailable>\n  Credentials path  {credentials_path}\n  Stored creds      {stored_creds}\n  Refresh token     <unavailable>\n  Expiry            {expiry}\n  Scopes            {scopes}\n\nHooks + MCP\n  Pre hooks         <unavailable>\n  Post hooks        <unavailable>\n  MCP servers       <unavailable>\n  MCP transports    <unavailable>\n  MCP executable    <unavailable>\n  MCP blocked       <unavailable>\n  MCP statuses      <unavailable>\n  MCP blockers      <unavailable>\n  MCP attention     <unavailable>\n\nRemote\n  Enabled           {remote_enabled}\n  Proxy ready       {proxy_ready}\n  WS path ready     {ws_path_ready}\n  Live blocker      {live_remote_blocker}\n  WS probe          {remote_ws_probe}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Missing           {remote_missing}\n\nIssues\n{issue_lines}",
         rust_status = snapshot.rust_status,
         cwd = snapshot.working_directory.as_str(),
         project_root = project_root,
@@ -1417,6 +1467,9 @@ pub(crate) fn render_doctor_report_from_snapshot(snapshot: &DoctorSnapshot) -> S
         scopes = scopes,
         remote_enabled = yes_no(snapshot.remote.enabled),
         proxy_ready = yes_no(snapshot.remote.proxy_ready),
+        ws_path_ready = yes_no(snapshot.remote.ws_path_ready),
+        live_remote_blocker = live_remote_blocker,
+        remote_ws_probe = remote_ws_probe,
         session_id = session_id,
         base_url = base_url,
         remote_missing = remote_missing,
@@ -1703,11 +1756,13 @@ pub(crate) fn render_reload_plugins_report() -> Result<String, Box<dyn std::erro
 fn remote_env_snapshot_from_env_map(env_map: &BTreeMap<String, String>) -> RemoteEnvReportSnapshot {
     let remote = RemoteSessionContext::from_env_map(env_map);
     let bootstrap = UpstreamProxyBootstrap::from_env_map(env_map);
+    let websocket_probe = runtime::upstream_proxy_websocket_probe_from_env_map(env_map);
     let inherited = inherited_upstream_proxy_env(env_map);
 
     RemoteEnvReportSnapshot {
         remote,
         bootstrap,
+        websocket_probe,
         inherited_proxy_env_keys: inherited.keys().cloned().collect(),
     }
 }
@@ -1720,6 +1775,9 @@ pub(crate) fn remote_env_report_snapshot() -> RemoteEnvReportSnapshot {
 pub(crate) fn render_remote_env_report_from_snapshot(snapshot: &RemoteEnvReportSnapshot) -> String {
     let remote = &snapshot.remote;
     let bootstrap = &snapshot.bootstrap;
+    let websocket_probe = format_upstream_proxy_probe(&snapshot.websocket_probe);
+    let (ws_path_ready, live_blocker) =
+        format_live_remote_transport_state(bootstrap, &snapshot.websocket_probe);
     let missing = remote_setup_gaps(&bootstrap);
     let session_id = remote
         .session_id
@@ -1737,17 +1795,20 @@ pub(crate) fn render_remote_env_report_from_snapshot(snapshot: &RemoteEnvReportS
     };
 
     format!(
-        "Remote env\n  Rust status      bootstrap foundation only\n  Remote enabled   {remote_enabled}\n  Session id       {session_id}\n  Base URL         {base_url}\n  Upstream proxy   {upstream_proxy}\n  Proxy ready      {proxy_ready}\n  Token path       {token_path}\n  Token present    {token_present}\n  CA bundle path   {ca_bundle}\n  System CA path   {system_ca}\n  WS target        {ws_target}\n  Inherited proxy  {inherited_count} vars\n  Missing          {missing}\n  Usage            /remote-setup",
+        "Remote env\n  Rust status      bootstrap foundation only\n  Remote enabled   {remote_enabled}\n  Session id       {session_id}\n  Base URL         {base_url}\n  Upstream proxy   {upstream_proxy}\n  Proxy ready      {proxy_ready}\n  WS path ready    {ws_path_ready}\n  Live blocker     {live_blocker}\n  Token path       {token_path}\n  Token present    {token_present}\n  CA bundle path   {ca_bundle}\n  System CA path   {system_ca}\n  WS target        {ws_target}\n  WS probe         {websocket_probe}\n  Inherited proxy  {inherited_count} vars\n  Missing          {missing}\n  Usage            /remote-setup",
         remote_enabled = yes_no(remote.enabled),
         session_id = session_id,
         base_url = base_url,
         upstream_proxy = yes_no(bootstrap.upstream_proxy_enabled),
         proxy_ready = yes_no(bootstrap.should_enable()),
+        ws_path_ready = ws_path_ready,
+        live_blocker = live_blocker,
         token_path = bootstrap.token_path.display(),
         token_present = yes_no(bootstrap.token.is_some()),
         ca_bundle = bootstrap.ca_bundle_path.display(),
         system_ca = bootstrap.system_ca_path.display(),
         ws_target = ws_target,
+        websocket_probe = websocket_probe,
         inherited_count = snapshot.inherited_proxy_env_keys.len(),
         missing = missing,
     )
@@ -1777,6 +1838,9 @@ pub(crate) fn render_remote_setup_report_from_snapshot(
 ) -> String {
     let remote = &snapshot.env.remote;
     let bootstrap = &snapshot.env.bootstrap;
+    let websocket_probe = format_upstream_proxy_probe(&snapshot.env.websocket_probe);
+    let (ws_path_ready, live_blocker) =
+        format_live_remote_transport_state(bootstrap, &snapshot.env.websocket_probe);
     let missing = remote_setup_gaps(&bootstrap);
     let session_id = remote
         .session_id
@@ -1791,12 +1855,15 @@ pub(crate) fn render_remote_setup_report_from_snapshot(
     let transport_hints = render_bulleted_items(&snapshot.catalog.transport_files);
 
     format!(
-        "Remote setup\n  Rust status       bootstrap foundation only\n  Remote ready      {ready}\n  Remote enabled    {remote_enabled}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Token present     {token_present}\n  Archive           {archive}\n  Package           {package}\n  Archived files    {archived_files}\n  Transport files   {transport_files}\n  Summary           {summary}\n  Missing           {missing}\n  Usage             /remote-env\n\nSource hints\n{source_hints}\n\nTransport hints\n{transport_hints}",
-        ready = yes_no(bootstrap.should_enable()),
+        "Remote setup\n  Rust status       bootstrap foundation only\n  Proxy ready       {proxy_ready}\n  WS path ready     {ws_path_ready}\n  Live blocker      {live_blocker}\n  Remote enabled    {remote_enabled}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Token present     {token_present}\n  WS probe          {websocket_probe}\n  Archive           {archive}\n  Package           {package}\n  Archived files    {archived_files}\n  Transport files   {transport_files}\n  Summary           {summary}\n  Missing           {missing}\n  Usage             /remote-env\n\nSource hints\n{source_hints}\n\nTransport hints\n{transport_hints}",
+        proxy_ready = yes_no(bootstrap.should_enable()),
+        ws_path_ready = ws_path_ready,
+        live_blocker = live_blocker,
         remote_enabled = yes_no(remote.enabled),
         session_id = session_id,
         base_url = base_url,
         token_present = yes_no(bootstrap.token.is_some()),
+        websocket_probe = websocket_probe,
         archive = snapshot.catalog.archive_name,
         package = snapshot.catalog.package_name,
         archived_files = snapshot.command.archived_file_count,
@@ -1821,6 +1888,29 @@ fn yes_no(value: bool) -> &'static str {
     } else {
         "no"
     }
+}
+
+fn format_upstream_proxy_probe(probe: &UpstreamProxyWebSocketProbe) -> String {
+    match probe.status {
+        "reachable" => "reachable".to_string(),
+        "skipped" | "blocked" | "failed" => probe.detail.as_ref().map_or_else(
+            || probe.status.to_string(),
+            |detail| format!("{} ({detail})", probe.status),
+        ),
+        _ => probe.status.to_string(),
+    }
+}
+
+fn format_live_remote_transport_state(
+    bootstrap: &UpstreamProxyBootstrap,
+    probe: &UpstreamProxyWebSocketProbe,
+) -> (String, String) {
+    let status = runtime::upstream_proxy_live_transport_status(bootstrap, probe);
+    let blocker = status.blocker_detail.as_deref().map_or_else(
+        || status.blocker_kind.to_string(),
+        |detail| format!("{} ({detail})", status.blocker_kind),
+    );
+    (yes_no(status.path_ready).to_string(), blocker)
 }
 
 fn resolved_permission_mode_label(mode: ResolvedPermissionMode) -> &'static str {

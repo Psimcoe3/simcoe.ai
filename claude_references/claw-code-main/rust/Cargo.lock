@@ -1141,6 +1141,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tokio",
+ "tungstenite",
  "walkdir",
 ]
 
@@ -1396,8 +1397,10 @@ dependencies = [
  "compat-harness",
  "crossterm",
  "pulldown-cmark",
+ "reqwest",
  "runtime",
  "rustyline",
+ "serde",
  "serde_json",
  "syntect",
  "tokio",

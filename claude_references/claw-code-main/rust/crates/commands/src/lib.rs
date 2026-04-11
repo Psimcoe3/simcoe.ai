@@ -120,7 +120,7 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
     SlashCommandSpec {
         name: "config",
         summary: "Inspect Simcoe AI config files or merged sections",
-        argument_hint: Some("[env|hooks|model]"),
+        argument_hint: Some("[env|hooks|model|provider]"),
         resume_supported: true,
     },
     SlashCommandSpec {
@@ -831,7 +831,7 @@ mod tests {
         assert!(help.contains("/login"));
         assert!(help.contains("/logout"));
         assert!(help.contains("/system-prompt [--cwd PATH] [--date YYYY-MM-DD]"));
-        assert!(help.contains("/config [env|hooks|model]"));
+        assert!(help.contains("/config [env|hooks|model|provider]"));
         assert!(help.contains("/hooks [pre|post]"));
         assert!(help.contains("/mcp [server]"));
         assert!(help.contains("/memory"));
@@ -861,7 +861,7 @@ mod tests {
 
         assert!(help.contains("Resume-compatible slash commands"));
         assert!(help.contains("/help"));
-        assert!(help.contains("/config [env|hooks|model]"));
+        assert!(help.contains("/config [env|hooks|model|provider]"));
         assert!(help.contains("/export [file]"));
         assert!(help.contains("/session [list|switch <session-id>]"));
         assert!(!help.contains("/review [context]"));

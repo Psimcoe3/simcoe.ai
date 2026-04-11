@@ -2,24 +2,27 @@ use std::collections::BTreeMap;
 use std::env;
 
 use runtime::{
-    inherited_upstream_proxy_env, AssistantEvent, TokenUsage, TurnSummary, UpstreamProxyBootstrap,
+    inherited_upstream_proxy_env, upstream_proxy_live_transport_status,
+    upstream_proxy_websocket_probe_from_env_map, AssistantEvent, TokenUsage, TurnSummary,
+    UpstreamProxyBootstrap,
 };
 use serde_json::{json, Value};
 
-pub(crate) fn build_turn_transport(summary: &TurnSummary) -> Value {
-    let metadata = build_turn_transport_metadata();
+pub(crate) fn build_turn_transport(summary: &TurnSummary, provider: &str) -> Value {
+    let metadata = build_turn_transport_metadata(provider);
     json!({
         "kind": metadata["kind"].clone(),
         "active_transport_kind": metadata["active_transport_kind"].clone(),
+        "provider_runtime": metadata["provider_runtime"].clone(),
         "capabilities": metadata["capabilities"].clone(),
         "bootstrap": metadata["bootstrap"].clone(),
         "events": build_turn_transport_events(summary),
     })
 }
 
-pub(crate) fn build_turn_transport_metadata() -> Value {
+pub(crate) fn build_turn_transport_metadata(provider: &str) -> Value {
     let env_map = env::vars().collect::<BTreeMap<String, String>>();
-    build_turn_transport_metadata_from_env_map(&env_map)
+    build_turn_transport_metadata_from_env_map(&env_map, provider)
 }
 
 pub(crate) fn build_turn_transport_events(summary: &TurnSummary) -> Vec<Value> {
@@ -29,31 +32,61 @@ pub(crate) fn build_turn_transport_events(summary: &TurnSummary) -> Vec<Value> {
 fn build_turn_transport_from_env_map(
     summary: &TurnSummary,
     env_map: &BTreeMap<String, String>,
+    provider: &str,
 ) -> Value {
-    let metadata = build_turn_transport_metadata_from_env_map(env_map);
+    let metadata = build_turn_transport_metadata_from_env_map(env_map, provider);
     json!({
         "kind": metadata["kind"].clone(),
         "active_transport_kind": metadata["active_transport_kind"].clone(),
+        "provider_runtime": metadata["provider_runtime"].clone(),
         "capabilities": metadata["capabilities"].clone(),
         "bootstrap": metadata["bootstrap"].clone(),
         "events": build_turn_transport_events(summary),
     })
 }
 
-fn build_turn_transport_metadata_from_env_map(env_map: &BTreeMap<String, String>) -> Value {
+pub(crate) fn build_provider_runtime_metadata(provider: &str) -> Value {
+    let (family, request_format) = match provider {
+        "simcoe" | "anthropic" => ("anthropic-compatible", "messages-v1"),
+        "openai" | "ollama" => ("openai-compatible", "chat-completions"),
+        _ => ("custom", "unknown"),
+    };
+
+    json!({
+        "provider": provider,
+        "family": family,
+        "request_format": request_format,
+        "streaming_protocol": "sse",
+        "buffered_fallback_supported": true,
+    })
+}
+
+fn build_turn_transport_metadata_from_env_map(
+    env_map: &BTreeMap<String, String>,
+    provider: &str,
+) -> Value {
     let bootstrap = UpstreamProxyBootstrap::from_env_map(env_map);
+    let websocket_probe = upstream_proxy_websocket_probe_from_env_map(env_map);
     let ready = bootstrap.should_enable();
+    let live_remote_transport = upstream_proxy_live_transport_status(&bootstrap, &websocket_probe);
     let inherited = inherited_upstream_proxy_env(env_map);
     let inherited_keys = inherited.keys().cloned().collect::<Vec<_>>();
     let missing = bootstrap.missing_requirements();
     let ws_url = (!bootstrap.remote.base_url.is_empty()).then(|| bootstrap.ws_url());
 
     json!({
-        "kind": if ready { "upstream-proxy" } else { "local" },
+        "kind": "provider-direct",
         "active_transport_kind": "api-stream",
+        "provider_runtime": build_provider_runtime_metadata(provider),
         "capabilities": {
             "structured_local_events": true,
             "live_remote_transport": false,
+            "live_remote_transport_kind": "upstream-proxy-websocket",
+            "live_remote_transport_ready": live_remote_transport.ready,
+            "live_remote_transport_path_ready": live_remote_transport.path_ready,
+            "live_remote_transport_selected": false,
+            "live_remote_transport_blocker_kind": live_remote_transport.blocker_kind,
+            "live_remote_transport_blocker_detail": live_remote_transport.blocker_detail,
         },
         "bootstrap": {
             "remote_enabled": bootstrap.remote.enabled,
@@ -62,6 +95,13 @@ fn build_turn_transport_metadata_from_env_map(env_map: &BTreeMap<String, String>
             "upstream_proxy_enabled": bootstrap.upstream_proxy_enabled,
             "ready": ready,
             "ws_url": ws_url,
+            "websocket_probe": {
+                "requested": websocket_probe.requested,
+                "attempted": websocket_probe.attempted,
+                "reachable": websocket_probe.reachable,
+                "status": websocket_probe.status,
+                "detail": websocket_probe.detail,
+            },
             "token_path": bootstrap.token_path.display().to_string(),
             "token_present": bootstrap.token.is_some(),
             "ca_bundle_path": bootstrap.ca_bundle_path.display().to_string(),
@@ -313,16 +353,52 @@ mod tests {
             ),
         ]);
 
-        let transport = build_turn_transport_from_env_map(&sample_summary(), &env_map);
+        let transport = build_turn_transport_from_env_map(&sample_summary(), &env_map, "openai");
 
-        assert_eq!(transport["kind"], json!("upstream-proxy"));
+        assert_eq!(transport["kind"], json!("provider-direct"));
         assert_eq!(transport["active_transport_kind"], json!("api-stream"));
+        assert_eq!(transport["provider_runtime"]["provider"], json!("openai"));
+        assert_eq!(
+            transport["provider_runtime"]["family"],
+            json!("openai-compatible")
+        );
+        assert_eq!(
+            transport["provider_runtime"]["request_format"],
+            json!("chat-completions")
+        );
         assert_eq!(
             transport["capabilities"]["live_remote_transport"],
             json!(false)
         );
+        assert_eq!(
+            transport["capabilities"]["live_remote_transport_kind"],
+            json!("upstream-proxy-websocket")
+        );
+        assert_eq!(
+            transport["capabilities"]["live_remote_transport_ready"],
+            json!(false)
+        );
+        assert_eq!(
+            transport["capabilities"]["live_remote_transport_path_ready"],
+            json!(true)
+        );
+        assert_eq!(
+            transport["capabilities"]["live_remote_transport_selected"],
+            json!(false)
+        );
+        assert_eq!(
+            transport["capabilities"]["live_remote_transport_blocker_kind"],
+            json!("adapter-not-ported")
+        );
+        assert!(transport["capabilities"]["live_remote_transport_blocker_detail"]
+            .as_str()
+            .is_some_and(|detail| detail.contains("not ported in Rust")));
         assert_eq!(transport["bootstrap"]["remote_enabled"], json!(true));
         assert_eq!(transport["bootstrap"]["ready"], json!(true));
+        assert_eq!(
+            transport["bootstrap"]["websocket_probe"]["status"],
+            json!("skipped")
+        );
         assert_eq!(transport["bootstrap"]["token_present"], json!(true));
         assert_eq!(transport["bootstrap"]["missing"], json!([]));
         assert_eq!(
@@ -335,12 +411,44 @@ mod tests {
 
     #[test]
     fn build_turn_transport_metadata_reports_local_when_remote_is_unavailable() {
-        let metadata = build_turn_transport_metadata_from_env_map(&BTreeMap::new());
+        let metadata = build_turn_transport_metadata_from_env_map(&BTreeMap::new(), "simcoe");
 
-        assert_eq!(metadata["kind"], json!("local"));
+        assert_eq!(metadata["kind"], json!("provider-direct"));
         assert_eq!(metadata["active_transport_kind"], json!("api-stream"));
+        assert_eq!(metadata["provider_runtime"]["provider"], json!("simcoe"));
+        assert_eq!(
+            metadata["provider_runtime"]["family"],
+            json!("anthropic-compatible")
+        );
+        assert_eq!(
+            metadata["capabilities"]["live_remote_transport_kind"],
+            json!("upstream-proxy-websocket")
+        );
+        assert_eq!(
+            metadata["capabilities"]["live_remote_transport_ready"],
+            json!(false)
+        );
+        assert_eq!(
+            metadata["capabilities"]["live_remote_transport_path_ready"],
+            json!(false)
+        );
+        assert_eq!(
+            metadata["capabilities"]["live_remote_transport_selected"],
+            json!(false)
+        );
+        assert_eq!(
+            metadata["capabilities"]["live_remote_transport_blocker_kind"],
+            json!("disabled")
+        );
+        assert!(metadata["capabilities"]["live_remote_transport_blocker_detail"]
+            .as_str()
+            .is_some_and(|detail| detail.contains("SIMCOE_AI_REMOTE disabled")));
         assert_eq!(metadata["bootstrap"]["remote_enabled"], json!(false));
         assert_eq!(metadata["bootstrap"]["ready"], json!(false));
+        assert_eq!(
+            metadata["bootstrap"]["websocket_probe"]["status"],
+            json!("skipped")
+        );
         assert_eq!(metadata["bootstrap"]["token_present"], json!(false));
         assert_eq!(metadata["bootstrap"]["inherited_proxy_env_count"], json!(0));
         assert_eq!(
@@ -373,9 +481,10 @@ mod tests {
             ),
         ]);
 
-        let metadata = build_turn_transport_metadata_from_env_map(&env_map);
+        let metadata = build_turn_transport_metadata_from_env_map(&env_map, "anthropic");
 
         assert_eq!(metadata["bootstrap"]["ready"], json!(false));
+        assert_eq!(metadata["provider_runtime"]["provider"], json!("anthropic"));
         assert_eq!(
             metadata["bootstrap"]["ws_url"],
             json!("wss://remote.test/v1/code/upstreamproxy/ws")
@@ -385,6 +494,62 @@ mod tests {
             metadata["bootstrap"]["inherited_proxy_env_keys"],
             json!(["HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE"])
         );
+    }
+
+    #[test]
+    fn build_turn_transport_metadata_downgrades_remote_readiness_when_probe_fails() {
+        let token_dir = std::env::temp_dir().join("claw-transport-probe-failure");
+        let token_path = token_dir.join("session_token");
+        fs::create_dir_all(&token_dir).expect("create temp dir");
+        fs::write(&token_path, "token-value\n").expect("write session token");
+        let unused_port = std::net::TcpListener::bind("127.0.0.1:0")
+            .expect("bind port")
+            .local_addr()
+            .expect("local addr")
+            .port();
+
+        let env_map = BTreeMap::from([
+            ("SIMCOE_AI_REMOTE".to_string(), "1".to_string()),
+            (
+                "SIMCOE_AI_REMOTE_SESSION_ID".to_string(),
+                "session-123".to_string(),
+            ),
+            (
+                "SIMCOE_AI_BASE_URL".to_string(),
+                format!("http://127.0.0.1:{unused_port}"),
+            ),
+            ("CCR_UPSTREAM_PROXY_ENABLED".to_string(), "true".to_string()),
+            (
+                "CCR_SESSION_TOKEN_PATH".to_string(),
+                token_path.display().to_string(),
+            ),
+            ("CCR_UPSTREAM_PROXY_PROBE".to_string(), "1".to_string()),
+        ]);
+
+        let metadata = build_turn_transport_metadata_from_env_map(&env_map, "simcoe");
+
+        assert_eq!(metadata["bootstrap"]["ready"], json!(true));
+        assert_eq!(
+            metadata["bootstrap"]["websocket_probe"]["status"],
+            json!("failed")
+        );
+        assert_eq!(
+            metadata["capabilities"]["live_remote_transport_ready"],
+            json!(false)
+        );
+        assert_eq!(
+            metadata["capabilities"]["live_remote_transport_path_ready"],
+            json!(false)
+        );
+        assert_eq!(
+            metadata["capabilities"]["live_remote_transport_blocker_kind"],
+            json!("probe-failed")
+        );
+        assert!(metadata["capabilities"]["live_remote_transport_blocker_detail"]
+            .as_str()
+            .is_some_and(|detail| detail.contains("failed to connect")));
+
+        let _ = fs::remove_dir_all(token_dir);
     }
 
     #[test]

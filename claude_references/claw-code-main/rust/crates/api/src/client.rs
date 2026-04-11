@@ -197,6 +197,11 @@ impl SimcoeApiClient {
         &self.auth
     }
 
+    #[must_use]
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
     pub async fn send_message(
         &self,
         request: &MessageRequest,
