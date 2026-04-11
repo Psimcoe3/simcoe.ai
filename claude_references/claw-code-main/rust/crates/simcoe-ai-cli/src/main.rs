@@ -64,8 +64,8 @@ use session_manager::{
     ManagedSessionSummary, SessionHandle,
 };
 use tools::{
-    execute_tool, mvp_tool_specs, runtime_tool_definitions, tool_name_is_allowed,
-    tool_output_schema, ToolSpec,
+    execute_tool, mvp_tool_specs, runtime_tool_definitions, tool_name_is_allowed, InspectableTool,
+    InspectableToolSource, ToolSpec,
 };
 use tui::status_bar::StatusBarHandle;
 
@@ -696,6 +696,7 @@ fn mcp_server_payload(server: &McpServerSnapshot) -> serde_json::Value {
         "runtime": {
             "transport": server.runtime.transport.as_str(),
             "status": server.runtime.status.as_str(),
+            "reason_kind": server.runtime.reason_kind.map(runtime::McpReasonKind::as_str),
             "detail": server.runtime.detail.as_deref(),
             "auth_kind": server.runtime.auth_kind.as_str(),
             "requires_user_auth": server.runtime.requires_user_auth,
@@ -715,11 +716,17 @@ fn mcp_server_payload(server: &McpServerSnapshot) -> serde_json::Value {
 }
 
 fn mcp_attention_payload(server: &McpAttentionSnapshot) -> serde_json::Value {
+    let hint = server
+        .detail
+        .as_deref()
+        .and_then(runtime::mcp_reason_remediation_hint);
     json!({
         "name": server.name.as_str(),
         "transport": server.transport,
         "status": server.status.as_str(),
+        "reason_kind": server.reason_kind.map(runtime::McpReasonKind::as_str),
         "detail": server.detail.as_deref(),
+        "remediation_hint": hint,
     })
 }
 
@@ -728,10 +735,13 @@ fn mcp_attention_payloads(servers: &[McpAttentionSnapshot]) -> Vec<serde_json::V
 }
 
 fn mcp_blocked_server_payload(server: &McpBlockedServerSnapshot) -> serde_json::Value {
+    let hint = runtime::mcp_reason_remediation_hint(&server.detail);
     json!({
         "name": server.name.as_str(),
         "transport": server.transport,
+        "reason_kind": server.reason_kind.as_str(),
         "detail": server.detail.as_str(),
+        "remediation_hint": hint,
     })
 }
 
@@ -1145,25 +1155,27 @@ fn doctor_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     Ok(serde_json::Value::Object(payload))
 }
 
-fn rust_tool_summary_payload(spec: &ToolSpec) -> serde_json::Value {
+fn rust_tool_summary_payload(spec: &InspectableTool) -> serde_json::Value {
     json!({
         "name": spec.name,
         "description": spec.description,
+        "source": spec.source.as_str(),
         "required_permission": spec.required_permission.as_str(),
     })
 }
 
-fn rust_tool_detail_payload(spec: &ToolSpec) -> serde_json::Value {
+fn rust_tool_detail_payload(spec: &InspectableTool) -> serde_json::Value {
     let mut payload = serde_json::Map::from_iter([
         ("name".to_string(), json!(spec.name)),
         ("description".to_string(), json!(spec.description)),
+        ("source".to_string(), json!(spec.source.as_str())),
         (
             "required_permission".to_string(),
             json!(spec.required_permission.as_str()),
         ),
         ("input_schema".to_string(), spec.input_schema.clone()),
     ]);
-    if let Some(output_schema) = tool_output_schema(spec.name) {
+    if let Some(output_schema) = spec.output_schema.clone() {
         payload.insert("output_schema".to_string(), output_schema);
     }
     serde_json::Value::Object(payload)
@@ -1214,11 +1226,29 @@ fn tools_payload(tool: Option<String>) -> Result<serde_json::Value, Box<dyn std:
             .map(archived_tool_family_payload)
             .collect::<Vec<_>>()
     });
+    let registry_tool_count = snapshot
+        .rust_tools
+        .iter()
+        .filter(|tool| tool.source == InspectableToolSource::Registry)
+        .count();
+    let dynamic_mcp_tool_count = snapshot
+        .rust_tools
+        .iter()
+        .filter(|tool| tool.source == InspectableToolSource::DynamicMcp)
+        .count();
 
     payload.insert(
         "rust_registry".to_string(),
         json!({
             "tool_count": snapshot.rust_tools.len(),
+            "registry_tool_count": registry_tool_count,
+            "dynamic_mcp_tool_count": dynamic_mcp_tool_count,
+            "pending_mcp_servers": snapshot
+                .pending_mcp_servers
+                .iter()
+                .map(|entry| entry.server.clone())
+                .collect::<Vec<_>>(),
+            "pending_mcp_server_details": snapshot.pending_mcp_servers,
             "tools": snapshot
                 .rust_tools
                 .iter()
@@ -2917,6 +2947,103 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
         }
         "glob_search" | "Glob" => format_search_start("🔎 Glob", &parsed),
         "grep_search" | "Grep" => format_search_start("🔎 Grep", &parsed),
+        "AskUserQuestionTool" => {
+            let question = parsed
+                .get("question")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!("\x1b[1;36m? {}\x1b[0m", truncate_for_summary(question, 120))
+        }
+        "TaskCreateTool" => {
+            let description = parsed
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!(
+                "\x1b[38;5;99m⊕ Creating task:\x1b[0m {}",
+                truncate_for_summary(description, 100)
+            )
+        }
+        "TaskGetTool" | "TaskOutputTool" => {
+            let task_id = parsed
+                .get("task_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!(
+                "\x1b[2m↩ {name} {}\x1b[0m",
+                truncate_for_summary(task_id, 40)
+            )
+        }
+        "TaskListTool" => {
+            let status_hint = parsed
+                .get("status")
+                .and_then(|v| v.as_str())
+                .map(|s| format!(" [{s}]"))
+                .unwrap_or_default();
+            format!("\x1b[2m↩ TaskListTool{status_hint}\x1b[0m")
+        }
+        "TaskStopTool" => {
+            let task_id = parsed
+                .get("task_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!(
+                "\x1b[38;5;203m⊗ Stopping task {}\x1b[0m",
+                truncate_for_summary(task_id, 40)
+            )
+        }
+        "TaskUpdateTool" => {
+            let task_id = parsed
+                .get("task_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!(
+                "\x1b[38;5;99m✎ Updating task {}\x1b[0m",
+                truncate_for_summary(task_id, 40)
+            )
+        }
+        "LSPTool" => {
+            let command = parsed
+                .get("command")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!("\x1b[2m⬡ LSP {command}\x1b[0m")
+        }
+        "RemoteTriggerTool" => {
+            let event = parsed.get("event").and_then(|v| v.as_str()).unwrap_or("?");
+            format!("\x1b[2m⇝ trigger '{event}'\x1b[0m")
+        }
+        "TeamCreateTool" => {
+            let name_val = parsed.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+            format!("\x1b[2m⊕ TeamCreate '{name_val}'\x1b[0m")
+        }
+        "TeamDeleteTool" => {
+            let team_id = parsed
+                .get("team_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!(
+                "\x1b[2m⊗ TeamDelete {}\x1b[0m",
+                truncate_for_summary(team_id, 40)
+            )
+        }
+        "CronCreateTool" => {
+            let schedule = parsed
+                .get("schedule")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let command = parsed
+                .get("command")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!(
+                "\x1b[2m⊕ CronCreate [{schedule}] {}\x1b[0m",
+                truncate_for_summary(command, 60)
+            )
+        }
+        "CronDeleteTool" | "CronListTool" => {
+            format!("\x1b[2m{name}\x1b[0m")
+        }
         "web_search" | "WebSearch" => parsed
             .get("query")
             .and_then(|value| value.as_str())
@@ -2938,6 +3065,13 @@ fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
         "\x1b[1;32m✓\x1b[0m"
     };
     if is_error {
+        if matches!(
+            name,
+            "ListMcpResourcesTool" | "ReadMcpResourceTool" | "MCPTool" | "McpAuthTool"
+        ) || name.starts_with("mcp__")
+        {
+            return format_mcp_error_result(icon, name, output);
+        }
         let summary = truncate_for_summary(output.trim(), 160);
         return if summary.is_empty() {
             format!("{icon} \x1b[38;5;245m{name}\x1b[0m")
@@ -2955,6 +3089,22 @@ fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
         "edit_file" | "Edit" => format_edit_result(icon, &parsed),
         "glob_search" | "Glob" => format_glob_result(icon, &parsed),
         "grep_search" | "Grep" => format_grep_result(icon, &parsed),
+        "ListMcpResourcesTool" => format_list_mcp_resources_result(icon, &parsed),
+        "ReadMcpResourceTool" => format_read_mcp_resource_result(icon, &parsed),
+        "MCPTool" => format_mcp_tool_result(icon, "MCPTool", &parsed),
+        "McpAuthTool" => format_mcp_auth_result(icon, &parsed),
+        "ToolSearch" => format_tool_search_result(icon, &parsed),
+        "AskUserQuestionTool" => format_ask_user_question_result(icon, &parsed),
+        "TaskCreateTool" | "TaskGetTool" | "TaskStopTool" | "TaskUpdateTool" => {
+            format_task_manifest_result(icon, name, &parsed)
+        }
+        "TaskListTool" => format_task_list_result(icon, &parsed),
+        "TaskOutputTool" => format_task_output_result(icon, &parsed),
+        "LSPTool" | "RemoteTriggerTool" | "TeamCreateTool" | "TeamDeleteTool"
+        | "CronCreateTool" | "CronDeleteTool" | "CronListTool" => {
+            format_stub_tool_result(icon, name, output)
+        }
+        _ if name.starts_with("mcp__") => format_mcp_tool_result(icon, name, &parsed),
         _ => {
             let summary = truncate_for_summary(output.trim(), 200);
             format!("{icon} \x1b[38;5;245m{name}:\x1b[0m {summary}")
@@ -3200,6 +3350,764 @@ fn format_grep_result(icon: &str, parsed: &serde_json::Value) -> String {
     } else {
         summary
     }
+}
+
+fn format_tool_search_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let query = parsed
+        .get("query")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("<empty query>");
+    let match_count = parsed
+        .get("match_details")
+        .and_then(|value| value.as_array())
+        .map_or_else(
+            || {
+                parsed
+                    .get("matches")
+                    .and_then(|value| value.as_array())
+                    .map_or(0, Vec::len)
+            },
+            Vec::len,
+        );
+    let mut lines = vec![if match_count == 0 {
+        format!("{icon} \x1b[38;5;245mToolSearch\x1b[0m no matches for {query}")
+    } else {
+        format!(
+            "{icon} \x1b[38;5;245mToolSearch\x1b[0m {match_count} match{} for {query}",
+            if match_count == 1 { "" } else { "es" }
+        )
+    }];
+
+    if let Some(details) = parsed
+        .get("match_details")
+        .and_then(|value| value.as_array())
+    {
+        let rendered = details
+            .iter()
+            .take(4)
+            .filter_map(|detail| {
+                let name = detail.get("name")?.as_str()?;
+                let source = detail
+                    .get("source")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("unknown");
+                let permission = detail
+                    .get("required_permission")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("unknown");
+                let source_label = if source == "dynamic-mcp" {
+                    detail
+                        .get("mcp_server")
+                        .and_then(|value| value.as_str())
+                        .map(|server| format!("dynamic-mcp:{server}"))
+                        .unwrap_or_else(|| source.to_string())
+                } else {
+                    source.to_string()
+                };
+                let description = detail
+                    .get("description")
+                    .and_then(|value| value.as_str())
+                    .map(|value| truncate_for_summary(value, 72))
+                    .unwrap_or_default();
+                let description = if description.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {description}")
+                };
+                Some(format!(
+                    "  - {name} [{source_label}, {permission}]{description}"
+                ))
+            })
+            .collect::<Vec<_>>();
+        if !rendered.is_empty() {
+            lines.push(String::from("Matches"));
+            lines.extend(rendered);
+            if details.len() > 4 {
+                lines.push(format!("  - +{} more", details.len() - 4));
+            }
+        }
+    } else if let Some(matches) = parsed.get("matches").and_then(|value| value.as_array()) {
+        let rendered = matches
+            .iter()
+            .take(4)
+            .filter_map(|value| value.as_str())
+            .map(|name| format!("  - {name}"))
+            .collect::<Vec<_>>();
+        if !rendered.is_empty() {
+            lines.push(String::from("Matches"));
+            lines.extend(rendered);
+            if matches.len() > 4 {
+                lines.push(format!("  - +{} more", matches.len() - 4));
+            }
+        }
+    }
+
+    if let Some(entries) = parsed
+        .get("pending_mcp_server_details")
+        .and_then(|value| value.as_array())
+        .filter(|entries| !entries.is_empty())
+    {
+        lines.push(String::from("Pending MCP discovery"));
+        lines.extend(entries.iter().take(3).filter_map(|entry| {
+            let server = entry.get("server")?.as_str()?;
+            let reason_kind = entry
+                .get("reason_kind")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
+            let detail = entry
+                .get("detail")
+                .and_then(|value| value.as_str())
+                .map(|value| truncate_for_summary(value, 96))
+                .unwrap_or_default();
+            let detail = if detail.is_empty() {
+                String::new()
+            } else {
+                format!(" {detail}")
+            };
+            Some(format!("  - {server} [{reason_kind}]{detail}"))
+        }));
+        if entries.len() > 3 {
+            lines.push(format!("  - +{} more pending servers", entries.len() - 3));
+        }
+    }
+
+    lines.join("\n")
+}
+
+fn format_task_manifest_result(icon: &str, label: &str, parsed: &serde_json::Value) -> String {
+    let agent_id = parsed
+        .get("agentId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let status = parsed.get("status").and_then(|v| v.as_str()).unwrap_or("?");
+    let name = parsed.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let status_color = match status {
+        "completed" => "\x1b[1;32m",
+        "running" => "\x1b[1;33m",
+        "failed" => "\x1b[1;31m",
+        "stopped" => "\x1b[38;5;203m",
+        _ => "\x1b[38;5;245m",
+    };
+    let name_suffix = if name.is_empty() {
+        String::new()
+    } else {
+        format!(" {name}")
+    };
+    format!(
+        "{icon} \x1b[38;5;245m{label}\x1b[0m{name_suffix}\n  \x1b[2mid:\x1b[0m {}\n  \x1b[2mstatus:\x1b[0m {status_color}{status}\x1b[0m",
+        truncate_for_summary(agent_id, 40)
+    )
+}
+
+fn format_task_list_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let total = parsed.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
+    let tasks = parsed
+        .get("tasks")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.as_slice())
+        .unwrap_or(&[]);
+    let filter_hint = parsed
+        .get("filteredBy")
+        .and_then(|v| v.as_str())
+        .map(|s| format!(" [{s}]"))
+        .unwrap_or_default();
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mTaskListTool\x1b[0m{filter_hint} \x1b[2m({total} tasks)\x1b[0m"
+    )];
+    for task in tasks.iter().take(5) {
+        let id = task.get("agentId").and_then(|v| v.as_str()).unwrap_or("?");
+        let status = task.get("status").and_then(|v| v.as_str()).unwrap_or("?");
+        let name = task.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+        lines.push(format!(
+            "  \x1b[2m{}\x1b[0m {} [{status}]",
+            truncate_for_summary(id, 20),
+            truncate_for_summary(name, 30)
+        ));
+    }
+    if total > 5 {
+        lines.push(format!("  \x1b[2m+{} more\x1b[0m", total - 5));
+    }
+    lines.join("\n")
+}
+
+fn format_task_output_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let task_id = parsed.get("taskId").and_then(|v| v.as_str()).unwrap_or("?");
+    let status = parsed.get("status").and_then(|v| v.as_str()).unwrap_or("?");
+    let output = parsed.get("output").and_then(|v| v.as_str()).unwrap_or("");
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mTaskOutputTool\x1b[0m {}\n  \x1b[2mstatus:\x1b[0m {status}",
+        truncate_for_summary(task_id, 40)
+    )];
+    if !output.trim().is_empty() {
+        lines.push(format!(
+            "  \x1b[2moutput:\x1b[0m {}",
+            truncate_for_summary(output.trim(), 120)
+        ));
+    }
+    lines.join("\n")
+}
+
+fn format_stub_tool_result(icon: &str, name: &str, output: &str) -> String {
+    let summary = truncate_for_summary(output.trim(), 120);
+    if summary.is_empty() {
+        format!("{icon} \x1b[38;5;245m{name}\x1b[0m")
+    } else {
+        format!("{icon} \x1b[38;5;245m{name}\x1b[0m\n  \x1b[2m{summary}\x1b[0m")
+    }
+}
+
+fn format_ask_user_question_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let question = parsed
+        .get("question")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let answer = parsed.get("answer").and_then(|v| v.as_str()).unwrap_or("");
+    let mut lines = vec![format!("{icon} \x1b[38;5;245mAskUserQuestionTool\x1b[0m")];
+    lines.push(format!(
+        "  \x1b[2mQ:\x1b[0m {}",
+        truncate_for_summary(question, 100)
+    ));
+    if !answer.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mA:\x1b[0m {}",
+            truncate_for_summary(answer, 100)
+        ));
+    }
+    lines.join("\n")
+}
+
+fn format_mcp_error_result(icon: &str, label: &str, output: &str) -> String {
+    let trimmed = output.trim();
+    let summary = truncate_for_summary(trimmed, 160);
+    let server = extract_mcp_server_name_from_error(trimmed);
+    let reason_kind = runtime::classify_mcp_reason_kind(trimmed).as_str();
+    let context = extract_mcp_error_context(trimmed);
+    let mut tags = vec![reason_kind.to_string()];
+    if let Some(operation) = context.operation {
+        tags.push(operation.to_string());
+    }
+    if let Some(http_status) = context.http_status {
+        tags.push(format!("HTTP {http_status}"));
+    }
+    let tags = tags.join(", ");
+
+    let header = match server {
+        Some(server) => format!("{icon} \x1b[38;5;245m{label}\x1b[0m {server} [{tags}]"),
+        None => format!("{icon} \x1b[38;5;245m{label}\x1b[0m [{tags}]"),
+    };
+
+    let mut lines = vec![header];
+    if !summary.is_empty() {
+        lines.push(format!("\x1b[38;5;203m{summary}\x1b[0m"));
+    }
+    if let Some(hint) = runtime::mcp_reason_remediation_hint(trimmed) {
+        lines.push(format!("\x1b[38;5;246mHint {hint}\x1b[0m"));
+    }
+    lines.join("\n")
+}
+
+fn extract_mcp_server_name_from_error(output: &str) -> Option<&str> {
+    let marker = "MCP server `";
+    let start = output.find(marker)? + marker.len();
+    let remainder = &output[start..];
+    let end = remainder.find('`')?;
+    Some(&remainder[..end])
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct McpErrorContext<'a> {
+    operation: Option<&'a str>,
+    http_status: Option<u16>,
+}
+
+fn extract_mcp_error_context(output: &str) -> McpErrorContext<'_> {
+    if let Some((http_status, operation)) = extract_mcp_http_error_context(output) {
+        return McpErrorContext {
+            operation,
+            http_status: Some(http_status),
+        };
+    }
+    if let Some(operation) = extract_mcp_jsonrpc_error_operation(output) {
+        return McpErrorContext {
+            operation: Some(operation),
+            http_status: None,
+        };
+    }
+    if let Some(operation) = extract_mcp_request_failure_operation(output) {
+        return McpErrorContext {
+            operation: Some(operation),
+            http_status: None,
+        };
+    }
+    McpErrorContext::default()
+}
+
+fn extract_mcp_http_error_context(output: &str) -> Option<(u16, Option<&str>)> {
+    let marker = " failed with HTTP ";
+    if let Some(position) = output.find(marker) {
+        let status_and_detail = &output[position + marker.len()..];
+        let status_end = status_and_detail
+            .find(':')
+            .unwrap_or(status_and_detail.len());
+        let http_status = status_and_detail[..status_end].trim().parse().ok()?;
+        let operation = if output.starts_with("OAuth refresh for MCP server `") {
+            Some("oauth-refresh")
+        } else if output.starts_with("OAuth metadata request for MCP server `") {
+            Some("oauth-metadata")
+        } else {
+            None
+        };
+        return Some((http_status, operation));
+    }
+
+    let marker = " returned HTTP ";
+    let position = output.find(marker)?;
+    let status_and_rest = &output[position + marker.len()..];
+    let (status, rest) = status_and_rest.split_once(" for ")?;
+    let http_status = status.trim().parse().ok()?;
+    let operation_end = rest.find(':').unwrap_or(rest.len());
+    let operation = rest[..operation_end].trim();
+    let operation = (!operation.is_empty()).then_some(operation);
+    Some((http_status, operation))
+}
+
+fn extract_mcp_jsonrpc_error_operation(output: &str) -> Option<&str> {
+    let marker = " returned JSON-RPC error for ";
+    let position = output.find(marker)?;
+    let rest = &output[position + marker.len()..];
+    let operation_end = rest.find(':').unwrap_or(rest.len());
+    let operation = rest[..operation_end].trim();
+    (!operation.is_empty()).then_some(operation)
+}
+
+fn extract_mcp_request_failure_operation(output: &str) -> Option<&str> {
+    let marker = " request failed";
+    let position = output.find(marker)?;
+    let prefix = &output[..position];
+    let operation = prefix.rsplit_once(' ')?.1.trim();
+    (!operation.is_empty()).then_some(operation)
+}
+
+fn format_list_mcp_resources_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let server = parsed
+        .get("server")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let transport = parsed
+        .get("transport")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let resource_count = parsed
+        .get("resourceCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mListMcpResourcesTool\x1b[0m {server} [{transport}] {resource_count} resource{}",
+        if resource_count == 1 { "" } else { "s" }
+    )];
+
+    if let Some(resources) = parsed.get("resources").and_then(|value| value.as_array()) {
+        let rendered = resources
+            .iter()
+            .take(4)
+            .filter_map(format_mcp_resource_entry)
+            .collect::<Vec<_>>();
+        if !rendered.is_empty() {
+            lines.push(String::from("Resources"));
+            lines.extend(rendered);
+            if resources.len() > 4 {
+                lines.push(format!("  - +{} more resources", resources.len() - 4));
+            }
+        }
+    }
+
+    lines.join("\n")
+}
+
+fn format_read_mcp_resource_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let server = parsed
+        .get("server")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let transport = parsed
+        .get("transport")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let uri = parsed
+        .get("uri")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let content_count = parsed
+        .get("contentCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mReadMcpResourceTool\x1b[0m {uri} from {server} [{transport}] {content_count} item{}",
+        if content_count == 1 { "" } else { "s" }
+    )];
+
+    if let Some(contents) = parsed.get("contents").and_then(|value| value.as_array()) {
+        let rendered = contents
+            .iter()
+            .take(4)
+            .map(format_mcp_resource_content_entry)
+            .collect::<Vec<_>>();
+        if !rendered.is_empty() {
+            lines.push(String::from("Contents"));
+            lines.extend(rendered);
+            if contents.len() > 4 {
+                lines.push(format!("  - +{} more content items", contents.len() - 4));
+            }
+        }
+    }
+
+    lines.join("\n")
+}
+
+fn format_mcp_resource_entry(entry: &serde_json::Value) -> Option<String> {
+    let uri = entry.get("uri")?.as_str()?;
+    let mut details = Vec::new();
+    if let Some(name) = entry.get("name").and_then(|value| value.as_str()) {
+        if !name.is_empty() {
+            details.push(name.to_string());
+        }
+    }
+    if let Some(mime_type) = entry.get("mimeType").and_then(|value| value.as_str()) {
+        if !mime_type.is_empty() {
+            details.push(format!("[{mime_type}]"));
+        }
+    }
+    if let Some(description) = entry.get("description").and_then(|value| value.as_str()) {
+        if !description.is_empty() {
+            details.push(truncate_for_summary(description, 72));
+        }
+    }
+    let details = if details.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", details.join(" "))
+    };
+    Some(format!("  - {uri}{details}"))
+}
+
+fn format_mcp_resource_content_entry(entry: &serde_json::Value) -> String {
+    let uri = entry
+        .get("uri")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let mime_type = entry
+        .get("mimeType")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.is_empty())
+        .map(|value| format!(" [{value}]"))
+        .unwrap_or_default();
+
+    if let Some(text) = entry.get("text").and_then(|value| value.as_str()) {
+        return format!("  - {uri}{mime_type} {}", truncate_for_summary(text, 96));
+    }
+
+    if let Some(blob) = entry.get("blob").and_then(|value| value.as_str()) {
+        return format!("  - {uri}{mime_type} blob {} chars", blob.chars().count());
+    }
+
+    format!("  - {uri}{mime_type}")
+}
+
+fn format_mcp_tool_result(icon: &str, label: &str, parsed: &serde_json::Value) -> String {
+    match parsed
+        .get("action")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
+    {
+        "list_tools" => format_mcp_tool_list_result(icon, label, parsed),
+        "call_tool" => format_mcp_tool_call_result(icon, label, parsed),
+        _ => {
+            let summary = truncate_for_summary(&parsed.to_string(), 200);
+            format!("{icon} \x1b[38;5;245m{label}:\x1b[0m {summary}")
+        }
+    }
+}
+
+fn format_mcp_tool_list_result(icon: &str, label: &str, parsed: &serde_json::Value) -> String {
+    let server = parsed
+        .get("server")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let transport = parsed
+        .get("transport")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let tool_count = parsed
+        .get("toolCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245m{label}\x1b[0m list_tools {server} [{transport}] {tool_count} tool{}",
+        if tool_count == 1 { "" } else { "s" }
+    )];
+
+    if let Some(tools) = parsed.get("tools").and_then(|value| value.as_array()) {
+        let rendered = tools
+            .iter()
+            .take(4)
+            .filter_map(|tool| {
+                let name = tool.get("name")?.as_str()?;
+                let description = tool
+                    .get("description")
+                    .and_then(|value| value.as_str())
+                    .map(|value| truncate_for_summary(value, 72))
+                    .unwrap_or_default();
+                let description = if description.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {description}")
+                };
+                Some(format!("  - {name}{description}"))
+            })
+            .collect::<Vec<_>>();
+        if !rendered.is_empty() {
+            lines.push(String::from("Tools"));
+            lines.extend(rendered);
+            if tools.len() > 4 {
+                lines.push(format!("  - +{} more tools", tools.len() - 4));
+            }
+        }
+    }
+
+    lines.join("\n")
+}
+
+fn format_mcp_tool_call_result(icon: &str, label: &str, parsed: &serde_json::Value) -> String {
+    let server = parsed
+        .get("server")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let transport = parsed
+        .get("transport")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let tool = parsed
+        .get("tool")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let qualified_name = parsed
+        .get("qualifiedToolName")
+        .and_then(|value| value.as_str())
+        .unwrap_or(tool);
+    let is_error = parsed
+        .get("isError")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245m{label}\x1b[0m call_tool {qualified_name} on {server} [{transport}]{}",
+        if is_error { " error" } else { "" }
+    )];
+
+    if let Some(content) = parsed.get("content").and_then(|value| value.as_array()) {
+        let rendered = content
+            .iter()
+            .take(3)
+            .map(format_mcp_tool_content_entry)
+            .collect::<Vec<_>>();
+        if !rendered.is_empty() {
+            lines.push(String::from("Content"));
+            lines.extend(rendered);
+            if content.len() > 3 {
+                lines.push(format!("  - +{} more content items", content.len() - 3));
+            }
+        }
+    }
+
+    if let Some(structured) = parsed.get("structuredContent") {
+        if !structured.is_null() {
+            lines.push(format!(
+                "Structured {}",
+                truncate_for_summary(&structured.to_string(), 120)
+            ));
+        }
+    }
+
+    lines.join("\n")
+}
+
+fn format_mcp_tool_content_entry(entry: &serde_json::Value) -> String {
+    match entry.get("type").and_then(|value| value.as_str()) {
+        Some("text") => {
+            let text = entry
+                .get("text")
+                .and_then(|value| value.as_str())
+                .map(|value| truncate_for_summary(value, 96))
+                .unwrap_or_else(|| truncate_for_summary(&entry.to_string(), 96));
+            format!("  - text {text}")
+        }
+        Some(content_type) => format!(
+            "  - {content_type} {}",
+            truncate_for_summary(&entry.to_string(), 96)
+        ),
+        None => format!("  - {}", truncate_for_summary(&entry.to_string(), 96)),
+    }
+}
+
+fn format_mcp_auth_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let action = parsed
+        .get("action")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("status");
+    let server_count = parsed
+        .get("serverCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let supported_count = parsed
+        .get("supportedExecutionCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let unsupported_count = parsed
+        .get("unsupportedExecutionCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mMcpAuthTool\x1b[0m {action} {server_count} server{} ({supported_count} executable, {unsupported_count} blocked)",
+        if server_count == 1 { "" } else { "s" }
+    )];
+
+    if let Some(status_counts) = parsed
+        .get("statusCounts")
+        .and_then(|value| value.as_object())
+    {
+        let mut rendered = status_counts
+            .iter()
+            .filter_map(|(status, count)| count.as_u64().map(|count| format!("{status}={count}")))
+            .collect::<Vec<_>>();
+        rendered.sort();
+        if !rendered.is_empty() {
+            lines.push(format!("Statuses {}", rendered.join(", ")));
+        }
+    }
+
+    if let Some(entries) = parsed
+        .get("attentionServers")
+        .and_then(|value| value.as_array())
+        .filter(|entries| !entries.is_empty())
+    {
+        lines.push(String::from("Attention"));
+        lines.extend(
+            entries
+                .iter()
+                .take(3)
+                .filter_map(format_mcp_auth_attention_entry),
+        );
+        if entries.len() > 3 {
+            lines.push(format!("  - +{} more attention servers", entries.len() - 3));
+        }
+    }
+
+    if let Some(entries) = parsed
+        .get("servers")
+        .and_then(|value| value.as_array())
+        .filter(|entries| !entries.is_empty() && (action != "status" || entries.len() <= 2))
+    {
+        let rendered = entries
+            .iter()
+            .take(3)
+            .filter_map(format_mcp_auth_server_entry)
+            .collect::<Vec<_>>();
+        if !rendered.is_empty() {
+            lines.push(String::from("Servers"));
+            lines.extend(rendered);
+            if entries.len() > 3 {
+                lines.push(format!("  - +{} more servers", entries.len() - 3));
+            }
+        }
+    }
+
+    lines.join("\n")
+}
+
+fn format_mcp_auth_attention_entry(entry: &serde_json::Value) -> Option<String> {
+    let server = entry.get("server")?.as_str()?;
+    let transport = entry
+        .get("transport")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let status = entry
+        .get("status")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let reason_kind = entry
+        .get("reasonKind")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let detail = entry
+        .get("detail")
+        .and_then(|value| value.as_str())
+        .map(|value| truncate_for_summary(value, 96))
+        .unwrap_or_default();
+    let detail = if detail.is_empty() {
+        String::new()
+    } else {
+        format!(" {detail}")
+    };
+
+    Some(format!(
+        "  - {server} [{transport}, {status}, {reason_kind}]{detail}"
+    ))
+}
+
+fn format_mcp_auth_server_entry(entry: &serde_json::Value) -> Option<String> {
+    let server = entry.get("server")?.as_str()?;
+    let status = entry
+        .get("status")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+
+    let mut tags = Vec::new();
+    if let Some(auth_kind) = entry.get("authKind").and_then(|value| value.as_str()) {
+        if auth_kind != "none" {
+            tags.push(auth_kind.to_string());
+        }
+    }
+    if let Some(reason_kind) = entry.get("reasonKind").and_then(|value| value.as_str()) {
+        tags.push(reason_kind.to_string());
+    }
+    if entry
+        .get("storedCredentials")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+    {
+        tags.push(String::from("stored-credentials"));
+    }
+    if entry
+        .get("refreshTokenPresent")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+    {
+        tags.push(String::from("refresh-token"));
+    }
+
+    let tags = if tags.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", tags.join(", "))
+    };
+    let detail = entry
+        .get("detail")
+        .and_then(|value| value.as_str())
+        .map(|value| truncate_for_summary(value, 96))
+        .unwrap_or_default();
+    let detail = if detail.is_empty() {
+        String::new()
+    } else {
+        format!(" {detail}")
+    };
+
+    Some(format!("  - {server} [{status}]{tags}{detail}"))
 }
 
 fn summarize_tool_payload(payload: &str) -> String {
@@ -3557,6 +4465,7 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::path::PathBuf;
+    use std::process::Command;
     use std::sync::{Mutex, OnceLock};
     use std::thread;
     use tools::mvp_tool_specs;
@@ -5011,6 +5920,129 @@ mod tests {
         std::env::temp_dir().join(format!("claw-cli-{name}-{nanos}"))
     }
 
+    fn detect_first_command(candidates: &[&str]) -> String {
+        candidates
+            .iter()
+            .find(|candidate| Command::new(candidate).arg("--version").output().is_ok())
+            .map(|candidate| (*candidate).to_string())
+            .unwrap_or_else(|| panic!("no command found in {:?}", candidates))
+    }
+
+    fn write_tools_mcp_server_script() -> PathBuf {
+        let root = temp_path("tools-mcp-server-script");
+        fs::create_dir_all(&root).expect("create mcp server root");
+        let script_path = root.join("tools-mcp-server.py");
+        let script = [
+            "#!/usr/bin/env python3",
+            "import json, sys",
+            "",
+            "def read_message():",
+            "    header = b''",
+            r"    while not header.endswith(b'\r\n\r\n'):",
+            "        chunk = sys.stdin.buffer.read(1)",
+            "        if not chunk:",
+            "            return None",
+            "        header += chunk",
+            "    length = 0",
+            r"    for line in header.decode().split('\r\n'):",
+            r"        if line.lower().startswith('content-length:'):",
+            r"            length = int(line.split(':', 1)[1].strip())",
+            "    payload = sys.stdin.buffer.read(length)",
+            "    return json.loads(payload.decode())",
+            "",
+            "def send_message(message):",
+            "    payload = json.dumps(message).encode()",
+            r"    sys.stdout.buffer.write(f'Content-Length: {len(payload)}\r\n\r\n'.encode() + payload)",
+            "    sys.stdout.buffer.flush()",
+            "",
+            "while True:",
+            "    request = read_message()",
+            "    if request is None:",
+            "        break",
+            "    method = request['method']",
+            "    if method == 'initialize':",
+            "        send_message({",
+            "            'jsonrpc': '2.0',",
+            "            'id': request['id'],",
+            "            'result': {",
+            "                'protocolVersion': request['params']['protocolVersion'],",
+            "                'capabilities': {'tools': {}, 'resources': {}},",
+            "                'serverInfo': {'name': 'alpha', 'version': '1.0.0'}",
+            "            }",
+            "        })",
+            "    elif method == 'tools/list':",
+            "        send_message({",
+            "            'jsonrpc': '2.0',",
+            "            'id': request['id'],",
+            "            'result': {",
+            "                'tools': [",
+            "                    {",
+            "                        'name': 'echo',",
+            "                        'description': 'Echoes back the provided text',",
+            "                        'inputSchema': {",
+            "                            'type': 'object',",
+            "                            'properties': {'text': {'type': 'string'}},",
+            "                            'required': ['text']",
+            "                        }",
+            "                    }",
+            "                ]",
+            "            }",
+            "        })",
+            "    elif method == 'tools/call':",
+            "        args = request['params'].get('arguments') or {}",
+            "        text = args.get('text', '')",
+            "        send_message({",
+            "            'jsonrpc': '2.0',",
+            "            'id': request['id'],",
+            "            'result': {",
+            "                'content': [{'type': 'text', 'text': f'echo:{text}'}],",
+            "                'structuredContent': {'echoed': text, 'server': 'alpha'},",
+            "                'isError': False",
+            "            }",
+            "        })",
+            "    elif method == 'resources/list':",
+            "        send_message({",
+            "            'jsonrpc': '2.0',",
+            "            'id': request['id'],",
+            "            'result': {",
+            "                'resources': [",
+            "                    {",
+            "                        'uri': 'file://guide.txt',",
+            "                        'name': 'guide',",
+            "                        'description': 'Guide file',",
+            "                        'mimeType': 'text/plain'",
+            "                    }",
+            "                ]",
+            "            }",
+            "        })",
+            "    elif method == 'resources/read':",
+            "        uri = request['params']['uri']",
+            "        send_message({",
+            "            'jsonrpc': '2.0',",
+            "            'id': request['id'],",
+            "            'result': {",
+            "                'contents': [",
+            "                    {",
+            "                        'uri': uri,",
+            "                        'mimeType': 'text/plain',",
+            "                        'text': f'contents for {uri}'",
+            "                    }",
+            "                ]",
+            "            }",
+            "        })",
+            "    else:",
+            "        send_message({",
+            "            'jsonrpc': '2.0',",
+            "            'id': request['id'],",
+            "            'error': {'code': -32601, 'message': f'unknown method: {method}'},",
+            "        })",
+            "",
+        ]
+        .join("\n");
+        fs::write(&script_path, script).expect("write mcp server script");
+        script_path
+    }
+
     fn spawn_http_server(response: String) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
         let address = listener.local_addr().expect("listener addr");
@@ -5705,6 +6737,12 @@ mod tests {
                 payload["rust_registry"]["tool_count"],
                 json!(mvp_tool_specs().len())
             );
+            assert_eq!(payload["rust_registry"]["dynamic_mcp_tool_count"], json!(0));
+            assert_eq!(payload["rust_registry"]["pending_mcp_servers"], json!([]));
+            assert_eq!(
+                payload["rust_registry"]["pending_mcp_server_details"],
+                json!([])
+            );
             assert_eq!(payload["archived_snapshot"]["available"], json!(true));
             assert_eq!(payload["archived_snapshot"]["family_count"], json!(2));
             assert_eq!(
@@ -5811,6 +6849,16 @@ mod tests {
                 payload["rust_tool"]["output_schema"]["properties"]["attentionServers"]["type"],
                 json!("array")
             );
+            assert_eq!(
+                payload["rust_tool"]["output_schema"]["properties"]["attentionServers"]["items"]
+                    ["properties"]["reasonKind"]["type"],
+                json!("string")
+            );
+            assert_eq!(
+                payload["rust_tool"]["output_schema"]["properties"]["servers"]["items"]
+                    ["properties"]["reasonKind"]["type"],
+                json!("string")
+            );
             assert!(payload["archived_family"].is_null());
         }
 
@@ -5888,6 +6936,142 @@ mod tests {
     }
 
     #[test]
+    fn tools_report_renders_tool_search_output_schema() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("tools-tool-search-selected");
+        let nested_cwd = repo_root.join("rust");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+
+        {
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report = render_tools_report(Some("ToolSearch"))
+                .expect("selected ToolSearch report should render");
+            assert!(report.contains("Name             ToolSearch"));
+            assert!(report.contains("Output schema"));
+            assert!(report.contains("match_details"));
+            assert!(report.contains("pending_mcp_server_details"));
+            assert!(report.contains("reason_kind"));
+
+            let payload = super::tools_payload(Some("ToolSearch".to_string()))
+                .expect("selected ToolSearch payload should render");
+            assert_eq!(payload["type"], json!("tools"));
+            assert_eq!(payload["requested"], json!("ToolSearch"));
+            assert_eq!(payload["rust_tool"]["name"], json!("ToolSearch"));
+            assert_eq!(
+                payload["rust_tool"]["output_schema"]["properties"]["match_details"]["type"],
+                json!("array")
+            );
+            assert_eq!(
+                payload["rust_tool"]["output_schema"]["properties"]["pending_mcp_server_details"]
+                    ["items"]["properties"]["reason_kind"]["type"],
+                json!("string")
+            );
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn tools_report_lists_dynamic_mcp_tools_and_renders_selected_dynamic_tool() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("tools-dynamic-mcp-selected");
+        let nested_cwd = repo_root.join("rust");
+        let config_home = repo_root.join("home").join(".simcoe");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+        let script_path = write_tools_mcp_server_script();
+        let python = detect_first_command(&["python3", "python"]);
+        fs::write(
+            config_home.join("settings.json"),
+            serde_json::to_string_pretty(&json!({
+                "mcpServers": {
+                    "vendor": {
+                        "command": python,
+                        "args": [script_path.to_string_lossy().into_owned()]
+                    },
+                    "remote": {
+                        "type": "http",
+                        "url": "https://example.test/mcp",
+                        "headersHelper": "helper.sh"
+                    }
+                }
+            }))
+            .expect("serialize dynamic MCP settings"),
+        )
+        .expect("write dynamic MCP settings");
+
+        {
+            let _config_home_guard = ScopedEnvVar::set("SIMCOE_CONFIG_HOME", &config_home);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report = render_tools_report(None).expect("tools report should render");
+            assert!(report.contains("Dynamic MCP tools"));
+            assert!(report.contains("mcp__vendor__echo"));
+            assert!(report.contains("Pending MCP discovery"));
+            assert!(report.contains("remote"));
+            assert!(report.contains("unsupported-runtime"));
+            assert!(report.contains("headersHelper"));
+
+            let payload = super::tools_payload(None).expect("tools payload should render");
+            assert_eq!(payload["type"], json!("tools"));
+            assert_eq!(payload["rust_registry"]["dynamic_mcp_tool_count"], json!(1));
+            assert_eq!(
+                payload["rust_registry"]["pending_mcp_servers"],
+                json!(["remote"])
+            );
+            assert!(payload["rust_registry"]["pending_mcp_server_details"]
+                .as_array()
+                .is_some_and(|entries| entries.iter().any(|entry| {
+                    entry["server"] == json!("remote")
+                        && entry["reason_kind"] == json!("unsupported-runtime")
+                        && entry["detail"]
+                            .as_str()
+                            .is_some_and(|detail| detail.contains("headersHelper"))
+                })));
+            assert!(payload["rust_registry"]["tools"]
+                .as_array()
+                .is_some_and(|tools| tools.iter().any(|tool| {
+                    tool["name"] == json!("mcp__vendor__echo")
+                        && tool["source"] == json!("dynamic-mcp")
+                        && tool["required_permission"] == json!("danger-full-access")
+                })));
+
+            let selected = render_tools_report(Some("mcp__vendor__echo"))
+                .expect("selected dynamic tool report should render");
+            assert!(selected.contains("Tool"));
+            assert!(selected.contains("Name             mcp__vendor__echo"));
+            assert!(selected.contains("Source           dynamic MCP tool"));
+            assert!(selected.contains("qualifiedToolName"));
+
+            let selected_payload = super::tools_payload(Some("mcp__vendor__echo".to_string()))
+                .expect("selected dynamic tool payload should render");
+            assert_eq!(selected_payload["requested"], json!("mcp__vendor__echo"));
+            assert_eq!(
+                selected_payload["rust_tool"]["name"],
+                json!("mcp__vendor__echo")
+            );
+            assert_eq!(
+                selected_payload["rust_tool"]["source"],
+                json!("dynamic-mcp")
+            );
+            assert_eq!(
+                selected_payload["rust_tool"]["output_schema"]["properties"]["qualifiedToolName"]
+                    ["type"],
+                json!("string")
+            );
+            assert!(selected_payload["archived_family"].is_null());
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+        let _ = fs::remove_dir_all(script_path.parent().expect("script parent"));
+    }
+
+    #[test]
     fn doctor_report_summarizes_runtime_health() {
         let _guard = env_lock()
             .lock()
@@ -5929,8 +7113,8 @@ mod tests {
             assert!(report.contains("MCP executable    1"));
             assert!(report.contains("MCP blocked       1"));
             assert!(report.contains("MCP statuses      ready=1, unsupported-transport=1"));
-            assert!(report.contains("MCP blockers      remote (http)"));
-            assert!(report.contains("MCP attention     remote (unsupported-transport)"));
+            assert!(report.contains("MCP blockers      remote (http, unsupported-runtime)"));
+            assert!(report.contains("MCP attention     remote (unsupported-runtime)"));
             assert!(report.contains("Pre hooks         1"));
             assert!(report.contains("Post hooks        1"));
             assert!(report.contains("Filesystem mode   workspace-only"));
@@ -5967,18 +7151,26 @@ mod tests {
                 .is_some_and(|servers| servers.iter().any(|server| {
                     server["name"] == json!("remote")
                         && server["transport"] == json!("http")
+                        && server["reason_kind"] == json!("unsupported-runtime")
                         && server["detail"]
                             .as_str()
                             .is_some_and(|detail| detail.contains("headersHelper"))
+                        && server["remediation_hint"]
+                            .as_str()
+                            .is_some_and(|hint| hint.contains("Remove headersHelper"))
                 })));
             assert!(payload["mcp"]["attention_servers"]
                 .as_array()
                 .is_some_and(|servers| servers.iter().any(|server| {
                     server["name"] == json!("remote")
                         && server["status"] == json!("unsupported-transport")
+                        && server["reason_kind"] == json!("unsupported-runtime")
                         && server["detail"]
                             .as_str()
                             .is_some_and(|detail| detail.contains("headersHelper"))
+                        && server["remediation_hint"]
+                            .as_str()
+                            .is_some_and(|hint| hint.contains("Remove headersHelper"))
                 })));
             assert_eq!(
                 payload["config"]["sandbox"]["filesystem_mode"],
@@ -6042,10 +7234,11 @@ mod tests {
             assert!(report.contains("MCP executable    2"));
             assert!(report.contains("MCP blocked       0"));
             assert!(report.contains("MCP statuses      ready=1, user-auth-required=1"));
-            assert!(report.contains("MCP attention     remote-auth (user-auth-required)"));
+            assert!(report.contains("MCP attention     remote-auth (auth-required)"));
             assert!(report.contains(
                 "MCP server `remote-auth` (http) requires stored OAuth credentials before execution"
             ));
+            assert!(report.contains("; hint: Save MCP OAuth credentials with McpAuthTool action"));
 
             let payload = super::doctor_payload().expect("doctor payload should render");
             assert_eq!(payload["mcp"]["server_count"], json!(2));
@@ -6061,6 +7254,7 @@ mod tests {
                 .is_some_and(|servers| servers.iter().any(|server| {
                     server["name"] == json!("remote-auth")
                         && server["status"] == json!("user-auth-required")
+                        && server["reason_kind"] == json!("auth-required")
                         && server["detail"]
                             .as_str()
                             .is_some_and(|detail| detail.contains("McpAuthTool action `save`"))
@@ -6329,8 +7523,9 @@ mod tests {
             assert!(report.contains("Executable now    2"));
             assert!(report.contains("Blocked now       1"));
             assert!(report.contains("Status counts     ready=2, unsupported-transport=1"));
-            assert!(report.contains("Blockers          proxy-server (simcoe-ai-proxy)"));
-            assert!(report.contains("Attention         proxy-server (unsupported-transport)"));
+            assert!(report
+                .contains("Blockers          proxy-server (simcoe-ai-proxy, unsupported-runtime)"));
+            assert!(report.contains("Attention         proxy-server (unsupported-runtime)"));
             assert!(report.contains("stdio-server"));
             assert!(report.contains("remote-server"));
             assert!(report.contains("proxy-server"));
@@ -6356,8 +7551,12 @@ mod tests {
                 .is_some_and(|servers| servers.iter().any(|server| {
                     server["name"] == json!("proxy-server")
                         && server["transport"] == json!("simcoe-ai-proxy")
+                        && server["reason_kind"] == json!("unsupported-runtime")
                         && server["detail"].as_str().is_some_and(|detail| {
                             detail.contains("proxy `proxy-123` targets `wss://vendor.example/mcp`")
+                        })
+                        && server["remediation_hint"].as_str().is_some_and(|hint| {
+                            hint.contains("proxy-backed server inspection-only")
                         })
                 })));
             assert!(payload["attention_servers"]
@@ -6365,8 +7564,12 @@ mod tests {
                 .is_some_and(|servers| servers.iter().any(|server| {
                     server["name"] == json!("proxy-server")
                         && server["status"] == json!("unsupported-transport")
+                        && server["reason_kind"] == json!("unsupported-runtime")
                         && server["detail"].as_str().is_some_and(|detail| {
                             detail.contains("proxy `proxy-123` targets `wss://vendor.example/mcp`")
+                        })
+                        && server["remediation_hint"].as_str().is_some_and(|hint| {
+                            hint.contains("proxy-backed server inspection-only")
                         })
                 })));
             assert!(servers.iter().any(|server| {
@@ -6433,6 +7636,7 @@ mod tests {
             assert!(report.contains("Name              remote-server"));
             assert!(report.contains("Transport         http"));
             assert!(report.contains("Status            unsupported-transport"));
+            assert!(report.contains("Reason kind       unsupported-runtime"));
             assert!(report.contains("Executable        no"));
             assert!(report.contains("User auth         yes"));
             assert!(report.contains("Stored creds      no"));
@@ -6459,6 +7663,10 @@ mod tests {
             assert_eq!(
                 payload["server"]["runtime"]["status"],
                 json!("unsupported-transport")
+            );
+            assert_eq!(
+                payload["server"]["runtime"]["reason_kind"],
+                json!("unsupported-runtime")
             );
             assert_eq!(payload["server"]["runtime"]["auth_kind"], json!("oauth"));
             assert_eq!(
@@ -6529,6 +7737,7 @@ mod tests {
             let report = render_mcp_report(Some("oauth-server"))
                 .expect("selected oauth mcp report should render");
             assert!(report.contains("Status            user-auth-required"));
+            assert!(report.contains("Reason kind       auth-required"));
             assert!(report.contains("Executable        yes"));
             assert!(report.contains("User auth         yes"));
             assert!(report.contains("Stored creds      no"));
@@ -6541,6 +7750,8 @@ mod tests {
             assert!(report.contains(
                 "stored OAuth credentials are required before this server can be executed"
             ));
+            assert!(report
+                .contains("Hint              Save MCP OAuth credentials with McpAuthTool action"));
 
             let payload = super::mcp_payload(Some("oauth-server".to_string()))
                 .expect("selected oauth mcp payload should render");
@@ -6549,6 +7760,10 @@ mod tests {
             assert_eq!(
                 payload["server"]["runtime"]["status"],
                 json!("user-auth-required")
+            );
+            assert_eq!(
+                payload["server"]["runtime"]["reason_kind"],
+                json!("auth-required")
             );
             assert_eq!(payload["server"]["runtime"]["auth_kind"], json!("oauth"));
             assert_eq!(
@@ -6651,6 +7866,7 @@ mod tests {
             let report = render_mcp_report(Some("expired-server"))
                 .expect("selected expired mcp report should render");
             assert!(report.contains("Status            expired"));
+            assert!(report.contains("Reason kind       expired-credentials"));
             assert!(report.contains("Executable        yes"));
             assert!(report.contains("Stored creds      yes"));
             assert!(report.contains("Refresh token     no"));
@@ -6659,12 +7875,19 @@ mod tests {
             assert!(report.contains(
                 "stored OAuth access token is expired and no refresh token is available"
             ));
+            assert!(report.contains(
+                "Hint              Re-authenticate and save fresh MCP OAuth credentials with McpAuthTool action"
+            ));
 
             let payload = super::mcp_payload(Some("expired-server".to_string()))
                 .expect("selected expired mcp payload should render");
             assert_eq!(payload["server"]["supported_execution"], json!(true));
             assert_eq!(payload["server"]["execution_detail"], json!(null));
             assert_eq!(payload["server"]["runtime"]["status"], json!("expired"));
+            assert_eq!(
+                payload["server"]["runtime"]["reason_kind"],
+                json!("expired-credentials")
+            );
             assert_eq!(
                 payload["server"]["runtime"]["stored_credentials"],
                 json!(true)
@@ -6721,6 +7944,9 @@ mod tests {
             assert!(report.contains("Proxy id          proxy-123"));
             assert!(report.contains("proxy `proxy-123` targets `wss://vendor.example/mcp`"));
             assert!(report.contains("SessionsWebSocket.ts"));
+            assert!(
+                report.contains("Hint              Keep this proxy-backed server inspection-only")
+            );
 
             let payload = super::mcp_payload(Some("proxy-server".to_string()))
                 .expect("selected proxy mcp payload should render");
@@ -6816,10 +8042,11 @@ mod tests {
             assert!(report.contains("MCP executable    2"));
             assert!(report.contains("MCP blocked       0"));
             assert!(report.contains("MCP statuses      expired=1, ready=1"));
-            assert!(report.contains("MCP attention     remote-expired (expired)"));
+            assert!(report.contains("MCP attention     remote-expired (expired-credentials)"));
             assert!(report.contains(
                 "MCP server `remote-expired` (http) has expired stored OAuth credentials"
             ));
+            assert!(report.contains("; hint: Re-authenticate and save fresh MCP OAuth credentials with McpAuthTool action"));
 
             let payload = super::doctor_payload().expect("doctor payload should render");
             assert_eq!(payload["mcp"]["server_count"], json!(2));
@@ -6832,6 +8059,7 @@ mod tests {
                 .is_some_and(|servers| servers.iter().any(|server| {
                     server["name"] == json!("remote-expired")
                         && server["status"] == json!("expired")
+                        && server["reason_kind"] == json!("expired-credentials")
                         && server["detail"]
                             .as_str()
                             .is_some_and(|detail| detail.contains("expired and no refresh token"))
@@ -7253,6 +8481,161 @@ mod tests {
         );
         assert!(done.contains("📄 Read src/main.rs"));
         assert!(done.contains("hello"));
+
+        let tool_search = format_tool_result(
+            "ToolSearch",
+            r#"{"query":"vendor echo","matches":["mcp__vendor__echo","read_file"],"match_details":[{"name":"mcp__vendor__echo","description":"Invoke MCP tool echo on configured vendor server.","source":"dynamic-mcp","required_permission":"danger-full-access","mcp_server":"vendor","mcp_tool":"echo"},{"name":"read_file","description":"Read a file from disk.","source":"registry","required_permission":"read-only"}],"pending_mcp_server_details":[{"server":"remote","reason_kind":"unsupported-runtime","detail":"http transport with headersHelper is not executed by the Rust MCP runtime yet"}]}"#,
+            false,
+        );
+        assert!(tool_search.contains("ToolSearch"));
+        assert!(tool_search.contains("2 matches for vendor echo"));
+        assert!(tool_search.contains("mcp__vendor__echo [dynamic-mcp:vendor, danger-full-access]"));
+        assert!(tool_search.contains("read_file [registry, read-only]"));
+        assert!(tool_search.contains("Pending MCP discovery"));
+        assert!(tool_search.contains("remote [unsupported-runtime]"));
+
+        let list_mcp_resources = format_tool_result(
+            "ListMcpResourcesTool",
+            r#"{"server":"alpha","transport":"stdio","resourceCount":2,"resources":[{"uri":"file://guide.txt","name":"Guide","description":"Primary guide for the MCP server.","mimeType":"text/plain"},{"uri":"file://schema.json","name":"Schema","mimeType":"application/json"}]}"#,
+            false,
+        );
+        assert!(list_mcp_resources.contains("ListMcpResourcesTool"));
+        assert!(list_mcp_resources.contains("alpha [stdio] 2 resources"));
+        assert!(list_mcp_resources.contains("Resources"));
+        assert!(list_mcp_resources
+            .contains("file://guide.txt Guide [text/plain] Primary guide for the MCP server."));
+        assert!(list_mcp_resources.contains("file://schema.json Schema [application/json]"));
+
+        let read_mcp_resource = format_tool_result(
+            "ReadMcpResourceTool",
+            r#"{"server":"alpha","transport":"http","uri":"file://guide.txt","contentCount":2,"contents":[{"uri":"file://guide.txt","mimeType":"text/plain","text":"contents for file://guide.txt"},{"uri":"file://diagram.png","mimeType":"image/png","blob":"aGVsbG8="}]}"#,
+            false,
+        );
+        assert!(read_mcp_resource.contains("ReadMcpResourceTool"));
+        assert!(read_mcp_resource.contains("file://guide.txt from alpha [http] 2 items"));
+        assert!(read_mcp_resource.contains("Contents"));
+        assert!(read_mcp_resource
+            .contains("file://guide.txt [text/plain] contents for file://guide.txt"));
+        assert!(read_mcp_resource.contains("file://diagram.png [image/png] blob 8 chars"));
+
+        let mcp_tool_list = format_tool_result(
+            "MCPTool",
+            r#"{"server":"alpha","transport":"stdio","action":"list_tools","toolCount":2,"tools":[{"name":"echo","description":"Echo text back from the MCP server."},{"name":"search","description":"Search the remote catalog."}]}"#,
+            false,
+        );
+        assert!(mcp_tool_list.contains("MCPTool"));
+        assert!(mcp_tool_list.contains("list_tools alpha [stdio] 2 tools"));
+        assert!(mcp_tool_list.contains("Tools"));
+        assert!(mcp_tool_list.contains("echo Echo text back from the MCP server."));
+        assert!(mcp_tool_list.contains("search Search the remote catalog."));
+
+        let mcp_tool_call = format_tool_result(
+            "MCPTool",
+            r#"{"server":"alpha","transport":"http","action":"call_tool","tool":"echo","qualifiedToolName":"mcp__alpha__echo","content":[{"type":"text","text":"hello from alpha"}],"structuredContent":{"server":"alpha","echoed":"hello from alpha"},"isError":false}"#,
+            false,
+        );
+        assert!(mcp_tool_call.contains("call_tool mcp__alpha__echo on alpha [http]"));
+        assert!(mcp_tool_call.contains("Content"));
+        assert!(mcp_tool_call.contains("text hello from alpha"));
+        assert!(mcp_tool_call
+            .contains("Structured {\"echoed\":\"hello from alpha\",\"server\":\"alpha\"}"));
+
+        let dynamic_mcp_tool_call = format_tool_result(
+            "mcp__alpha__echo",
+            r#"{"server":"alpha","transport":"http","action":"call_tool","tool":"echo","qualifiedToolName":"mcp__alpha__echo","content":[{"type":"text","text":"hello from alpha"}],"structuredContent":{"server":"alpha","echoed":"hello from alpha"},"isError":false}"#,
+            false,
+        );
+        assert!(dynamic_mcp_tool_call.contains("mcp__alpha__echo"));
+        assert!(dynamic_mcp_tool_call.contains("call_tool mcp__alpha__echo on alpha [http]"));
+        assert!(dynamic_mcp_tool_call.contains("text hello from alpha"));
+
+        let mcp_tool_auth_error = format_tool_result(
+            "MCPTool",
+            "MCP server `remote` requires stored OAuth credentials; save them with McpAuthTool action `save`",
+            true,
+        );
+        assert!(mcp_tool_auth_error.contains("MCPTool"));
+        assert!(mcp_tool_auth_error.contains("remote [auth-required]"));
+        assert!(mcp_tool_auth_error.contains("requires stored OAuth credentials"));
+        assert!(mcp_tool_auth_error
+            .contains("Hint Save MCP OAuth credentials with McpAuthTool action `save`."));
+
+        let mcp_resource_blocked_error = format_tool_result(
+            "ReadMcpResourceTool",
+            "MCP server `remote` uses http transport; http transport with headersHelper is not executed by the Rust MCP runtime yet",
+            true,
+        );
+        assert!(mcp_resource_blocked_error.contains("ReadMcpResourceTool"));
+        assert!(mcp_resource_blocked_error.contains("remote [unsupported-runtime]"));
+        assert!(mcp_resource_blocked_error.contains("headersHelper"));
+        assert!(mcp_resource_blocked_error
+            .contains("Hint Remove headersHelper for direct Rust execution"));
+
+        let dynamic_mcp_blocked_error = format_tool_result(
+            "mcp__remote__echo",
+            "MCP server `remote` uses http transport; http transport with headersHelper is not executed by the Rust MCP runtime yet",
+            true,
+        );
+        assert!(dynamic_mcp_blocked_error.contains("mcp__remote__echo"));
+        assert!(dynamic_mcp_blocked_error.contains("remote [unsupported-runtime]"));
+        assert!(dynamic_mcp_blocked_error.contains("headersHelper"));
+
+        let mcp_http_error = format_tool_result(
+            "MCPTool",
+            "MCP server `remote` returned HTTP 502 for tools/list: upstream timeout",
+            true,
+        );
+        assert!(mcp_http_error.contains("MCPTool"));
+        assert!(mcp_http_error.contains("remote [discovery-error, tools/list, HTTP 502]"));
+        assert!(mcp_http_error.contains("upstream timeout"));
+        assert!(mcp_http_error.contains("Hint Check the MCP endpoint, upstream service health"));
+
+        let mcp_refresh_error = format_tool_result(
+            "MCPTool",
+            "OAuth refresh for MCP server `remote` failed with HTTP 401: invalid_grant",
+            true,
+        );
+        assert!(mcp_refresh_error.contains("MCPTool"));
+        assert!(mcp_refresh_error.contains("remote [expired-credentials, oauth-refresh, HTTP 401]"));
+        assert!(mcp_refresh_error.contains("invalid_grant"));
+        assert!(
+            mcp_refresh_error.contains("Hint Re-authenticate and save fresh MCP OAuth credentials")
+        );
+
+        let mcp_jsonrpc_error = format_tool_result(
+            "mcp__remote__echo",
+            "MCP server `remote` returned JSON-RPC error for tools/call: tool not found (-32601)",
+            true,
+        );
+        assert!(mcp_jsonrpc_error.contains("mcp__remote__echo"));
+        assert!(mcp_jsonrpc_error.contains("remote [discovery-error, tools/call]"));
+        assert!(mcp_jsonrpc_error.contains("tool not found"));
+        assert!(mcp_jsonrpc_error.contains(
+            "Hint Check the remote MCP server logs and confirm the requested tool or resource still exists."
+        ));
+
+        let mcp_auth = format_tool_result(
+            "McpAuthTool",
+            r#"{"action":"status","serverCount":3,"supportedExecutionCount":2,"unsupportedExecutionCount":1,"statusCounts":{"ready":1,"unsupported-transport":1,"user-auth-required":1},"attentionServers":[{"server":"vendor","transport":"http","status":"user-auth-required","reasonKind":"auth-required"},{"server":"sdk-server","transport":"sdk","status":"unsupported-transport","reasonKind":"unsupported-runtime","detail":"SDK adapter runtime missing"}],"unsupportedServers":[{"server":"sdk-server","transport":"sdk","reasonKind":"unsupported-runtime","detail":"SDK adapter runtime missing"}],"servers":[{"server":"repo","status":"ready","transport":"stdio","authKind":"none","requiresUserAuth":false,"supportedExecution":true,"interactiveSupported":true,"storedCredentials":false,"refreshTokenPresent":false},{"server":"vendor","status":"user-auth-required","transport":"http","authKind":"oauth","requiresUserAuth":true,"supportedExecution":true,"interactiveSupported":true,"reasonKind":"auth-required","storedCredentials":false,"refreshTokenPresent":false},{"server":"sdk-server","status":"unsupported-transport","transport":"sdk","authKind":"none","requiresUserAuth":false,"supportedExecution":false,"interactiveSupported":false,"reasonKind":"unsupported-runtime","storedCredentials":false,"refreshTokenPresent":false,"detail":"SDK adapter runtime missing"}]}"#,
+            false,
+        );
+        assert!(mcp_auth.contains("McpAuthTool"));
+        assert!(mcp_auth.contains("status 3 servers (2 executable, 1 blocked)"));
+        assert!(
+            mcp_auth.contains("Statuses ready=1, unsupported-transport=1, user-auth-required=1")
+        );
+        assert!(mcp_auth.contains("Attention"));
+        assert!(mcp_auth.contains("vendor [http, user-auth-required, auth-required]"));
+        assert!(mcp_auth.contains("sdk-server [sdk, unsupported-transport, unsupported-runtime] SDK adapter runtime missing"));
+
+        let mcp_auth_save = format_tool_result(
+            "McpAuthTool",
+            r#"{"action":"save","serverCount":1,"supportedExecutionCount":1,"unsupportedExecutionCount":0,"statusCounts":{"ready":1},"unsupportedServers":[],"attentionServers":[],"servers":[{"server":"vendor","status":"ready","transport":"http","authKind":"oauth","requiresUserAuth":false,"supportedExecution":true,"interactiveSupported":true,"storedCredentials":true,"refreshTokenPresent":true}]}"#,
+            false,
+        );
+        assert!(mcp_auth_save.contains("save 1 server (1 executable, 0 blocked)"));
+        assert!(mcp_auth_save.contains("Servers"));
+        assert!(mcp_auth_save.contains("vendor [ready] oauth, stored-credentials, refresh-token"));
     }
 
     #[test]

@@ -15,15 +15,16 @@ use compat_harness::{
 };
 use runtime::{
     credentials_path, inherited_upstream_proxy_env, load_oauth_credentials,
-    mcp_client_transport_display_name, mcp_server_auth_status, mcp_transport_display_name,
-    ConfigSource, ContentBlock, McpClientAuth, McpClientBootstrap, McpClientTransport,
-    McpServerAuthStatusSnapshot, ProjectContext, RemoteSessionContext, ResolvedPermissionMode,
-    Session, TokenUsage, UpstreamProxyBootstrap,
+    mcp_client_transport_display_name, mcp_reason_remediation_hint, mcp_server_auth_status,
+    mcp_transport_display_name, ConfigSource, ContentBlock, McpClientAuth, McpClientBootstrap,
+    McpClientTransport, McpServerAuthStatusSnapshot, ProjectContext, RemoteSessionContext,
+    ResolvedPermissionMode, Session, TokenUsage, UpstreamProxyBootstrap,
 };
 use tools::{
-    list_agent_profiles, list_agent_tasks, list_skills, load_agent_profile, load_agent_task,
-    load_skill, mvp_tool_specs, tool_output_schema, AgentTaskSummary, LoadedAgentProfile,
-    LoadedAgentTask, LoadedSkill, SkillSummary, ToolSpec,
+    inspectable_tool_catalog, list_agent_profiles, list_agent_tasks, list_skills,
+    load_agent_profile, load_agent_task, load_skill, AgentTaskSummary, InspectableTool,
+    InspectableToolSource, LoadedAgentProfile, LoadedAgentTask, LoadedSkill,
+    PendingMcpServerDiscovery, SkillSummary,
 };
 
 #[derive(Debug, Clone)]
@@ -103,6 +104,7 @@ pub(crate) struct DoctorHooksSnapshot {
 pub(crate) struct McpBlockedServerSnapshot {
     pub(crate) name: String,
     pub(crate) transport: &'static str,
+    pub(crate) reason_kind: runtime::McpReasonKind,
     pub(crate) detail: String,
 }
 
@@ -172,6 +174,7 @@ pub(crate) struct McpAttentionSnapshot {
     pub(crate) name: String,
     pub(crate) transport: &'static str,
     pub(crate) status: String,
+    pub(crate) reason_kind: Option<runtime::McpReasonKind>,
     pub(crate) detail: Option<String>,
 }
 
@@ -259,9 +262,10 @@ pub(crate) struct TasksReportSnapshot {
 #[derive(Debug, Clone)]
 pub(crate) struct ToolsReportSnapshot {
     pub(crate) requested_tool: Option<String>,
-    pub(crate) selected_rust_tool: Option<ToolSpec>,
+    pub(crate) selected_rust_tool: Option<InspectableTool>,
     pub(crate) selected_archived_family: Option<ArchivedToolFamilySummary>,
-    pub(crate) rust_tools: Vec<ToolSpec>,
+    pub(crate) rust_tools: Vec<InspectableTool>,
+    pub(crate) pending_mcp_servers: Vec<PendingMcpServerDiscovery>,
     pub(crate) archived_catalog: Option<ToolCatalog>,
 }
 
@@ -920,7 +924,16 @@ pub(crate) fn render_mcp_report_from_snapshot(snapshot: &McpReportSnapshot) -> S
         .collection
         .attention_servers
         .iter()
-        .map(|server| format!("{} ({})", server.name, server.status))
+        .map(|server| {
+            format!(
+                "{} ({})",
+                server.name,
+                server
+                    .reason_kind
+                    .map(runtime::McpReasonKind::as_str)
+                    .unwrap_or(server.status.as_str())
+            )
+        })
         .collect::<Vec<_>>();
     let attention = if attention.is_empty() {
         String::from("<none>")
@@ -1419,18 +1432,21 @@ pub(crate) fn tools_report_snapshot(
     tool: Option<&str>,
 ) -> Result<ToolsReportSnapshot, Box<dyn std::error::Error>> {
     let requested = trimmed_non_empty(tool).map(str::to_owned);
-    let rust_tools = mvp_tool_specs();
+    let rust_catalog = inspectable_tool_catalog(None);
+    let rust_tools = rust_catalog.tools;
 
     if let Some(requested) = requested.as_deref() {
         let rust_match = rust_tools
             .iter()
-            .find(|spec| matches_tool_request(spec.name, requested));
+            .find(|spec| matches_tool_request(spec.name.as_str(), requested));
         let archived_match = load_tool_family_from_cwd(requested).ok();
 
         if rust_match.is_none() && archived_match.is_none() {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
-                format!("unknown Rust tool or archived tool family: {requested}"),
+                format!(
+                    "unknown live Rust tool, dynamic MCP tool, or archived tool family: {requested}"
+                ),
             )
             .into());
         }
@@ -1440,6 +1456,7 @@ pub(crate) fn tools_report_snapshot(
             selected_rust_tool: rust_match.cloned(),
             selected_archived_family: archived_match,
             rust_tools: Vec::new(),
+            pending_mcp_servers: Vec::new(),
             archived_catalog: None,
         });
     }
@@ -1449,6 +1466,7 @@ pub(crate) fn tools_report_snapshot(
         selected_rust_tool: None,
         selected_archived_family: None,
         rust_tools,
+        pending_mcp_servers: rust_catalog.pending_mcp_servers,
         archived_catalog: load_tool_catalog_from_cwd().ok(),
     })
 }
@@ -1475,27 +1493,18 @@ pub(crate) fn render_tools_report_from_snapshot(
         return Ok(sections.join("\n\n"));
     }
 
-    let rust_width = snapshot
+    let registry_tools = snapshot
         .rust_tools
         .iter()
-        .map(|spec| spec.name.len())
-        .max()
-        .unwrap_or(4)
-        + 2;
-    let rust_entries = snapshot
+        .filter(|spec| spec.source == InspectableToolSource::Registry)
+        .collect::<Vec<_>>();
+    let dynamic_mcp_tools = snapshot
         .rust_tools
         .iter()
-        .map(|spec| {
-            format!(
-                "  {name:<rust_width$}{mode:<20}{description}",
-                name = spec.name,
-                mode = spec.required_permission.as_str(),
-                description = spec.description,
-                rust_width = rust_width,
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+        .filter(|spec| spec.source == InspectableToolSource::DynamicMcp)
+        .collect::<Vec<_>>();
+    let rust_entries = render_tool_listing(&registry_tools);
+    let dynamic_entries = render_tool_listing(&dynamic_mcp_tools);
 
     let (archived_family_count, archived_file_count, archived_entries) =
         if let Some(catalog) = snapshot.archived_catalog.as_ref() {
@@ -1529,14 +1538,28 @@ pub(crate) fn render_tools_report_from_snapshot(
             )
         };
 
-    Ok(format!(
-        "Tools\n  Rust tools         {rust_tool_count}\n  Archived families  {archived_family_count}\n  Archived files     {archived_file_count}\n  Usage              /tools <name>\n\nRust registry\n{rust_entries}\n\nArchived TS families\n{archived_entries}",
-        rust_tool_count = snapshot.rust_tools.len(),
+    let mut sections = vec![format!(
+        "Tools\n  Rust tools         {rust_tool_count}\n  Dynamic MCP tools  {dynamic_mcp_tool_count}\n  Pending MCP srvrs  {pending_mcp_server_count}\n  Archived families  {archived_family_count}\n  Archived files     {archived_file_count}\n  Usage              /tools <name>\n\nRust registry\n{rust_entries}",
+        rust_tool_count = registry_tools.len(),
+        dynamic_mcp_tool_count = dynamic_mcp_tools.len(),
+        pending_mcp_server_count = snapshot.pending_mcp_servers.len(),
         archived_family_count = archived_family_count,
         archived_file_count = archived_file_count,
         rust_entries = rust_entries,
-        archived_entries = archived_entries,
-    ))
+    )];
+
+    if !dynamic_mcp_tools.is_empty() {
+        sections.push(format!("Dynamic MCP tools\n{dynamic_entries}"));
+    }
+    if !snapshot.pending_mcp_servers.is_empty() {
+        sections.push(format!(
+            "Pending MCP discovery\n{}",
+            render_pending_mcp_discovery_items(&snapshot.pending_mcp_servers)
+        ));
+    }
+    sections.push(format!("Archived TS families\n{archived_entries}"));
+
+    Ok(sections.join("\n\n"))
 }
 
 pub(crate) fn render_tools_report(
@@ -1830,11 +1853,12 @@ fn mcp_status_counts(servers: &[McpServerSnapshot]) -> BTreeMap<String, usize> {
 fn mcp_attention_servers(servers: &[McpServerSnapshot]) -> Vec<McpAttentionSnapshot> {
     servers
         .iter()
-        .filter(|server| server.runtime.status != "ready")
+        .filter(|server| server.runtime.reason_kind.is_some())
         .map(|server| McpAttentionSnapshot {
             name: server.name.clone(),
             transport: server.transport,
             status: server.runtime.status.clone(),
+            reason_kind: server.runtime.reason_kind,
             detail: server.runtime.detail.clone(),
         })
         .collect()
@@ -1845,10 +1869,16 @@ fn mcp_blocked_servers(
 ) -> Vec<McpBlockedServerSnapshot> {
     attention_servers
         .iter()
-        .filter(|server| server.status == "unsupported-transport")
+        .filter(|server| {
+            matches!(
+                server.reason_kind,
+                Some(runtime::McpReasonKind::UnsupportedRuntime)
+            )
+        })
         .map(|server| McpBlockedServerSnapshot {
             name: server.name.clone(),
             transport: server.transport,
+            reason_kind: runtime::McpReasonKind::UnsupportedRuntime,
             detail: server
                 .detail
                 .clone()
@@ -1862,23 +1892,28 @@ fn doctor_mcp_issues(attention_servers: &[McpAttentionSnapshot]) -> Vec<String> 
         .iter()
         .map(|server| {
             let detail = server.detail.as_deref().unwrap_or("<unknown>");
-            match server.status.as_str() {
-                "unsupported-transport" => format!(
+            let msg = match server.reason_kind {
+                Some(runtime::McpReasonKind::UnsupportedRuntime) => format!(
                     "MCP server `{}` ({}) is configured but not executable by the Rust runtime: {}",
                     server.name, server.transport, detail
                 ),
-                "user-auth-required" => format!(
+                Some(runtime::McpReasonKind::AuthRequired) => format!(
                     "MCP server `{}` ({}) requires stored OAuth credentials before execution: {}",
                     server.name, server.transport, detail
                 ),
-                "expired" => format!(
+                Some(runtime::McpReasonKind::ExpiredCredentials) => format!(
                     "MCP server `{}` ({}) has expired stored OAuth credentials: {}",
                     server.name, server.transport, detail
                 ),
-                other => format!(
+                Some(runtime::McpReasonKind::DiscoveryError) | None => format!(
                     "MCP server `{}` ({}) is in `{}` state: {}",
-                    server.name, server.transport, other, detail
+                    server.name, server.transport, server.status, detail
                 ),
+            };
+            if let Some(hint) = mcp_reason_remediation_hint(detail) {
+                format!("{msg}; hint: {hint}")
+            } else {
+                msg
             }
         })
         .collect()
@@ -1922,7 +1957,14 @@ fn summarize_mcp_blockers(blocked_servers: Option<&[McpBlockedServerSnapshot]>) 
         Some(blocked_servers) if blocked_servers.is_empty() => String::from("<none>"),
         Some(blocked_servers) => blocked_servers
             .iter()
-            .map(|server| format!("{} ({})", server.name, server.transport))
+            .map(|server| {
+                format!(
+                    "{} ({}, {})",
+                    server.name,
+                    server.transport,
+                    server.reason_kind.as_str()
+                )
+            })
             .collect::<Vec<_>>()
             .join(", "),
     }
@@ -1934,7 +1976,16 @@ fn summarize_doctor_mcp_attention(attention_servers: Option<&[McpAttentionSnapsh
         Some(attention_servers) if attention_servers.is_empty() => String::from("<none>"),
         Some(attention_servers) => attention_servers
             .iter()
-            .map(|server| format!("{} ({})", server.name, server.status))
+            .map(|server| {
+                format!(
+                    "{} ({})",
+                    server.name,
+                    server
+                        .reason_kind
+                        .map(runtime::McpReasonKind::as_str)
+                        .unwrap_or(server.status.as_str())
+                )
+            })
             .collect::<Vec<_>>()
             .join(", "),
     }
@@ -1978,23 +2029,65 @@ fn summarize_doctor_issues(issues: &[String]) -> String {
     }
 }
 
-fn render_tool_detail(spec: &ToolSpec) -> Result<String, Box<dyn std::error::Error>> {
+fn render_tool_detail(spec: &InspectableTool) -> Result<String, Box<dyn std::error::Error>> {
     let input_schema = render_json_block(&spec.input_schema)?;
-    let output_schema = tool_output_schema(spec.name)
-        .map(|schema| render_json_block(&schema))
+    let output_schema = spec
+        .output_schema
+        .as_ref()
+        .map(render_json_block)
         .transpose()?;
     let output_section = output_schema.map_or(String::new(), |schema| {
         format!("\n\nOutput schema\n{schema}")
     });
 
     Ok(format!(
-        "Tool\n  Name             {name}\n  Source           rust tool registry\n  Required mode    {required_mode}\n  Description      {description}\n\nInput schema\n{input_schema}{output_section}",
+        "Tool\n  Name             {name}\n  Source           {source}\n  Required mode    {required_mode}\n  Description      {description}\n\nInput schema\n{input_schema}{output_section}",
         name = spec.name,
+        source = spec.source.display_name(),
         required_mode = spec.required_permission.as_str(),
         description = spec.description,
         input_schema = input_schema,
         output_section = output_section,
     ))
+}
+
+fn render_tool_listing(specs: &[&InspectableTool]) -> String {
+    if specs.is_empty() {
+        return String::from("  <none>");
+    }
+    let width = specs.iter().map(|spec| spec.name.len()).max().unwrap_or(4) + 2;
+    specs
+        .iter()
+        .map(|spec| {
+            format!(
+                "  {name:<width$}{mode:<20}{description}",
+                name = spec.name,
+                mode = spec.required_permission.as_str(),
+                description = spec.description,
+                width = width,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn render_pending_mcp_discovery_items(entries: &[PendingMcpServerDiscovery]) -> String {
+    entries
+        .iter()
+        .map(|entry| {
+            let mut line = format!(
+                "  - {} [{}]: {}",
+                entry.server,
+                entry.reason_kind.as_str(),
+                entry.detail
+            );
+            if let Some(hint) = entry.remediation_hint {
+                line.push_str(&format!(" (hint: {hint})"));
+            }
+            line
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn render_json_block(value: &serde_json::Value) -> Result<String, serde_json::Error> {
@@ -2495,9 +2588,14 @@ fn render_mcp_server_detail(server: &McpServerSnapshot) -> String {
     )];
 
     lines.push(String::from(""));
-    lines.push(format!(
-        "Runtime\n  Status            {}\n  Executable        {}\n  Auth kind         {}\n  User auth         {}\n  Stored creds      {}\n  Refresh token     {}\n  Expiry            {}\n  Scopes            {}\n  Detail            {}",
+    let mut runtime_section = format!(
+        "Runtime\n  Status            {}\n  Reason kind       {}\n  Executable        {}\n  Auth kind         {}\n  User auth         {}\n  Stored creds      {}\n  Refresh token     {}\n  Expiry            {}\n  Scopes            {}\n  Detail            {}",
         server.runtime.status,
+        server
+            .runtime
+            .reason_kind
+            .map(runtime::McpReasonKind::as_str)
+            .unwrap_or("<none>"),
         yes_no(server.runtime.supported_execution),
         server.runtime.auth_kind,
         yes_no(server.runtime.requires_user_auth),
@@ -2506,7 +2604,13 @@ fn render_mcp_server_detail(server: &McpServerSnapshot) -> String {
         expiry,
         scopes,
         server.runtime.detail.as_deref().unwrap_or("<none>"),
-    ));
+    );
+    if let Some(detail) = server.runtime.detail.as_deref() {
+        if let Some(hint) = mcp_reason_remediation_hint(detail) {
+            runtime_section.push_str(&format!("\n  Hint              {hint}"));
+        }
+    }
+    lines.push(runtime_section);
 
     if server.runtime.requires_user_auth {
         let callback_port = server

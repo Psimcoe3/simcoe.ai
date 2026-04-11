@@ -12,12 +12,12 @@ use api::{
 use reqwest::blocking::Client;
 use runtime::{
     clear_mcp_oauth_credentials, edit_file, execute_bash, glob_search, grep_search,
-    load_mcp_oauth_credentials, load_system_prompt, read_file, save_mcp_oauth_credentials,
-    write_file, ApiClient, ApiRequest, AssistantEvent, BashCommandInput, ConfigLoader,
-    ContentBlock, ConversationMessage, ConversationRuntime, GrepSearchInput, McpClientTransport,
-    McpRemoteServerConfig, McpServerConfig, McpServerManager, McpWebSocketServerConfig,
-    MessageRole, OAuthRefreshRequest, OAuthTokenSet, PermissionMode, PermissionPolicy,
-    RuntimeConfig, RuntimeError, Session, TokenUsage, ToolError, ToolExecutor,
+    load_mcp_oauth_credentials, load_system_prompt, mcp_reason_remediation_hint, read_file,
+    save_mcp_oauth_credentials, write_file, ApiClient, ApiRequest, AssistantEvent,
+    BashCommandInput, ConfigLoader, ContentBlock, ConversationMessage, ConversationRuntime,
+    GrepSearchInput, McpClientTransport, McpRemoteServerConfig, McpServerConfig, McpServerManager,
+    McpWebSocketServerConfig, MessageRole, OAuthRefreshRequest, OAuthTokenSet, PermissionMode,
+    PermissionPolicy, RuntimeConfig, RuntimeError, Session, TokenUsage, ToolError, ToolExecutor,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -62,6 +62,55 @@ pub struct ToolSpec {
     pub required_permission: PermissionMode,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InspectableToolSource {
+    Registry,
+    DynamicMcp,
+}
+
+impl InspectableToolSource {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Registry => "registry",
+            Self::DynamicMcp => "dynamic-mcp",
+        }
+    }
+
+    #[must_use]
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Registry => "rust tool registry",
+            Self::DynamicMcp => "dynamic MCP tool",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct InspectableTool {
+    pub name: String,
+    pub description: String,
+    pub input_schema: Value,
+    pub output_schema: Option<Value>,
+    pub required_permission: PermissionMode,
+    pub source: InspectableToolSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PendingMcpServerDiscovery {
+    pub server: String,
+    pub reason_kind: runtime::McpReasonKind,
+    pub detail: String,
+    #[serde(rename = "remediationHint", skip_serializing_if = "Option::is_none")]
+    pub remediation_hint: Option<&'static str>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct InspectableToolCatalog {
+    pub tools: Vec<InspectableTool>,
+    pub pending_mcp_servers: Vec<PendingMcpServerDiscovery>,
+}
+
 #[must_use]
 pub fn tool_output_schema(tool_name: &str) -> Option<Value> {
     match tool_name {
@@ -69,7 +118,213 @@ pub fn tool_output_schema(tool_name: &str) -> Option<Value> {
         "ReadMcpResourceTool" => Some(read_mcp_resource_output_schema()),
         "MCPTool" => Some(mcp_tool_output_schema()),
         "McpAuthTool" => Some(mcp_auth_output_schema()),
+        "ToolSearch" => Some(tool_search_output_schema()),
+        "AskUserQuestionTool" => Some(ask_user_question_output_schema()),
+        "TaskCreateTool" | "TaskGetTool" | "TaskStopTool" | "TaskUpdateTool" => {
+            Some(agent_task_manifest_output_schema())
+        }
+        "TaskListTool" => Some(task_list_output_schema()),
+        "TaskOutputTool" => Some(task_output_output_schema()),
+        "CronListTool" => Some(cron_list_output_schema()),
+        _ if is_dynamic_mcp_tool_name(tool_name) => Some(mcp_tool_call_output_schema()),
         _ => None,
+    }
+}
+
+fn tool_search_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "matches": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "match_details": {
+                "type": "array",
+                "items": tool_search_match_detail_output_schema()
+            },
+            "query": { "type": "string" },
+            "normalized_query": { "type": "string" },
+            "total_deferred_tools": { "type": "integer", "minimum": 0 },
+            "pending_mcp_servers": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "pending_mcp_server_details": {
+                "type": "array",
+                "items": pending_mcp_server_discovery_output_schema()
+            }
+        },
+        "required": [
+            "matches",
+            "match_details",
+            "query",
+            "normalized_query",
+            "total_deferred_tools"
+        ],
+        "additionalProperties": false
+    })
+}
+
+fn tool_search_match_detail_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "source": { "type": "string", "enum": ["registry", "dynamic-mcp"] },
+            "required_permission": { "type": "string" },
+            "mcp_server": { "type": "string" },
+            "mcp_tool": { "type": "string" }
+        },
+        "required": ["name", "description", "source", "required_permission"],
+        "additionalProperties": false
+    })
+}
+
+fn ask_user_question_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "question": { "type": "string" },
+            "answer": { "type": "string" }
+        },
+        "required": ["question", "answer"],
+        "additionalProperties": false
+    })
+}
+
+fn pending_mcp_server_discovery_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "server": { "type": "string" },
+            "reason_kind": {
+                "type": "string",
+                "enum": [
+                    "unsupported-runtime",
+                    "auth-required",
+                    "expired-credentials",
+                    "discovery-error"
+                ]
+            },
+            "detail": { "type": "string" },
+            "remediationHint": { "type": "string" }
+        },
+        "required": ["server", "reason_kind", "detail"],
+        "additionalProperties": false
+    })
+}
+
+fn agent_task_manifest_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agentId": { "type": "string" },
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "subagentType": { "type": "string" },
+            "model": { "type": "string" },
+            "status": { "type": "string" },
+            "outputFile": { "type": "string" },
+            "manifestFile": { "type": "string" },
+            "createdAt": { "type": "string" },
+            "startedAt": { "type": "string" },
+            "completedAt": { "type": "string" },
+            "error": { "type": "string" }
+        },
+        "required": ["agentId", "name", "description", "status", "outputFile", "manifestFile", "createdAt"],
+        "additionalProperties": false
+    })
+}
+
+fn task_list_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "tasks": {
+                "type": "array",
+                "items": agent_task_manifest_output_schema()
+            },
+            "total": { "type": "integer", "minimum": 0 },
+            "filteredBy": { "type": "string" }
+        },
+        "required": ["tasks", "total"],
+        "additionalProperties": false
+    })
+}
+
+fn task_output_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "taskId": { "type": "string" },
+            "status": { "type": "string" },
+            "output": { "type": "string" }
+        },
+        "required": ["taskId", "status"],
+        "additionalProperties": false
+    })
+}
+
+fn cron_list_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "crons": { "type": "array", "items": { "type": "object" } },
+            "message": { "type": "string" }
+        },
+        "required": ["crons"],
+        "additionalProperties": false
+    })
+}
+
+#[must_use]
+pub fn inspectable_tool_catalog(
+    allowed_tools: Option<&BTreeSet<String>>,
+) -> InspectableToolCatalog {
+    let mut tools = tool_specs_for_allowed_tools(allowed_tools)
+        .into_iter()
+        .map(|spec| InspectableTool {
+            name: spec.name.to_string(),
+            description: spec.description.to_string(),
+            input_schema: spec.input_schema,
+            output_schema: tool_output_schema(spec.name),
+            required_permission: spec.required_permission,
+            source: InspectableToolSource::Registry,
+        })
+        .collect::<Vec<_>>();
+
+    let dynamic_catalog = dynamic_mcp_catalog(allowed_tools);
+    let mut dynamic_tools = dynamic_catalog
+        .tools
+        .into_iter()
+        .map(|tool| {
+            let name = tool.qualified_name.clone();
+            InspectableTool {
+                description: tool.tool.description.unwrap_or_else(|| {
+                    format!(
+                        "Invoke MCP tool `{}` on configured server `{}`.",
+                        tool.raw_name, tool.server_name
+                    )
+                }),
+                input_schema: tool
+                    .tool
+                    .input_schema
+                    .unwrap_or_else(|| json!({ "type": "object", "additionalProperties": true })),
+                output_schema: tool_output_schema(&name),
+                name,
+                required_permission: PermissionMode::DangerFullAccess,
+                source: InspectableToolSource::DynamicMcp,
+            }
+        })
+        .collect::<Vec<_>>();
+    dynamic_tools.sort_by(|left, right| left.name.cmp(&right.name));
+    tools.extend(dynamic_tools);
+
+    InspectableToolCatalog {
+        tools,
+        pending_mcp_servers: dynamic_catalog.pending_servers,
     }
 }
 
@@ -246,9 +501,18 @@ fn mcp_auth_unsupported_server_output_schema() -> Value {
         "properties": {
             "server": { "type": "string" },
             "transport": { "type": "string" },
+            "reasonKind": {
+                "type": "string",
+                "enum": [
+                    "unsupported-runtime",
+                    "auth-required",
+                    "expired-credentials",
+                    "discovery-error"
+                ]
+            },
             "detail": { "type": "string" }
         },
-        "required": ["server", "transport", "detail"],
+        "required": ["server", "transport", "reasonKind", "detail"],
         "additionalProperties": false
     })
 }
@@ -260,9 +524,18 @@ fn mcp_auth_attention_server_output_schema() -> Value {
             "server": { "type": "string" },
             "transport": { "type": "string" },
             "status": { "type": "string" },
+            "reasonKind": {
+                "type": "string",
+                "enum": [
+                    "unsupported-runtime",
+                    "auth-required",
+                    "expired-credentials",
+                    "discovery-error"
+                ]
+            },
             "detail": { "type": "string" }
         },
-        "required": ["server", "transport", "status"],
+        "required": ["server", "transport", "status", "reasonKind"],
         "additionalProperties": false
     })
 }
@@ -279,6 +552,15 @@ fn mcp_auth_server_status_output_schema() -> Value {
             "supportedExecution": { "type": "boolean" },
             "interactiveSupported": { "type": "boolean" },
             "status": { "type": "string" },
+            "reasonKind": {
+                "type": "string",
+                "enum": [
+                    "unsupported-runtime",
+                    "auth-required",
+                    "expired-credentials",
+                    "discovery-error"
+                ]
+            },
             "storedCredentials": { "type": "boolean" },
             "refreshTokenPresent": { "type": "boolean" },
             "expiresAt": { "type": "integer", "minimum": 0 },
@@ -772,6 +1054,199 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
             required_permission: PermissionMode::ReadOnly,
         },
         ToolSpec {
+            name: "AskUserQuestionTool",
+            description: "Pause to ask the user a clarifying question and wait for their answer. Only works in an interactive terminal.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "question": { "type": "string" },
+                    "options": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    }
+                },
+                "required": ["question"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
+            name: "TaskCreateTool",
+            description: "Create a new background task with a prompt and description. Returns a task_id for tracking via TaskGetTool, TaskOutputTool, TaskStopTool, or TaskUpdateTool.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "prompt": { "type": "string" },
+                    "description": { "type": "string" },
+                    "name": { "type": "string" },
+                    "subagent_type": { "type": "string" }
+                },
+                "required": ["prompt", "description"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
+            name: "TaskGetTool",
+            description: "Get the status and metadata of a task by its task_id (agentId).",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": { "type": "string" }
+                },
+                "required": ["task_id"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
+            name: "TaskListTool",
+            description: "List tasks, optionally filtered by status (pending, running, completed, failed, stopped).",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "status": { "type": "string", "enum": ["pending", "running", "completed", "failed", "stopped"] },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+                },
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
+            name: "TaskOutputTool",
+            description: "Retrieve the output content of a completed or running task.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": { "type": "string" }
+                },
+                "required": ["task_id"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
+            name: "TaskStopTool",
+            description: "Stop a pending or running task. Has no effect on tasks already in a terminal state.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": { "type": "string" }
+                },
+                "required": ["task_id"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
+            name: "TaskUpdateTool",
+            description: "Update the description or name of an existing task manifest.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": { "type": "string" },
+                    "description": { "type": "string" },
+                    "name": { "type": "string" }
+                },
+                "required": ["task_id"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
+            name: "LSPTool",
+            description: "Query a language server for diagnostics, hover info, completions, or go-to-definition. Requires an attached LSP server.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "command": { "type": "string", "enum": ["diagnostics", "hover", "completions", "definition", "references"] },
+                    "arguments": { "type": "object" }
+                },
+                "required": ["command"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
+            name: "RemoteTriggerTool",
+            description: "Trigger a named event on the active remote session. Requires an active remote connection.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "event": { "type": "string" },
+                    "payload": { "type": "object" }
+                },
+                "required": ["event"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
+            name: "TeamCreateTool",
+            description: "Create a new team in the connected backend service. Requires a configured team backend.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string" },
+                    "description": { "type": "string" }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
+            name: "TeamDeleteTool",
+            description: "Delete a team from the connected backend service. Requires a configured team backend.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "team_id": { "type": "string" }
+                },
+                "required": ["team_id"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
+            name: "CronCreateTool",
+            description: "Schedule a command to run on a cron schedule. Requires a connected scheduler service.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "schedule": { "type": "string", "description": "cron expression, e.g. '0 * * * *'" },
+                    "command": { "type": "string" },
+                    "description": { "type": "string" }
+                },
+                "required": ["schedule", "command"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
+            name: "CronDeleteTool",
+            description: "Delete a scheduled cron job by its id. Requires a connected scheduler service.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "cron_id": { "type": "string" }
+                },
+                "required": ["cron_id"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
+            name: "CronListTool",
+            description: "List all scheduled cron jobs. Returns an empty list if no scheduler service is connected.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
             name: "SendUserMessage",
             description: "Send a message to the user.",
             input_schema: json!({
@@ -875,6 +1350,9 @@ pub fn execute_tool(name: &str, input: &Value) -> Result<String, String> {
         "ToolSearch" => from_value::<ToolSearchInput>(input).and_then(run_tool_search),
         "NotebookEdit" => from_value::<NotebookEditInput>(input).and_then(run_notebook_edit),
         "Sleep" => from_value::<SleepInput>(input).and_then(run_sleep),
+        "AskUserQuestionTool" => {
+            from_value::<AskUserQuestionInput>(input).and_then(run_ask_user_question)
+        }
         "SendUserMessage" | "Brief" => from_value::<BriefInput>(input).and_then(run_brief),
         "Config" => from_value::<ConfigInput>(input).and_then(run_config),
         "StructuredOutput" => {
@@ -882,6 +1360,19 @@ pub fn execute_tool(name: &str, input: &Value) -> Result<String, String> {
         }
         "REPL" => from_value::<ReplInput>(input).and_then(run_repl),
         "PowerShell" => from_value::<PowerShellInput>(input).and_then(run_powershell),
+        "TaskCreateTool" => from_value::<TaskCreateInput>(input).and_then(run_task_create),
+        "TaskGetTool" => from_value::<TaskGetInput>(input).and_then(run_task_get),
+        "TaskListTool" => from_value::<TaskListInput>(input).and_then(run_task_list),
+        "TaskOutputTool" => from_value::<TaskOutputInput>(input).and_then(run_task_output),
+        "TaskStopTool" => from_value::<TaskStopInput>(input).and_then(run_task_stop),
+        "TaskUpdateTool" => from_value::<TaskUpdateInput>(input).and_then(run_task_update),
+        "LSPTool" => from_value::<LspToolInput>(input).and_then(run_lsp_tool),
+        "RemoteTriggerTool" => from_value::<RemoteTriggerInput>(input).and_then(run_remote_trigger),
+        "TeamCreateTool" => from_value::<TeamCreateInput>(input).and_then(run_team_create),
+        "TeamDeleteTool" => from_value::<TeamDeleteInput>(input).and_then(run_team_delete),
+        "CronCreateTool" => from_value::<CronCreateInput>(input).and_then(run_cron_create),
+        "CronDeleteTool" => from_value::<CronDeleteInput>(input).and_then(run_cron_delete),
+        "CronListTool" => from_value::<CronListInput>(input).and_then(run_cron_list),
         _ if is_dynamic_mcp_tool_name(name) => execute_dynamic_mcp_tool(name, input),
         _ => Err(format!("unsupported tool: {name}")),
     }
@@ -979,6 +1470,10 @@ fn run_sleep(input: SleepInput) -> Result<String, String> {
     to_pretty_json(execute_sleep(input))
 }
 
+fn run_ask_user_question(input: AskUserQuestionInput) -> Result<String, String> {
+    to_pretty_json(execute_ask_user_question(input)?)
+}
+
 fn run_brief(input: BriefInput) -> Result<String, String> {
     to_pretty_json(execute_brief(input)?)
 }
@@ -997,6 +1492,58 @@ fn run_repl(input: ReplInput) -> Result<String, String> {
 
 fn run_powershell(input: PowerShellInput) -> Result<String, String> {
     to_pretty_json(execute_powershell(input).map_err(|error| error.to_string())?)
+}
+
+fn run_task_create(input: TaskCreateInput) -> Result<String, String> {
+    to_pretty_json(execute_task_create(input)?)
+}
+
+fn run_task_get(input: TaskGetInput) -> Result<String, String> {
+    to_pretty_json(execute_task_get(input)?)
+}
+
+fn run_task_list(input: TaskListInput) -> Result<String, String> {
+    to_pretty_json(execute_task_list(input)?)
+}
+
+fn run_task_output(input: TaskOutputInput) -> Result<String, String> {
+    to_pretty_json(execute_task_output(input)?)
+}
+
+fn run_task_stop(input: TaskStopInput) -> Result<String, String> {
+    to_pretty_json(execute_task_stop(input)?)
+}
+
+fn run_task_update(input: TaskUpdateInput) -> Result<String, String> {
+    to_pretty_json(execute_task_update(input)?)
+}
+
+fn run_lsp_tool(input: LspToolInput) -> Result<String, String> {
+    execute_lsp_tool(input)
+}
+
+fn run_remote_trigger(input: RemoteTriggerInput) -> Result<String, String> {
+    execute_remote_trigger(input)
+}
+
+fn run_team_create(input: TeamCreateInput) -> Result<String, String> {
+    execute_team_create(input)
+}
+
+fn run_team_delete(input: TeamDeleteInput) -> Result<String, String> {
+    execute_team_delete(input)
+}
+
+fn run_cron_create(input: CronCreateInput) -> Result<String, String> {
+    execute_cron_create(input)
+}
+
+fn run_cron_delete(input: CronDeleteInput) -> Result<String, String> {
+    execute_cron_delete(input)
+}
+
+fn run_cron_list(input: CronListInput) -> Result<String, String> {
+    execute_cron_list(input)
 }
 
 fn to_pretty_json<T: serde::Serialize>(value: T) -> Result<String, String> {
@@ -1146,6 +1693,90 @@ enum NotebookEditMode {
 }
 
 #[derive(Debug, Deserialize)]
+struct AskUserQuestionInput {
+    question: String,
+    options: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TaskCreateInput {
+    prompt: String,
+    description: String,
+    name: Option<String>,
+    subagent_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TaskGetInput {
+    task_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TaskListInput {
+    status: Option<String>,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TaskOutputInput {
+    task_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TaskStopInput {
+    task_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TaskUpdateInput {
+    task_id: String,
+    description: Option<String>,
+    name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LspToolInput {
+    command: String,
+    #[allow(dead_code)]
+    arguments: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RemoteTriggerInput {
+    event: String,
+    #[allow(dead_code)]
+    payload: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TeamCreateInput {
+    name: String,
+    #[allow(dead_code)]
+    description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TeamDeleteInput {
+    team_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CronCreateInput {
+    schedule: String,
+    command: String,
+    #[allow(dead_code)]
+    description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CronDeleteInput {
+    cron_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CronListInput {}
+
+#[derive(Debug, Deserialize)]
 struct SleepInput {
     duration_ms: u64,
 }
@@ -1271,12 +1902,28 @@ struct AgentJob {
 #[derive(Debug, Serialize)]
 struct ToolSearchOutput {
     matches: Vec<String>,
+    #[serde(rename = "match_details")]
+    match_details: Vec<ToolSearchMatchDetail>,
     query: String,
     normalized_query: String,
     #[serde(rename = "total_deferred_tools")]
     total_deferred_tools: usize,
     #[serde(rename = "pending_mcp_servers")]
     pending_mcp_servers: Option<Vec<String>>,
+    #[serde(rename = "pending_mcp_server_details")]
+    pending_mcp_server_details: Option<Vec<PendingMcpServerDiscovery>>,
+}
+
+#[derive(Debug, Serialize)]
+struct ToolSearchMatchDetail {
+    name: String,
+    description: String,
+    source: String,
+    required_permission: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mcp_server: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mcp_tool: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1293,9 +1940,31 @@ struct NotebookEditOutput {
 }
 
 #[derive(Debug, Serialize)]
+struct TaskListOutput {
+    tasks: Vec<AgentTaskSummary>,
+    total: usize,
+    #[serde(rename = "filteredBy", skip_serializing_if = "Option::is_none")]
+    filtered_by: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct TaskOutputOutput {
+    #[serde(rename = "taskId")]
+    task_id: String,
+    status: String,
+    output: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 struct SleepOutput {
     duration_ms: u64,
     message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct AskUserQuestionOutput {
+    question: String,
+    answer: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -1434,7 +2103,11 @@ struct McpAuthOutput {
 struct McpAuthUnsupportedServer {
     server: String,
     transport: String,
+    #[serde(rename = "reasonKind")]
+    reason_kind: runtime::McpReasonKind,
     detail: String,
+    #[serde(rename = "remediationHint", skip_serializing_if = "Option::is_none")]
+    remediation_hint: Option<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1442,8 +2115,12 @@ struct McpAuthAttentionServer {
     server: String,
     transport: String,
     status: String,
+    #[serde(rename = "reasonKind")]
+    reason_kind: runtime::McpReasonKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     detail: Option<String>,
+    #[serde(rename = "remediationHint", skip_serializing_if = "Option::is_none")]
+    remediation_hint: Option<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1460,6 +2137,8 @@ struct McpServerAuthStatus {
     #[serde(rename = "interactiveSupported")]
     interactive_supported: bool,
     status: String,
+    #[serde(rename = "reasonKind", skip_serializing_if = "Option::is_none")]
+    reason_kind: Option<runtime::McpReasonKind>,
     #[serde(rename = "storedCredentials")]
     stored_credentials: bool,
     #[serde(rename = "refreshTokenPresent")]
@@ -1513,12 +2192,20 @@ fn mcp_auth_transport_counts(servers: &[McpServerAuthStatus]) -> BTreeMap<String
 fn mcp_auth_attention_servers(servers: &[McpServerAuthStatus]) -> Vec<McpAuthAttentionServer> {
     servers
         .iter()
-        .filter(|server| server.status != "ready")
-        .map(|server| McpAuthAttentionServer {
-            server: server.server.clone(),
-            transport: server.transport.clone(),
-            status: server.status.clone(),
-            detail: server.detail.clone(),
+        .filter(|server| server.reason_kind.is_some())
+        .map(|server| {
+            let hint = server
+                .detail
+                .as_deref()
+                .and_then(mcp_reason_remediation_hint);
+            McpAuthAttentionServer {
+                server: server.server.clone(),
+                transport: server.transport.clone(),
+                status: server.status.clone(),
+                reason_kind: server.reason_kind.expect("attention server reason kind"),
+                detail: server.detail.clone(),
+                remediation_hint: hint,
+            }
         })
         .collect()
 }
@@ -1528,14 +2215,20 @@ fn mcp_auth_unsupported_servers(
 ) -> Vec<McpAuthUnsupportedServer> {
     attention_servers
         .iter()
-        .filter(|server| server.status == "unsupported-transport")
-        .map(|server| McpAuthUnsupportedServer {
-            server: server.server.clone(),
-            transport: server.transport.clone(),
-            detail: server
+        .filter(|server| server.reason_kind == runtime::McpReasonKind::UnsupportedRuntime)
+        .map(|server| {
+            let detail = server
                 .detail
                 .clone()
-                .unwrap_or_else(|| String::from("<unknown>")),
+                .unwrap_or_else(|| String::from("<unknown>"));
+            let hint = mcp_reason_remediation_hint(&detail);
+            McpAuthUnsupportedServer {
+                server: server.server.clone(),
+                transport: server.transport.clone(),
+                reason_kind: runtime::McpReasonKind::UnsupportedRuntime,
+                detail,
+                remediation_hint: hint,
+            }
         })
         .collect()
 }
@@ -1592,7 +2285,7 @@ fn resolve_mcp_server_name(config: &RuntimeConfig, requested: &str) -> Result<St
 #[derive(Debug, Default)]
 struct DynamicMcpCatalog {
     tools: Vec<runtime::ManagedMcpTool>,
-    pending_servers: Vec<String>,
+    pending_servers: Vec<PendingMcpServerDiscovery>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2722,12 +3415,30 @@ fn dynamic_mcp_catalog(allowed_tools: Option<&BTreeSet<String>>) -> DynamicMcpCa
     for server_name in configured_mcp_server_names(&config) {
         match discover_mcp_tools_for_server(&config, &server_name) {
             Ok(tools) => catalog.tools.extend(tools),
-            Err(_) => catalog.pending_servers.push(server_name),
+            Err(detail) => catalog
+                .pending_servers
+                .push(pending_mcp_server_discovery(server_name, detail)),
         }
     }
-    catalog.pending_servers.sort();
-    catalog.pending_servers.dedup();
+    catalog.pending_servers.sort_by(|left, right| {
+        left.server
+            .cmp(&right.server)
+            .then_with(|| left.detail.cmp(&right.detail))
+    });
     catalog
+        .pending_servers
+        .dedup_by(|left, right| left.server == right.server);
+    catalog
+}
+
+fn pending_mcp_server_discovery(server_name: String, detail: String) -> PendingMcpServerDiscovery {
+    let hint = mcp_reason_remediation_hint(&detail);
+    PendingMcpServerDiscovery {
+        server: server_name,
+        reason_kind: runtime::classify_mcp_reason_kind(&detail),
+        remediation_hint: hint,
+        detail,
+    }
 }
 
 fn dynamic_mcp_tool_definitions(allowed_tools: Option<&BTreeSet<String>>) -> Vec<ToolDefinition> {
@@ -2886,6 +3597,7 @@ fn mcp_status_for_server(
         supported_execution: status.supported_execution,
         interactive_supported: status.interactive_supported,
         status: status.status,
+        reason_kind: status.reason_kind,
         stored_credentials: status.stored_credentials,
         refresh_token_present: status.refresh_token_present,
         expires_at: status.expires_at,
@@ -4531,14 +5243,62 @@ fn execute_tool_search(input: ToolSearchInput) -> ToolSearchOutput {
         }
     }
 
+    let pending_mcp_servers = pending_mcp_server_names(&catalog.pending_servers);
+
     ToolSearchOutput {
+        match_details: tool_search_match_details(&matches, &deferred, &catalog),
         matches,
         query,
         normalized_query,
         total_deferred_tools: deferred.len() + catalog.tools.len(),
-        pending_mcp_servers: (!catalog.pending_servers.is_empty())
+        pending_mcp_servers: (!pending_mcp_servers.is_empty()).then_some(pending_mcp_servers),
+        pending_mcp_server_details: (!catalog.pending_servers.is_empty())
             .then_some(catalog.pending_servers),
     }
+}
+
+fn pending_mcp_server_names(entries: &[PendingMcpServerDiscovery]) -> Vec<String> {
+    entries.iter().map(|entry| entry.server.clone()).collect()
+}
+
+fn tool_search_match_details(
+    matches: &[String],
+    specs: &[ToolSpec],
+    catalog: &DynamicMcpCatalog,
+) -> Vec<ToolSearchMatchDetail> {
+    matches
+        .iter()
+        .filter_map(|name| {
+            if let Some(spec) = specs.iter().find(|spec| spec.name == name) {
+                return Some(ToolSearchMatchDetail {
+                    name: spec.name.to_string(),
+                    description: spec.description.to_string(),
+                    source: String::from("registry"),
+                    required_permission: spec.required_permission.as_str().to_string(),
+                    mcp_server: None,
+                    mcp_tool: None,
+                });
+            }
+
+            catalog
+                .tools
+                .iter()
+                .find(|tool| tool.qualified_name == *name)
+                .map(|tool| ToolSearchMatchDetail {
+                    name: tool.qualified_name.clone(),
+                    description: tool.tool.description.clone().unwrap_or_else(|| {
+                        format!(
+                            "Invoke MCP tool `{}` on configured server `{}`.",
+                            tool.raw_name, tool.server_name
+                        )
+                    }),
+                    source: String::from("dynamic-mcp"),
+                    required_permission: PermissionMode::DangerFullAccess.as_str().to_string(),
+                    mcp_server: Some(tool.server_name.clone()),
+                    mcp_tool: Some(tool.raw_name.clone()),
+                })
+        })
+        .collect()
 }
 
 fn deferred_tool_specs() -> Vec<ToolSpec> {
@@ -5000,6 +5760,207 @@ fn execute_sleep(input: SleepInput) -> SleepOutput {
         duration_ms: input.duration_ms,
         message: format!("Slept for {}ms", input.duration_ms),
     }
+}
+
+fn execute_ask_user_question(input: AskUserQuestionInput) -> Result<AskUserQuestionOutput, String> {
+    use std::io::{IsTerminal, Write};
+    if !std::io::stdin().is_terminal() {
+        return Err(
+            "AskUserQuestionTool requires an interactive terminal (stdin is not attached)"
+                .to_string(),
+        );
+    }
+    println!();
+    println!("\x1b[1;36mQuestion:\x1b[0m {}", input.question);
+    if let Some(opts) = &input.options {
+        if !opts.is_empty() {
+            println!("\x1b[2mOptions:\x1b[0m");
+            for (i, option) in opts.iter().enumerate() {
+                println!("  {}. {}", i + 1, option);
+            }
+        }
+    }
+    print!("\x1b[1;36m> \x1b[0m");
+    let _ = std::io::stdout().flush();
+    let mut raw = String::new();
+    std::io::stdin()
+        .read_line(&mut raw)
+        .map_err(|e| e.to_string())?;
+    let answer = raw.trim().to_string();
+    Ok(AskUserQuestionOutput {
+        question: input.question,
+        answer,
+    })
+}
+
+fn execute_task_create(input: TaskCreateInput) -> Result<AgentOutput, String> {
+    if input.description.trim().is_empty() {
+        return Err(String::from("description must not be empty"));
+    }
+    if input.prompt.trim().is_empty() {
+        return Err(String::from("prompt must not be empty"));
+    }
+    let agent_id = make_agent_id();
+    let output_dir = agent_store_dir()?;
+    std::fs::create_dir_all(&output_dir).map_err(|e| e.to_string())?;
+    let output_file = output_dir.join(format!("{agent_id}.md"));
+    let manifest_file = output_dir.join(format!("{agent_id}.json"));
+    let agent_name = input
+        .name
+        .as_deref()
+        .map(slugify_agent_name)
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| slugify_agent_name(&input.description));
+    let created_at = iso8601_now();
+    let subagent_type = normalize_subagent_type(input.subagent_type.as_deref());
+    let output_contents = format!(
+        "# Task\n\n- id: {agent_id}\n- name: {agent_name}\n- description: {}\n- created_at: {created_at}\n\n## Prompt\n\n{}\n",
+        input.description, input.prompt
+    );
+    std::fs::write(&output_file, &output_contents).map_err(|e| e.to_string())?;
+    let manifest = AgentOutput {
+        agent_id,
+        name: agent_name,
+        description: input.description,
+        subagent_type: Some(subagent_type),
+        model: None,
+        status: String::from("pending"),
+        output_file: output_file.display().to_string(),
+        manifest_file: manifest_file.display().to_string(),
+        created_at,
+        started_at: None,
+        completed_at: None,
+        error: None,
+    };
+    write_agent_manifest(&manifest)?;
+    Ok(manifest)
+}
+
+fn read_task_manifest(task_id: &str) -> Result<AgentOutput, String> {
+    let loaded = load_agent_task(task_id)?;
+    let raw = std::fs::read_to_string(&loaded.task.manifest_file)
+        .map_err(|e| format!("failed to read manifest for {task_id}: {e}"))?;
+    serde_json::from_str::<AgentOutput>(&raw)
+        .map_err(|e| format!("failed to parse manifest for {task_id}: {e}"))
+}
+
+fn execute_task_get(input: TaskGetInput) -> Result<AgentOutput, String> {
+    read_task_manifest(&input.task_id)
+}
+
+fn execute_task_list(input: TaskListInput) -> Result<TaskListOutput, String> {
+    let all = list_agent_tasks()?;
+    let filtered = if let Some(ref status) = input.status {
+        let lower = status.to_lowercase();
+        all.into_iter()
+            .filter(|t| t.status.to_lowercase() == lower)
+            .collect::<Vec<_>>()
+    } else {
+        all
+    };
+    let total = filtered.len();
+    let limit = input.limit.unwrap_or(50);
+    let tasks = filtered.into_iter().take(limit).collect();
+    Ok(TaskListOutput {
+        tasks,
+        total,
+        filtered_by: input.status,
+    })
+}
+
+fn execute_task_output(input: TaskOutputInput) -> Result<TaskOutputOutput, String> {
+    let loaded = load_agent_task(&input.task_id)?;
+    Ok(TaskOutputOutput {
+        task_id: loaded.task.agent_id.clone(),
+        status: loaded.task.status.clone(),
+        output: loaded.output,
+    })
+}
+
+fn execute_task_stop(input: TaskStopInput) -> Result<AgentOutput, String> {
+    let mut manifest = read_task_manifest(&input.task_id)?;
+    if matches!(manifest.status.as_str(), "completed" | "failed" | "stopped") {
+        return Err(format!(
+            "task {} is already in terminal state: {}",
+            manifest.agent_id, manifest.status
+        ));
+    }
+    manifest.status = String::from("stopped");
+    manifest.completed_at = Some(iso8601_now());
+    write_agent_manifest(&manifest)?;
+    Ok(manifest)
+}
+
+fn execute_task_update(input: TaskUpdateInput) -> Result<AgentOutput, String> {
+    let mut manifest = read_task_manifest(&input.task_id)?;
+    if let Some(desc) = input.description {
+        if !desc.trim().is_empty() {
+            manifest.description = desc;
+        }
+    }
+    if let Some(name) = input.name {
+        let slugged = slugify_agent_name(&name);
+        if !slugged.is_empty() {
+            manifest.name = slugged;
+        }
+    }
+    write_agent_manifest(&manifest)?;
+    Ok(manifest)
+}
+
+fn execute_lsp_tool(input: LspToolInput) -> Result<String, String> {
+    Err(format!(
+        "LSPTool: no language server is connected in this session (command: {}); \
+         attach an LSP-aware editor or connect via the remote transport",
+        input.command
+    ))
+}
+
+fn execute_remote_trigger(input: RemoteTriggerInput) -> Result<String, String> {
+    Err(format!(
+        "RemoteTriggerTool: no active remote session for event '{}'; \
+         establish a remote connection first (`/remote-setup`)",
+        input.event
+    ))
+}
+
+fn execute_team_create(input: TeamCreateInput) -> Result<String, String> {
+    Err(format!(
+        "TeamCreateTool: team collaboration features require a connected backend service \
+         (team name: '{}')",
+        input.name
+    ))
+}
+
+fn execute_team_delete(input: TeamDeleteInput) -> Result<String, String> {
+    Err(format!(
+        "TeamDeleteTool: team collaboration features require a connected backend service \
+         (team_id: '{}')",
+        input.team_id
+    ))
+}
+
+fn execute_cron_create(input: CronCreateInput) -> Result<String, String> {
+    Err(format!(
+        "CronCreateTool: cron scheduling requires a connected scheduler service \
+         (schedule: '{}', command: '{}')",
+        input.schedule, input.command
+    ))
+}
+
+fn execute_cron_delete(input: CronDeleteInput) -> Result<String, String> {
+    Err(format!(
+        "CronDeleteTool: cron scheduling requires a connected scheduler service \
+         (cron_id: '{}')",
+        input.cron_id
+    ))
+}
+
+fn execute_cron_list(_input: CronListInput) -> Result<String, String> {
+    to_pretty_json(serde_json::json!({
+        "crons": [],
+        "message": "no scheduler service connected; cron list is empty"
+    }))
 }
 
 fn execute_brief(input: BriefInput) -> Result<BriefOutput, String> {
@@ -5797,17 +6758,310 @@ mod tests {
         assert!(names.contains(&"ToolSearch"));
         assert!(names.contains(&"NotebookEdit"));
         assert!(names.contains(&"Sleep"));
+        assert!(names.contains(&"AskUserQuestionTool"));
         assert!(names.contains(&"SendUserMessage"));
         assert!(names.contains(&"Config"));
         assert!(names.contains(&"StructuredOutput"));
         assert!(names.contains(&"REPL"));
         assert!(names.contains(&"PowerShell"));
+        assert!(names.contains(&"TaskCreateTool"));
+        assert!(names.contains(&"TaskGetTool"));
+        assert!(names.contains(&"TaskListTool"));
+        assert!(names.contains(&"TaskOutputTool"));
+        assert!(names.contains(&"TaskStopTool"));
+        assert!(names.contains(&"TaskUpdateTool"));
+        assert!(names.contains(&"LSPTool"));
+        assert!(names.contains(&"RemoteTriggerTool"));
+        assert!(names.contains(&"TeamCreateTool"));
+        assert!(names.contains(&"TeamDeleteTool"));
+        assert!(names.contains(&"CronCreateTool"));
+        assert!(names.contains(&"CronDeleteTool"));
+        assert!(names.contains(&"CronListTool"));
+    }
+
+    #[test]
+    #[ignore = "hangs in interactive terminals; run with: cargo test ask_user_question_rejects_non_tty < /dev/null"]
+    fn ask_user_question_rejects_non_tty() {
+        // In test environments stdin is not a tty, so the tool should refuse.
+        let error = execute_tool(
+            "AskUserQuestionTool",
+            &json!({ "question": "What is your name?" }),
+        )
+        .expect_err("should fail when stdin is not a tty");
+        assert!(
+            error.contains("interactive terminal"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn ask_user_question_output_schema_is_advertised() {
+        use crate::tool_output_schema;
+        let schema = tool_output_schema("AskUserQuestionTool")
+            .expect("AskUserQuestionTool should have an output schema");
+        assert_eq!(schema["properties"]["question"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["answer"]["type"], json!("string"));
     }
 
     #[test]
     fn rejects_unknown_tool_names() {
         let error = execute_tool("nope", &json!({})).expect_err("tool should be rejected");
         assert!(error.contains("unsupported tool"));
+    }
+
+    #[test]
+    fn task_create_creates_pending_manifest() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let dir = temp_path("task-create");
+        std::env::set_var("CLAWD_AGENT_STORE", &dir);
+
+        let result = execute_tool(
+            "TaskCreateTool",
+            &json!({
+                "prompt": "Audit the codebase for security issues",
+                "description": "Security audit",
+                "name": "sec-audit"
+            }),
+        )
+        .expect("task create should succeed");
+
+        let manifest: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(manifest["status"], json!("pending"));
+        assert_eq!(manifest["name"], json!("sec-audit"));
+        assert_eq!(manifest["description"], json!("Security audit"));
+        assert!(manifest["agentId"].as_str().unwrap().starts_with("agent-"));
+
+        std::env::remove_var("CLAWD_AGENT_STORE");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn task_get_returns_manifest() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let dir = temp_path("task-get");
+        std::env::set_var("CLAWD_AGENT_STORE", &dir);
+
+        let created: serde_json::Value = serde_json::from_str(
+            &execute_tool(
+                "TaskCreateTool",
+                &json!({ "prompt": "Run checks", "description": "CI check" }),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let task_id = created["agentId"].as_str().unwrap();
+
+        let fetched: serde_json::Value = serde_json::from_str(
+            &execute_tool("TaskGetTool", &json!({ "task_id": task_id })).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(fetched["agentId"], created["agentId"]);
+        assert_eq!(fetched["status"], json!("pending"));
+
+        std::env::remove_var("CLAWD_AGENT_STORE");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn task_list_returns_all_tasks_and_filters_by_status() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let dir = temp_path("task-list");
+        std::env::set_var("CLAWD_AGENT_STORE", &dir);
+
+        execute_tool(
+            "TaskCreateTool",
+            &json!({ "prompt": "p1", "description": "d1" }),
+        )
+        .unwrap();
+        execute_tool(
+            "TaskCreateTool",
+            &json!({ "prompt": "p2", "description": "d2" }),
+        )
+        .unwrap();
+
+        let all: serde_json::Value =
+            serde_json::from_str(&execute_tool("TaskListTool", &json!({})).unwrap()).unwrap();
+        assert_eq!(all["total"], json!(2));
+
+        let pending: serde_json::Value = serde_json::from_str(
+            &execute_tool("TaskListTool", &json!({ "status": "pending" })).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(pending["total"], json!(2));
+        assert_eq!(pending["filteredBy"], json!("pending"));
+
+        let running: serde_json::Value = serde_json::from_str(
+            &execute_tool("TaskListTool", &json!({ "status": "running" })).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(running["total"], json!(0));
+
+        std::env::remove_var("CLAWD_AGENT_STORE");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn task_stop_marks_task_stopped() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let dir = temp_path("task-stop");
+        std::env::set_var("CLAWD_AGENT_STORE", &dir);
+
+        let created: serde_json::Value = serde_json::from_str(
+            &execute_tool(
+                "TaskCreateTool",
+                &json!({ "prompt": "long work", "description": "long task" }),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let task_id = created["agentId"].as_str().unwrap();
+
+        let stopped: serde_json::Value = serde_json::from_str(
+            &execute_tool("TaskStopTool", &json!({ "task_id": task_id })).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(stopped["status"], json!("stopped"));
+        assert!(stopped["completedAt"].is_string());
+
+        let err = execute_tool("TaskStopTool", &json!({ "task_id": task_id }))
+            .expect_err("stopping a stopped task should fail");
+        assert!(err.contains("terminal state"), "unexpected: {err}");
+
+        std::env::remove_var("CLAWD_AGENT_STORE");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn task_update_changes_name_and_description() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let dir = temp_path("task-update");
+        std::env::set_var("CLAWD_AGENT_STORE", &dir);
+
+        let created: serde_json::Value = serde_json::from_str(
+            &execute_tool(
+                "TaskCreateTool",
+                &json!({ "prompt": "initial", "description": "original desc" }),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let task_id = created["agentId"].as_str().unwrap();
+
+        let updated: serde_json::Value = serde_json::from_str(
+            &execute_tool(
+                "TaskUpdateTool",
+                &json!({
+                    "task_id": task_id,
+                    "description": "updated desc",
+                    "name": "new name"
+                }),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(updated["description"], json!("updated desc"));
+        assert_eq!(updated["name"], json!("new-name"));
+
+        std::env::remove_var("CLAWD_AGENT_STORE");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn task_output_returns_output_content() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let dir = temp_path("task-output");
+        std::env::set_var("CLAWD_AGENT_STORE", &dir);
+
+        let created: serde_json::Value = serde_json::from_str(
+            &execute_tool(
+                "TaskCreateTool",
+                &json!({ "prompt": "compute", "description": "output test" }),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let task_id = created["agentId"].as_str().unwrap();
+
+        let out: serde_json::Value = serde_json::from_str(
+            &execute_tool("TaskOutputTool", &json!({ "task_id": task_id })).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(out["taskId"], created["agentId"]);
+        assert_eq!(out["status"], json!("pending"));
+        // output file is written by task_create so it should be Some
+        assert!(out["output"].is_string());
+
+        std::env::remove_var("CLAWD_AGENT_STORE");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stub_tools_return_unavailable_errors() {
+        let lsp_err = execute_tool("LSPTool", &json!({ "command": "diagnostics" }))
+            .expect_err("LSPTool should error");
+        assert!(lsp_err.contains("language server"), "unexpected: {lsp_err}");
+
+        let remote_err = execute_tool("RemoteTriggerTool", &json!({ "event": "ping" }))
+            .expect_err("RemoteTriggerTool should error");
+        assert!(
+            remote_err.contains("remote session"),
+            "unexpected: {remote_err}"
+        );
+
+        let team_err = execute_tool("TeamCreateTool", &json!({ "name": "alpha" }))
+            .expect_err("TeamCreateTool should error");
+        assert!(
+            team_err.contains("backend service"),
+            "unexpected: {team_err}"
+        );
+
+        let cron_err = execute_tool(
+            "CronCreateTool",
+            &json!({ "schedule": "0 * * * *", "command": "backup" }),
+        )
+        .expect_err("CronCreateTool should error");
+        assert!(
+            cron_err.contains("scheduler service"),
+            "unexpected: {cron_err}"
+        );
+
+        // CronListTool returns Ok with empty list
+        let cron_list: serde_json::Value =
+            serde_json::from_str(&execute_tool("CronListTool", &json!({})).unwrap()).unwrap();
+        assert_eq!(cron_list["crons"], json!([]));
+    }
+
+    #[test]
+    fn task_schemas_are_advertised() {
+        use crate::tool_output_schema;
+        for name in &[
+            "TaskCreateTool",
+            "TaskGetTool",
+            "TaskStopTool",
+            "TaskUpdateTool",
+        ] {
+            let schema = tool_output_schema(name).unwrap_or_else(|| panic!("{name} has no schema"));
+            assert!(
+                schema["properties"]["agentId"]["type"] == json!("string"),
+                "{name} schema missing agentId"
+            );
+        }
+        let list_schema = tool_output_schema("TaskListTool").unwrap();
+        assert_eq!(list_schema["properties"]["tasks"]["type"], json!("array"));
+        let out_schema = tool_output_schema("TaskOutputTool").unwrap();
+        assert_eq!(out_schema["properties"]["taskId"]["type"], json!("string"));
     }
 
     #[test]
@@ -5931,7 +7185,11 @@ mod tests {
             .is_some_and(|servers| servers.iter().any(|server| {
                 server["server"] == json!("remote")
                     && server["status"] == json!("user-auth-required")
+                    && server["reasonKind"] == json!("auth-required")
                     && server["transport"] == json!("http")
+                    && server["remediationHint"]
+                        .as_str()
+                        .is_some_and(|hint| hint.contains("McpAuthTool action `save`"))
             })));
         let servers = auth["servers"].as_array().expect("auth server list");
         assert!(servers.iter().any(|server| {
@@ -5942,6 +7200,7 @@ mod tests {
         assert!(servers.iter().any(|server| {
             server["server"] == json!("remote")
                 && server["status"] == json!("user-auth-required")
+                && server["reasonKind"] == json!("auth-required")
                 && server["supportedExecution"] == json!(true)
                 && server["authKind"] == json!("oauth")
         }));
@@ -5953,7 +7212,7 @@ mod tests {
                 "tool": "echo"
             }),
         )
-        .expect_err("remote transport should be rejected honestly");
+        .expect_err("remote OAuth server should require stored credentials");
         assert!(unsupported.contains("requires stored OAuth credentials"));
 
         match original_config_home {
@@ -6013,19 +7272,27 @@ mod tests {
             .is_some_and(|servers| servers.iter().any(|server| {
                 server["server"] == json!("sdk-server")
                     && server["transport"] == json!("sdk")
+                    && server["reasonKind"] == json!("unsupported-runtime")
                     && server["detail"]
                         .as_str()
                         .is_some_and(|detail| detail.contains("SDK server `sdk-adapter`"))
+                    && server["remediationHint"]
+                        .as_str()
+                        .is_some_and(|hint| hint.contains("SDK-backed server inspection-only"))
             })));
         assert!(status["attentionServers"]
             .as_array()
             .is_some_and(|servers| servers.iter().any(|server| {
                 server["server"] == json!("proxy-server")
                     && server["status"] == json!("unsupported-transport")
+                    && server["reasonKind"] == json!("unsupported-runtime")
                     && server["transport"] == json!("simcoe-ai-proxy")
                     && server["detail"].as_str().is_some_and(|detail| {
                         detail.contains("proxy `proxy-123` targets `wss://vendor.example/mcp`")
                     })
+                    && server["remediationHint"]
+                        .as_str()
+                        .is_some_and(|hint| hint.contains("proxy-backed server inspection-only"))
             })));
 
         let servers = status["servers"].as_array().expect("server status array");
@@ -6054,6 +7321,84 @@ mod tests {
         let proxy_error = execute_tool("MCPTool", &json!({ "server": "proxy-server" }))
             .expect_err("proxy transport should still be rejected honestly");
         assert!(proxy_error.contains("proxy `proxy-123` targets `wss://vendor.example/mcp`"));
+
+        match original_config_home {
+            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
+            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(&cwd);
+        let _ = fs::remove_dir_all(&config_home);
+    }
+
+    #[test]
+    fn mcp_tool_family_rejects_headers_helper_remote_execution_honestly() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cwd = temp_path("mcp-headers-helper-cwd");
+        let config_home = temp_path("mcp-headers-helper-home");
+        fs::create_dir_all(&cwd).expect("create cwd");
+        fs::create_dir_all(&config_home).expect("create config home");
+
+        fs::write(
+            cwd.join(".simcoe.json"),
+            serde_json::to_string_pretty(&json!({
+                "mcpServers": {
+                    "remote": {
+                        "type": "http",
+                        "url": "https://example.test/mcp",
+                        "headersHelper": "helper.sh",
+                        "oauth": {
+                            "clientId": "client-id",
+                            "authServerMetadataUrl": "https://issuer.example/.well-known/oauth-authorization-server"
+                        }
+                    }
+                }
+            }))
+            .expect("serialize settings"),
+        )
+        .expect("write project settings");
+
+        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
+        let original_cwd = set_test_cwd(&cwd);
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+
+        let auth = execute_tool("McpAuthTool", &json!({})).expect("inspect MCP auth");
+        let auth: serde_json::Value = serde_json::from_str(&auth).expect("valid MCP auth json");
+        let remote = auth["servers"]
+            .as_array()
+            .expect("auth server list")
+            .iter()
+            .find(|server| server["server"] == json!("remote"))
+            .expect("remote server present");
+        assert_eq!(remote["status"], json!("unsupported-transport"));
+        assert_eq!(remote["reasonKind"], json!("unsupported-runtime"));
+        assert_eq!(remote["authKind"], json!("oauth"));
+        assert_eq!(remote["supportedExecution"], json!(false));
+
+        let list_tools = execute_tool("MCPTool", &json!({ "server": "remote" }))
+            .expect_err("headersHelper transport should block tool listing");
+        assert!(list_tools.contains("headersHelper"));
+        assert!(!list_tools.contains("requires stored OAuth credentials"));
+
+        let call_tool = execute_tool("MCPTool", &json!({ "server": "remote", "tool": "echo" }))
+            .expect_err("headersHelper transport should block tool execution");
+        assert!(call_tool.contains("headersHelper"));
+        assert!(!call_tool.contains("requires stored OAuth credentials"));
+
+        let list_resources = execute_tool("ListMcpResourcesTool", &json!({ "server": "remote" }))
+            .expect_err("headersHelper transport should block resource listing");
+        assert!(list_resources.contains("headersHelper"));
+        assert!(!list_resources.contains("requires stored OAuth credentials"));
+
+        let read_resource = execute_tool(
+            "ReadMcpResourceTool",
+            &json!({ "server": "remote", "uri": "file://guide.txt" }),
+        )
+        .expect_err("headersHelper transport should block resource reads");
+        assert!(read_resource.contains("headersHelper"));
+        assert!(!read_resource.contains("requires stored OAuth credentials"));
 
         match original_config_home {
             Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
@@ -6256,6 +7601,17 @@ mod tests {
             .expect("search matches")
             .iter()
             .any(|value| value == "mcp__vendor__echo"));
+        assert!(search["match_details"]
+            .as_array()
+            .expect("match details")
+            .iter()
+            .any(|detail| {
+                detail["name"] == json!("mcp__vendor__echo")
+                    && detail["source"] == json!("dynamic-mcp")
+                    && detail["mcp_server"] == json!("vendor")
+                    && detail["mcp_tool"] == json!("echo")
+            }));
+        assert!(search["pending_mcp_server_details"].is_null());
 
         let called = execute_tool("mcp__vendor__echo", &json!({ "text": "hello" }))
             .expect("call dynamic MCP tool");
@@ -6380,6 +7736,10 @@ mod tests {
         assert_eq!(
             initial_status["servers"][0]["status"],
             json!("user-auth-required")
+        );
+        assert_eq!(
+            initial_status["servers"][0]["reasonKind"],
+            json!("auth-required")
         );
         assert_eq!(
             initial_status["servers"][0]["supportedExecution"],
@@ -7076,6 +8436,11 @@ mod tests {
             serde_json::from_str(&selected).expect("valid json");
         assert_eq!(selected_output["matches"][0], "Agent");
         assert_eq!(selected_output["matches"][1], "Skill");
+        assert_eq!(selected_output["match_details"][0]["name"], json!("Agent"));
+        assert_eq!(
+            selected_output["match_details"][0]["source"],
+            json!("registry")
+        );
 
         let aliased = execute_tool("ToolSearch", &json!({"query": "AgentTool"}))
             .expect("ToolSearch should support tool aliases");
@@ -7090,6 +8455,62 @@ mod tests {
             serde_json::from_str(&selected_with_alias).expect("valid json");
         assert_eq!(selected_with_alias_output["matches"][0], "Agent");
         assert_eq!(selected_with_alias_output["matches"][1], "Skill");
+    }
+
+    #[test]
+    fn tool_search_reports_pending_mcp_discovery_details() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cwd = temp_path("tool-search-pending-cwd");
+        let config_home = temp_path("tool-search-pending-home");
+        std::fs::create_dir_all(&cwd).expect("create cwd");
+        std::fs::create_dir_all(&config_home).expect("create config home");
+        std::fs::write(
+            cwd.join(".simcoe.json"),
+            serde_json::to_string_pretty(&json!({
+                "mcpServers": {
+                    "remote": {
+                        "type": "http",
+                        "url": "https://example.test/mcp",
+                        "headersHelper": "helper.sh"
+                    }
+                }
+            }))
+            .expect("serialize pending discovery config"),
+        )
+        .expect("write pending discovery config");
+
+        let original_config_home = std::env::var("SIMCOE_CONFIG_HOME").ok();
+        let original_cwd = set_test_cwd(&cwd);
+        std::env::set_var("SIMCOE_CONFIG_HOME", &config_home);
+
+        let search = execute_tool("ToolSearch", &json!({ "query": "remote" }))
+            .expect("ToolSearch should succeed with pending MCP discovery");
+        let search: serde_json::Value = serde_json::from_str(&search).expect("valid search json");
+        assert_eq!(search["pending_mcp_servers"], json!(["remote"]));
+        assert!(search["pending_mcp_server_details"]
+            .as_array()
+            .expect("pending mcp server details")
+            .iter()
+            .any(|detail| {
+                detail["server"] == json!("remote")
+                    && detail["reason_kind"] == json!("unsupported-runtime")
+                    && detail["detail"]
+                        .as_str()
+                        .is_some_and(|text| text.contains("headersHelper"))
+                    && detail["remediationHint"]
+                        .as_str()
+                        .is_some_and(|hint| hint.contains("inspection-only"))
+            }));
+
+        match original_config_home {
+            Some(value) => std::env::set_var("SIMCOE_CONFIG_HOME", value),
+            None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
+        }
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = std::fs::remove_dir_all(cwd);
+        let _ = std::fs::remove_dir_all(config_home);
     }
 
     #[test]

@@ -1,12 +1,122 @@
 use std::io;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use serde::Serialize;
+
 use crate::config::{McpServerConfig, McpTransport, ScopedMcpServerConfig};
 use crate::mcp_client::McpClientTransport;
 use crate::oauth::{load_mcp_oauth_credentials, OAuthTokenSet};
 
 const SIMCOEAI_SERVER_PREFIX: &str = "simcoe.ai ";
 const CCR_PROXY_PATH_MARKERS: [&str; 2] = ["/v2/session_ingress/shttp/mcp/", "/v2/ccr-sessions/"];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum McpReasonKind {
+    UnsupportedRuntime,
+    AuthRequired,
+    ExpiredCredentials,
+    DiscoveryError,
+}
+
+impl McpReasonKind {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::UnsupportedRuntime => "unsupported-runtime",
+            Self::AuthRequired => "auth-required",
+            Self::ExpiredCredentials => "expired-credentials",
+            Self::DiscoveryError => "discovery-error",
+        }
+    }
+
+    #[must_use]
+    pub const fn status_label(self) -> &'static str {
+        match self {
+            Self::UnsupportedRuntime => "unsupported-transport",
+            Self::AuthRequired => "user-auth-required",
+            Self::ExpiredCredentials => "expired",
+            Self::DiscoveryError => "discovery-error",
+        }
+    }
+}
+
+#[must_use]
+pub fn classify_mcp_reason_kind(detail: &str) -> McpReasonKind {
+    let normalized = detail.to_ascii_lowercase();
+    if normalized.contains("not executed by the rust mcp runtime yet") {
+        McpReasonKind::UnsupportedRuntime
+    } else if normalized.contains("user auth is required")
+        || normalized.contains("oauth credentials are required")
+        || normalized.contains("requires stored oauth credentials")
+        || (normalized.contains("oauth credentials") && normalized.contains("not found"))
+    {
+        McpReasonKind::AuthRequired
+    } else if normalized.contains("expired")
+        || (normalized.contains("oauth refresh") && normalized.contains("invalid_grant"))
+    {
+        McpReasonKind::ExpiredCredentials
+    } else {
+        McpReasonKind::DiscoveryError
+    }
+}
+
+#[must_use]
+pub fn mcp_reason_remediation_hint(detail: &str) -> Option<&'static str> {
+    let normalized = detail.to_ascii_lowercase();
+    match classify_mcp_reason_kind(detail) {
+        McpReasonKind::AuthRequired => {
+            Some("Save MCP OAuth credentials with McpAuthTool action `save`.")
+        }
+        McpReasonKind::ExpiredCredentials => Some(
+            "Re-authenticate and save fresh MCP OAuth credentials with McpAuthTool action `save`.",
+        ),
+        McpReasonKind::UnsupportedRuntime => {
+            if normalized.contains("headershelper") {
+                Some(
+                    "Remove headersHelper for direct Rust execution, or keep using inspection-only MCP surfaces until helper execution is ported.",
+                )
+            } else if normalized.contains("sdk server") || normalized.contains("sdk adapter path") {
+                Some(
+                    "Keep this SDK-backed server inspection-only until the upstream SDK adapter path is ported in Rust.",
+                )
+            } else if normalized.contains("sessionswebsocket.ts")
+                || normalized.contains("sdkmessageadapter.ts")
+                || normalized.contains("simcoe-ai-proxy")
+            {
+                Some(
+                    "Keep this proxy-backed server inspection-only until the upstream proxy websocket/session adapter path is ported in Rust.",
+                )
+            } else {
+                Some(
+                    "Use a transport the Rust runtime can execute directly, or keep this server inspection-only for now.",
+                )
+            }
+        }
+        McpReasonKind::DiscoveryError => {
+            if normalized.contains("json-rpc error") {
+                Some(
+                    "Check the remote MCP server logs and confirm the requested tool or resource still exists.",
+                )
+            } else if normalized.contains("returned http")
+                || normalized.contains("failed with http")
+            {
+                Some(
+                    "Check the MCP endpoint, upstream service health, and any required auth or network configuration.",
+                )
+            } else if normalized.contains("request failed")
+                || normalized.contains("failed to connect")
+                || normalized.contains("failed to open sse stream")
+            {
+                Some(
+                    "Check network reachability and the MCP server URL or transport configuration.",
+                )
+            } else {
+                None
+            }
+        }
+    }
+}
 
 #[must_use]
 pub fn normalize_name_for_mcp(name: &str) -> String {
@@ -135,6 +245,7 @@ pub struct McpServerAuthStatusSnapshot {
     pub supported_execution: bool,
     pub interactive_supported: bool,
     pub status: String,
+    pub reason_kind: Option<McpReasonKind>,
     pub stored_credentials: bool,
     pub refresh_token_present: bool,
     pub expires_at: Option<u64>,
@@ -179,6 +290,7 @@ pub fn mcp_server_auth_status(
             supported_execution: true,
             interactive_supported: false,
             status: String::from("ready"),
+            reason_kind: None,
             stored_credentials: false,
             refresh_token_present: false,
             expires_at: None,
@@ -217,15 +329,18 @@ pub fn mcp_server_auth_status(
                 .unwrap_or_default();
             let token_expired = stored.as_ref().is_some_and(mcp_oauth_token_is_expired);
             let supported_execution = execution_reason.is_none();
-            let status = if !supported_execution {
-                String::from("unsupported-transport")
+            let reason_kind = if !supported_execution {
+                Some(McpReasonKind::UnsupportedRuntime)
             } else if requires_user_auth && !stored_credentials {
-                String::from("user-auth-required")
+                Some(McpReasonKind::AuthRequired)
             } else if requires_user_auth && token_expired && !refresh_token_present {
-                String::from("expired")
+                Some(McpReasonKind::ExpiredCredentials)
             } else {
-                String::from("ready")
+                None
             };
+            let status = reason_kind
+                .map(|kind| kind.status_label().to_string())
+                .unwrap_or_else(|| String::from("ready"));
             let detail = if let Some(reason) = execution_reason {
                 Some(reason)
             } else if requires_user_auth && !stored_credentials {
@@ -246,6 +361,7 @@ pub fn mcp_server_auth_status(
                 supported_execution,
                 interactive_supported: false,
                 status,
+                reason_kind,
                 stored_credentials,
                 refresh_token_present,
                 expires_at,
@@ -265,6 +381,7 @@ pub fn mcp_server_auth_status(
                 supported_execution: false,
                 interactive_supported: false,
                 status: String::from("unsupported-transport"),
+                reason_kind: Some(McpReasonKind::UnsupportedRuntime),
                 stored_credentials: false,
                 refresh_token_present: false,
                 expires_at: None,
@@ -471,10 +588,11 @@ mod tests {
     use crate::oauth::{save_mcp_oauth_credentials, OAuthTokenSet};
 
     use super::{
-        mcp_client_transport_display_name, mcp_credentials_key, mcp_oauth_token_is_expired,
-        mcp_server_auth_status, mcp_server_signature, mcp_tool_name, mcp_transport_display_name,
-        normalize_name_for_mcp, scoped_mcp_config_hash, unsupported_live_mcp_execution_reason,
-        unwrap_ccr_proxy_url,
+        classify_mcp_reason_kind, mcp_client_transport_display_name, mcp_credentials_key,
+        mcp_oauth_token_is_expired, mcp_reason_remediation_hint, mcp_server_auth_status,
+        mcp_server_signature, mcp_tool_name, mcp_transport_display_name, normalize_name_for_mcp,
+        scoped_mcp_config_hash, unsupported_live_mcp_execution_reason, unwrap_ccr_proxy_url,
+        McpReasonKind,
     };
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
@@ -664,6 +782,7 @@ mod tests {
         assert!(auth_required.requires_user_auth);
         assert!(auth_required.supported_execution);
         assert_eq!(auth_required.status, "user-auth-required");
+        assert_eq!(auth_required.reason_kind, Some(McpReasonKind::AuthRequired));
         assert!(!auth_required.stored_credentials);
         assert!(auth_required
             .detail
@@ -684,6 +803,10 @@ mod tests {
         let expired_status =
             mcp_server_auth_status("vendor", &oauth_server).expect("expired status");
         assert_eq!(expired_status.status, "expired");
+        assert_eq!(
+            expired_status.reason_kind,
+            Some(McpReasonKind::ExpiredCredentials)
+        );
         assert!(expired_status.stored_credentials);
         assert!(!expired_status.refresh_token_present);
         assert_eq!(expired_status.scopes, vec!["scope:a".to_string()]);
@@ -704,6 +827,10 @@ mod tests {
         let blocked_status =
             mcp_server_auth_status("blocked", &blocked_server).expect("blocked status");
         assert_eq!(blocked_status.status, "unsupported-transport");
+        assert_eq!(
+            blocked_status.reason_kind,
+            Some(McpReasonKind::UnsupportedRuntime)
+        );
         assert!(!blocked_status.supported_execution);
         assert_eq!(blocked_status.auth_kind, "none");
         assert!(blocked_status
@@ -716,5 +843,77 @@ mod tests {
             None => std::env::remove_var("SIMCOE_CONFIG_HOME"),
         }
         let _ = std::fs::remove_dir_all(config_home);
+    }
+
+    #[test]
+    fn classifies_mcp_reason_kinds_from_detail_text() {
+        assert_eq!(
+            classify_mcp_reason_kind(
+                "http transport with headersHelper is not executed by the Rust MCP runtime yet"
+            ),
+            McpReasonKind::UnsupportedRuntime
+        );
+        assert_eq!(
+            classify_mcp_reason_kind(
+                "stored OAuth credentials are required before this server can be executed"
+            ),
+            McpReasonKind::AuthRequired
+        );
+        assert_eq!(
+            classify_mcp_reason_kind(
+                "MCP server `remote` requires stored OAuth credentials; save them with McpAuthTool action `save`"
+            ),
+            McpReasonKind::AuthRequired
+        );
+        assert_eq!(
+            classify_mcp_reason_kind(
+                "stored OAuth access token is expired and no refresh token is available"
+            ),
+            McpReasonKind::ExpiredCredentials
+        );
+        assert_eq!(
+            classify_mcp_reason_kind(
+                "OAuth refresh for MCP server `remote` failed with HTTP 401: invalid_grant"
+            ),
+            McpReasonKind::ExpiredCredentials
+        );
+        assert_eq!(
+            classify_mcp_reason_kind("failed to connect to MCP server: connection refused"),
+            McpReasonKind::DiscoveryError
+        );
+    }
+
+    #[test]
+    fn returns_mcp_reason_remediation_hints_from_detail_text() {
+        assert_eq!(
+            mcp_reason_remediation_hint(
+                "MCP server `remote` requires stored OAuth credentials; save them with McpAuthTool action `save`"
+            ),
+            Some("Save MCP OAuth credentials with McpAuthTool action `save`.")
+        );
+        assert_eq!(
+            mcp_reason_remediation_hint(
+                "OAuth refresh for MCP server `remote` failed with HTTP 401: invalid_grant"
+            ),
+            Some(
+                "Re-authenticate and save fresh MCP OAuth credentials with McpAuthTool action `save`."
+            )
+        );
+        assert_eq!(
+            mcp_reason_remediation_hint(
+                "http transport with headersHelper is not executed by the Rust MCP runtime yet"
+            ),
+            Some(
+                "Remove headersHelper for direct Rust execution, or keep using inspection-only MCP surfaces until helper execution is ported."
+            )
+        );
+        assert_eq!(
+            mcp_reason_remediation_hint(
+                "MCP server `remote` returned JSON-RPC error for tools/call: tool not found (-32601)"
+            ),
+            Some(
+                "Check the remote MCP server logs and confirm the requested tool or resource still exists."
+            )
+        );
     }
 }

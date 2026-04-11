@@ -42,10 +42,11 @@ pub use file_ops::{
 };
 pub use hooks::{HookEvent, HookRunResult, HookRunner};
 pub use mcp::{
-    mcp_client_transport_display_name, mcp_credentials_key, mcp_oauth_token_is_expired,
-    mcp_server_auth_status, mcp_server_signature, mcp_tool_name, mcp_tool_prefix,
-    mcp_transport_display_name, normalize_name_for_mcp, scoped_mcp_config_hash,
-    unsupported_live_mcp_execution_reason, unwrap_ccr_proxy_url, McpServerAuthStatusSnapshot,
+    classify_mcp_reason_kind, mcp_client_transport_display_name, mcp_credentials_key,
+    mcp_oauth_token_is_expired, mcp_reason_remediation_hint, mcp_server_auth_status,
+    mcp_server_signature, mcp_tool_name, mcp_tool_prefix, mcp_transport_display_name,
+    normalize_name_for_mcp, scoped_mcp_config_hash, unsupported_live_mcp_execution_reason,
+    unwrap_ccr_proxy_url, McpReasonKind, McpServerAuthStatusSnapshot,
 };
 pub use mcp_client::{
     McpClientAuth, McpClientBootstrap, McpClientTransport, McpRemoteTransport, McpSdkTransport,
