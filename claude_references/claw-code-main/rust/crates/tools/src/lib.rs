@@ -1247,6 +1247,76 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
             required_permission: PermissionMode::ReadOnly,
         },
         ToolSpec {
+            name: "EnterPlanModeTool",
+            description: "Enter plan mode: the assistant will only plan and not execute any tools that modify state.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
+            name: "ExitPlanModeV2Tool",
+            description: "Exit plan mode and resume normal operation.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
+            name: "EnterWorktreeTool",
+            description: "Enter a git worktree context for isolated branch work.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "worktree_path": { "type": "string" }
+                },
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
+            name: "ExitWorktreeTool",
+            description: "Exit the current git worktree context and return to the main worktree.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
+            name: "SyntheticOutputTool",
+            description: "Emit a synthetic structured output record for downstream consumers.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "content": { "type": "string" },
+                    "outputType": { "type": "string" }
+                },
+                "required": ["content"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
+            name: "TestingPermissionTool",
+            description: "Internal testing tool for verifying permission-check behaviour.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "action": { "type": "string" },
+                    "path": { "type": "string" }
+                },
+                "required": ["action"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
             name: "SendUserMessage",
             description: "Send a message to the user.",
             input_schema: json!({
@@ -1373,6 +1443,18 @@ pub fn execute_tool(name: &str, input: &Value) -> Result<String, String> {
         "CronCreateTool" => from_value::<CronCreateInput>(input).and_then(run_cron_create),
         "CronDeleteTool" => from_value::<CronDeleteInput>(input).and_then(run_cron_delete),
         "CronListTool" => from_value::<CronListInput>(input).and_then(run_cron_list),
+        "EnterPlanModeTool" => {
+            from_value::<EnterPlanModeInput>(input).and_then(run_enter_plan_mode)
+        }
+        "ExitPlanModeV2Tool" => from_value::<ExitPlanModeInput>(input).and_then(run_exit_plan_mode),
+        "EnterWorktreeTool" => from_value::<EnterWorktreeInput>(input).and_then(run_enter_worktree),
+        "ExitWorktreeTool" => from_value::<ExitWorktreeInput>(input).and_then(run_exit_worktree),
+        "SyntheticOutputTool" => {
+            from_value::<SyntheticOutputInput>(input).and_then(run_synthetic_output)
+        }
+        "TestingPermissionTool" => {
+            from_value::<TestingPermissionInput>(input).and_then(run_testing_permission)
+        }
         _ if is_dynamic_mcp_tool_name(name) => execute_dynamic_mcp_tool(name, input),
         _ => Err(format!("unsupported tool: {name}")),
     }
@@ -1544,6 +1626,30 @@ fn run_cron_delete(input: CronDeleteInput) -> Result<String, String> {
 
 fn run_cron_list(input: CronListInput) -> Result<String, String> {
     execute_cron_list(input)
+}
+
+fn run_enter_plan_mode(input: EnterPlanModeInput) -> Result<String, String> {
+    execute_enter_plan_mode(input)
+}
+
+fn run_exit_plan_mode(input: ExitPlanModeInput) -> Result<String, String> {
+    execute_exit_plan_mode(input)
+}
+
+fn run_enter_worktree(input: EnterWorktreeInput) -> Result<String, String> {
+    execute_enter_worktree(input)
+}
+
+fn run_exit_worktree(input: ExitWorktreeInput) -> Result<String, String> {
+    execute_exit_worktree(input)
+}
+
+fn run_synthetic_output(input: SyntheticOutputInput) -> Result<String, String> {
+    execute_synthetic_output(input)
+}
+
+fn run_testing_permission(input: TestingPermissionInput) -> Result<String, String> {
+    execute_testing_permission(input)
 }
 
 fn to_pretty_json<T: serde::Serialize>(value: T) -> Result<String, String> {
@@ -1775,6 +1881,33 @@ struct CronDeleteInput {
 
 #[derive(Debug, Deserialize)]
 struct CronListInput {}
+
+#[derive(Debug, Deserialize)]
+struct EnterPlanModeInput {}
+
+#[derive(Debug, Deserialize)]
+struct ExitPlanModeInput {}
+
+#[derive(Debug, Deserialize)]
+struct EnterWorktreeInput {
+    worktree_path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExitWorktreeInput {}
+
+#[derive(Debug, Deserialize)]
+struct SyntheticOutputInput {
+    content: String,
+    #[serde(rename = "outputType")]
+    output_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TestingPermissionInput {
+    action: String,
+    path: Option<String>,
+}
 
 #[derive(Debug, Deserialize)]
 struct SleepInput {
@@ -5963,6 +6096,47 @@ fn execute_cron_list(_input: CronListInput) -> Result<String, String> {
     }))
 }
 
+fn execute_enter_plan_mode(_input: EnterPlanModeInput) -> Result<String, String> {
+    Err(String::from(
+        "EnterPlanModeTool: plan mode state management requires a connected session runtime",
+    ))
+}
+
+fn execute_exit_plan_mode(_input: ExitPlanModeInput) -> Result<String, String> {
+    Err(String::from(
+        "ExitPlanModeV2Tool: plan mode state management requires a connected session runtime",
+    ))
+}
+
+fn execute_enter_worktree(input: EnterWorktreeInput) -> Result<String, String> {
+    let path = input.worktree_path.as_deref().unwrap_or("(unspecified)");
+    Err(format!(
+        "EnterWorktreeTool: git worktree session management is not yet implemented (path: '{path}')"
+    ))
+}
+
+fn execute_exit_worktree(_input: ExitWorktreeInput) -> Result<String, String> {
+    Err(String::from(
+        "ExitWorktreeTool: git worktree session management is not yet implemented",
+    ))
+}
+
+fn execute_synthetic_output(input: SyntheticOutputInput) -> Result<String, String> {
+    let output_type = input.output_type.as_deref().unwrap_or("text");
+    to_pretty_json(serde_json::json!({
+        "content": input.content,
+        "outputType": output_type,
+        "synthetic": true
+    }))
+}
+
+fn execute_testing_permission(input: TestingPermissionInput) -> Result<String, String> {
+    Err(format!(
+        "TestingPermissionTool: internal permission testing is not available outside a test harness (action: '{}')",
+        input.action
+    ))
+}
+
 fn execute_brief(input: BriefInput) -> Result<BriefOutput, String> {
     if input.message.trim().is_empty() {
         return Err(String::from("message must not be empty"));
@@ -6777,6 +6951,53 @@ mod tests {
         assert!(names.contains(&"CronCreateTool"));
         assert!(names.contains(&"CronDeleteTool"));
         assert!(names.contains(&"CronListTool"));
+        assert!(names.contains(&"EnterPlanModeTool"));
+        assert!(names.contains(&"ExitPlanModeV2Tool"));
+        assert!(names.contains(&"EnterWorktreeTool"));
+        assert!(names.contains(&"ExitWorktreeTool"));
+        assert!(names.contains(&"SyntheticOutputTool"));
+        assert!(names.contains(&"TestingPermissionTool"));
+    }
+
+    #[test]
+    fn plan_mode_worktree_synthetic_stubs_return_informative_errors() {
+        let enter_plan = execute_tool("EnterPlanModeTool", &json!({}))
+            .expect_err("EnterPlanModeTool should error");
+        assert!(
+            enter_plan.contains("session runtime"),
+            "unexpected: {enter_plan}"
+        );
+
+        let exit_plan = execute_tool("ExitPlanModeV2Tool", &json!({}))
+            .expect_err("ExitPlanModeV2Tool should error");
+        assert!(
+            exit_plan.contains("session runtime"),
+            "unexpected: {exit_plan}"
+        );
+
+        let enter_tree = execute_tool("EnterWorktreeTool", &json!({"worktree_path": "/tmp/wt"}))
+            .expect_err("EnterWorktreeTool should error");
+        assert!(enter_tree.contains("worktree"), "unexpected: {enter_tree}");
+
+        let exit_tree = execute_tool("ExitWorktreeTool", &json!({}))
+            .expect_err("ExitWorktreeTool should error");
+        assert!(exit_tree.contains("worktree"), "unexpected: {exit_tree}");
+
+        let perm = execute_tool(
+            "TestingPermissionTool",
+            &json!({"action": "read", "path": "/tmp"}),
+        )
+        .expect_err("TestingPermissionTool should error");
+        assert!(perm.contains("test harness"), "unexpected: {perm}");
+
+        // SyntheticOutputTool succeeds with structured output
+        let synth: serde_json::Value = serde_json::from_str(
+            &execute_tool("SyntheticOutputTool", &json!({"content": "hello"})).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(synth["content"], json!("hello"));
+        assert_eq!(synth["synthetic"], json!(true));
+        assert_eq!(synth["outputType"], json!("text"));
     }
 
     #[test]

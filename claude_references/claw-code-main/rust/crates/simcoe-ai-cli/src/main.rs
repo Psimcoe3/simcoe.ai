@@ -3044,6 +3044,30 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
         "CronDeleteTool" | "CronListTool" => {
             format!("\x1b[2m{name}\x1b[0m")
         }
+        "EnterPlanModeTool" => format!("\x1b[38;5;99m⊞ Enter plan mode\x1b[0m"),
+        "ExitPlanModeV2Tool" => format!("\x1b[38;5;99m⊟ Exit plan mode\x1b[0m"),
+        "EnterWorktreeTool" => {
+            let path = parsed
+                .get("worktree_path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("(default)");
+            format!(
+                "\x1b[2m⎇ EnterWorktree {}\x1b[0m",
+                truncate_for_summary(path, 60)
+            )
+        }
+        "ExitWorktreeTool" => format!("\x1b[2m⎇ ExitWorktree\x1b[0m"),
+        "SyntheticOutputTool" => {
+            let content = parsed.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            format!(
+                "\x1b[2m~ synthetic: {}\x1b[0m",
+                truncate_for_summary(content, 60)
+            )
+        }
+        "TestingPermissionTool" => {
+            let action = parsed.get("action").and_then(|v| v.as_str()).unwrap_or("?");
+            format!("\x1b[2m⚑ TestingPermission: {action}\x1b[0m")
+        }
         "web_search" | "WebSearch" => parsed
             .get("query")
             .and_then(|value| value.as_str())
@@ -3100,10 +3124,19 @@ fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
         }
         "TaskListTool" => format_task_list_result(icon, &parsed),
         "TaskOutputTool" => format_task_output_result(icon, &parsed),
-        "LSPTool" | "RemoteTriggerTool" | "TeamCreateTool" | "TeamDeleteTool"
-        | "CronCreateTool" | "CronDeleteTool" | "CronListTool" => {
-            format_stub_tool_result(icon, name, output)
-        }
+        "LSPTool"
+        | "RemoteTriggerTool"
+        | "TeamCreateTool"
+        | "TeamDeleteTool"
+        | "CronCreateTool"
+        | "CronDeleteTool"
+        | "CronListTool"
+        | "EnterPlanModeTool"
+        | "ExitPlanModeV2Tool"
+        | "EnterWorktreeTool"
+        | "ExitWorktreeTool"
+        | "TestingPermissionTool" => format_stub_tool_result(icon, name, output),
+        "SyntheticOutputTool" => format_synthetic_output_result(icon, &parsed),
         _ if name.starts_with("mcp__") => format_mcp_tool_result(icon, name, &parsed),
         _ => {
             let summary = truncate_for_summary(output.trim(), 200);
@@ -3555,6 +3588,18 @@ fn format_stub_tool_result(icon: &str, name: &str, output: &str) -> String {
     } else {
         format!("{icon} \x1b[38;5;245m{name}\x1b[0m\n  \x1b[2m{summary}\x1b[0m")
     }
+}
+
+fn format_synthetic_output_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let content = parsed.get("content").and_then(|v| v.as_str()).unwrap_or("");
+    let output_type = parsed
+        .get("outputType")
+        .and_then(|v| v.as_str())
+        .unwrap_or("text");
+    format!(
+        "{icon} \x1b[38;5;245mSyntheticOutputTool\x1b[0m [{output_type}]\n  \x1b[2m{}\x1b[0m",
+        truncate_for_summary(content, 100)
+    )
 }
 
 fn format_ask_user_question_result(icon: &str, parsed: &serde_json::Value) -> String {

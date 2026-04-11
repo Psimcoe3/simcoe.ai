@@ -64,10 +64,10 @@ Evidence:
 - A fresh repo search still found only reference-data pointers for the blocked proxy/helper adapter files (`src/reference_data/subsystems/remote.json` mentions `remote/SessionsWebSocket.ts` and `remote/sdkMessageAdapter.ts`) rather than live implementation or helper-output contracts, so `headersHelper`, `sdk`, and `simcoe-ai-proxy` execution remain genuinely blocked in this Rust snapshot.
 
 ### Missing or broken in Rust
-- No Rust equivalents for major TS tools such as `LSPTool`, `RemoteTriggerTool`, `ScheduleCronTool`, `Task*`, `Team*`, and several workflow/system tools.
+- `LSPTool`, `RemoteTriggerTool`, `ScheduleCronTool` (now `CronCreateTool`/`CronDeleteTool`/`CronListTool`), `Task*` (`TaskListTool`, `TaskReadTool`, `TaskWriteTool`, `TaskCreateTool`, `TaskUpdateTool`, `TaskDeleteTool`, `TaskManifestTool`), `Team*` (`TeamCreateTool`, `TeamDeleteTool`), `EnterPlanModeTool`, `ExitPlanModeV2Tool`, `EnterWorktreeTool`, `ExitWorktreeTool`, `SyntheticOutputTool`, `TestingPermissionTool` are all now **stub-registered** in Rust (`tools/src/lib.rs`): they appear in `mvp_tool_specs()`, their input schemas are declared, they pattern-match in `execute_tool()`, and they return informative `Err` strings (or a structured `Ok` for `SyntheticOutputTool` and `CronListTool`). CLI display arms are wired in `simcoe-ai-cli/src/main.rs`. All added to `parity_manifest.json`.
 - `AskUserQuestionTool` is now implemented in Rust (`tools/src/lib.rs`): accepts `question` (string) + optional `options` array, checks `std::io::IsTerminal` to reject non-interactive contexts, prints the question/options to stdout, and reads the user's answer via `read_line`. CLI display includes a `? …` prompt in `format_tool_call_start` and a Q/A summary in `format_ask_user_question_result`. Tool spec registered in `mvp_tool_specs()`, output schema in `tool_output_schema()`, and `parity_manifest.json` updated.
 - Some MCP parity gaps remain: `sdk`, `simcoe-ai-proxy`, and remote `headersHelper` execution are still inspection-only in Rust because the upstream adapter/runtime contract is not present in this port.
-- Rust tool surface is still explicitly an MVP registry, not a parity registry, even though it is now inspectable through `/tools`.
+- Rust tool surface is a stub-parity registry (all TS tool names registered with schemas and dispatch), not a full-execution registry.
 - Rust lacks TS’s layered tool orchestration split.
 
 **Status:** partial core with inspection parity.
