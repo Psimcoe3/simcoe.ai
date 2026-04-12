@@ -17,7 +17,8 @@ use runtime::{
     BashCommandInput, ConfigLoader, ContentBlock, ConversationMessage, ConversationRuntime,
     GrepSearchInput, McpClientTransport, McpRemoteServerConfig, McpServerConfig, McpServerManager,
     McpWebSocketServerConfig, MessageRole, OAuthRefreshRequest, OAuthTokenSet, PermissionMode,
-    PermissionPolicy, RuntimeConfig, RuntimeError, Session, TokenUsage, ToolError, ToolExecutor,
+    PermissionOutcome, PermissionPolicy, RuntimeConfig, RuntimeError, Session, TokenUsage,
+    ToolError, ToolExecutor,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -125,6 +126,7 @@ pub fn tool_output_schema(tool_name: &str) -> Option<Value> {
         }
         "TaskListTool" => Some(task_list_output_schema()),
         "TaskOutputTool" => Some(task_output_output_schema()),
+        "TestingPermissionTool" => Some(testing_permission_output_schema()),
         "CronListTool" => Some(cron_list_output_schema()),
         _ if is_dynamic_mcp_tool_name(tool_name) => Some(mcp_tool_call_output_schema()),
         _ => None,
@@ -263,6 +265,26 @@ fn task_output_output_schema() -> Value {
             "output": { "type": "string" }
         },
         "required": ["taskId", "status"],
+        "additionalProperties": false
+    })
+}
+
+fn testing_permission_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "action": { "type": "string" },
+            "path": { "type": "string" },
+            "toolName": { "type": "string" },
+            "currentMode": { "type": "string" },
+            "requiredMode": { "type": "string" },
+            "outcome": {
+                "type": "string",
+                "enum": ["allow", "prompt", "deny"]
+            },
+            "reason": { "type": "string" }
+        },
+        "required": ["action", "toolName", "currentMode", "requiredMode", "outcome"],
         "additionalProperties": false
     })
 }
@@ -1906,6 +1928,8 @@ struct SyntheticOutputInput {
 #[derive(Debug, Deserialize)]
 struct TestingPermissionInput {
     action: String,
+    #[serde(default, alias = "currentMode", alias = "permissionMode")]
+    current_mode: Option<String>,
     path: Option<String>,
 }
 
@@ -2086,6 +2110,22 @@ struct TaskOutputOutput {
     task_id: String,
     status: String,
     output: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct TestingPermissionOutput {
+    action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
+    #[serde(rename = "toolName")]
+    tool_name: String,
+    #[serde(rename = "currentMode")]
+    current_mode: String,
+    #[serde(rename = "requiredMode")]
+    required_mode: String,
+    outcome: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -6131,10 +6171,111 @@ fn execute_synthetic_output(input: SyntheticOutputInput) -> Result<String, Strin
 }
 
 fn execute_testing_permission(input: TestingPermissionInput) -> Result<String, String> {
-    Err(format!(
-        "TestingPermissionTool: internal permission testing is not available outside a test harness (action: '{}')",
-        input.action
-    ))
+    let resolved_tool = resolve_testing_permission_tool_name(&input.action).ok_or_else(|| {
+        format!(
+            "TestingPermissionTool: unsupported action '{}'; provide a known tool alias or canonical tool name",
+            input.action
+        )
+    })?;
+    let current_mode = input
+        .current_mode
+        .as_deref()
+        .and_then(parse_testing_permission_mode)
+        .unwrap_or_else(default_testing_permission_mode);
+    let policy = mvp_tool_specs()
+        .into_iter()
+        .fold(PermissionPolicy::new(current_mode), |policy, spec| {
+            policy.with_tool_requirement(spec.name, spec.required_permission)
+        });
+    let required_mode = policy.required_mode_for(resolved_tool);
+    let request_input = serde_json::to_string(&json!({
+        "action": input.action,
+        "path": input.path,
+        "toolName": resolved_tool,
+    }))
+    .map_err(|error| error.to_string())?;
+    let authorization = policy.authorize(resolved_tool, &request_input, None);
+    let (outcome, reason) =
+        classify_testing_permission_outcome(current_mode, required_mode, authorization);
+
+    to_pretty_json(TestingPermissionOutput {
+        action: input.action,
+        path: input.path,
+        tool_name: resolved_tool.to_string(),
+        current_mode: current_mode.as_str().to_string(),
+        required_mode: required_mode.as_str().to_string(),
+        outcome: outcome.to_string(),
+        reason,
+    })
+}
+
+fn normalize_testing_permission_token(value: &str) -> String {
+    value
+        .trim()
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn parse_testing_permission_mode(value: &str) -> Option<PermissionMode> {
+    match normalize_testing_permission_token(value).as_str() {
+        "readonly" => Some(PermissionMode::ReadOnly),
+        "workspacewrite" => Some(PermissionMode::WorkspaceWrite),
+        "dangerfullaccess" => Some(PermissionMode::DangerFullAccess),
+        "prompt" => Some(PermissionMode::Prompt),
+        "allow" => Some(PermissionMode::Allow),
+        _ => None,
+    }
+}
+
+fn default_testing_permission_mode() -> PermissionMode {
+    std::env::var("RUSTY_CLAUDE_PERMISSION_MODE")
+        .ok()
+        .as_deref()
+        .and_then(parse_testing_permission_mode)
+        .unwrap_or(PermissionMode::DangerFullAccess)
+}
+
+fn resolve_testing_permission_tool_name(action: &str) -> Option<&'static str> {
+    let token = normalize_testing_permission_token(action);
+    let alias = match token.as_str() {
+        "read" | "open" | "cat" => Some("read_file"),
+        "write" | "create" | "save" => Some("write_file"),
+        "edit" | "patch" | "replace" => Some("edit_file"),
+        "glob" | "files" | "findfiles" => Some("glob_search"),
+        "grep" | "search" | "searchtext" | "rg" => Some("grep_search"),
+        "bash" | "shell" | "command" | "exec" | "execute" => Some("bash"),
+        "powershell" | "pwsh" => Some("PowerShell"),
+        "webfetch" | "fetch" | "http" | "url" => Some("WebFetch"),
+        "websearch" | "searchweb" => Some("WebSearch"),
+        _ => None,
+    };
+    if alias.is_some() {
+        return alias;
+    }
+
+    mvp_tool_specs().into_iter().find_map(|spec| {
+        (normalize_testing_permission_token(spec.name) == token).then_some(spec.name)
+    })
+}
+
+fn classify_testing_permission_outcome(
+    current_mode: PermissionMode,
+    required_mode: PermissionMode,
+    authorization: PermissionOutcome,
+) -> (&'static str, Option<String>) {
+    match authorization {
+        PermissionOutcome::Allow => ("allow", None),
+        PermissionOutcome::Deny { reason }
+            if current_mode == PermissionMode::Prompt
+                || (current_mode == PermissionMode::WorkspaceWrite
+                    && required_mode == PermissionMode::DangerFullAccess) =>
+        {
+            ("prompt", Some(reason))
+        }
+        PermissionOutcome::Deny { reason } => ("deny", Some(reason)),
+    }
 }
 
 fn execute_brief(input: BriefInput) -> Result<BriefOutput, String> {
@@ -6960,7 +7101,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_mode_worktree_synthetic_stubs_return_informative_errors() {
+    fn plan_mode_worktree_stubs_and_permission_diagnostics_behave_as_expected() {
         let enter_plan = execute_tool("EnterPlanModeTool", &json!({}))
             .expect_err("EnterPlanModeTool should error");
         assert!(
@@ -6983,12 +7124,25 @@ mod tests {
             .expect_err("ExitWorktreeTool should error");
         assert!(exit_tree.contains("worktree"), "unexpected: {exit_tree}");
 
-        let perm = execute_tool(
-            "TestingPermissionTool",
-            &json!({"action": "read", "path": "/tmp"}),
+        let perm: serde_json::Value = serde_json::from_str(
+            &execute_tool(
+                "TestingPermissionTool",
+                &json!({
+                    "action": "bash",
+                    "path": "/tmp",
+                    "current_mode": "workspace-write"
+                }),
+            )
+            .expect("TestingPermissionTool should succeed"),
         )
-        .expect_err("TestingPermissionTool should error");
-        assert!(perm.contains("test harness"), "unexpected: {perm}");
+        .expect("TestingPermissionTool output should parse");
+        assert_eq!(perm["toolName"], json!("bash"));
+        assert_eq!(perm["currentMode"], json!("workspace-write"));
+        assert_eq!(perm["requiredMode"], json!("danger-full-access"));
+        assert_eq!(perm["outcome"], json!("prompt"));
+        assert!(perm["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("requires approval to escalate")));
 
         // SyntheticOutputTool succeeds with structured output
         let synth: serde_json::Value = serde_json::from_str(
@@ -7283,6 +7437,15 @@ mod tests {
         assert_eq!(list_schema["properties"]["tasks"]["type"], json!("array"));
         let out_schema = tool_output_schema("TaskOutputTool").unwrap();
         assert_eq!(out_schema["properties"]["taskId"]["type"], json!("string"));
+        let permission_schema = tool_output_schema("TestingPermissionTool").unwrap();
+        assert_eq!(
+            permission_schema["properties"]["toolName"]["type"],
+            json!("string")
+        );
+        assert_eq!(
+            permission_schema["properties"]["outcome"]["enum"],
+            json!(["allow", "prompt", "deny"])
+        );
     }
 
     #[test]

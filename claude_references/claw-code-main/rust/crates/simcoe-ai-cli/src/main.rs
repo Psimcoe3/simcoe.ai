@@ -434,7 +434,10 @@ fn structured_error_context_from_action(action: CliAction) -> StructuredCliError
         },
         CliAction::ResumeSession { commands, .. } => StructuredCliErrorContext {
             operation: Some("resume".to_string()),
-            command: commands.first().filter(|command| command.starts_with('/')).cloned(),
+            command: commands
+                .first()
+                .filter(|command| command.starts_with('/'))
+                .cloned(),
             ..StructuredCliErrorContext::default()
         },
         CliAction::Prompt {
@@ -532,10 +535,10 @@ fn inferred_error_context_from_raw_args(args: &[String]) -> StructuredCliErrorCo
             arg if arg.starts_with("--") => {
                 index += 1;
             }
-            "dump-manifests" | "bootstrap-plan" | "system-prompt" | "config" | "hooks"
-            | "mcp" | "memory" | "agents" | "plugin" | "reload-plugins"
-            | "remote-env" | "remote-setup" | "tools" | "doctor" | "skills"
-            | "tasks" | "export" | "session" | "login" | "logout" | "init" => {
+            "dump-manifests" | "bootstrap-plan" | "system-prompt" | "config" | "hooks" | "mcp"
+            | "memory" | "agents" | "plugin" | "reload-plugins" | "remote-env" | "remote-setup"
+            | "tools" | "doctor" | "skills" | "tasks" | "export" | "session" | "login"
+            | "logout" | "init" => {
                 return StructuredCliErrorContext {
                     operation: Some(args[index].clone()),
                     ..StructuredCliErrorContext::default()
@@ -1154,6 +1157,12 @@ fn remote_setup_payload() -> Result<serde_json::Value, Box<dyn std::error::Error
             "package_name": snapshot.catalog.package_name,
             "module_count": snapshot.catalog.module_count,
             "transport_files": snapshot.catalog.transport_files,
+            "upstream_proxy": snapshot.catalog.upstream_proxy.as_ref().map(|proxy| json!({
+                "archive_name": proxy.archive_name,
+                "package_name": proxy.package_name,
+                "module_count": proxy.module_count,
+                "files": proxy.files,
+            })),
             "command": {
                 "name": snapshot.command.name,
                 "summary": snapshot.command.summary,
@@ -1275,9 +1284,48 @@ fn skills_payload(skill: Option<String>) -> Result<serde_json::Value, Box<dyn st
         return Ok(serde_json::Value::Object(payload));
     }
 
+    if let Some(archived) = snapshot.selected_archived_skill.as_ref() {
+        payload.insert(
+            "archived_skill".to_string(),
+            archived_skill_payload(archived),
+        );
+        return Ok(serde_json::Value::Object(payload));
+    }
+
     payload.insert("available_count".to_string(), json!(snapshot.skills.len()));
     payload.insert("skills".to_string(), json!(snapshot.skills));
+    if let Some(catalog) = snapshot.archived_catalog.as_ref() {
+        payload.insert(
+            "archived".to_string(),
+            archived_skill_catalog_payload(catalog),
+        );
+    }
     Ok(serde_json::Value::Object(payload))
+}
+
+fn archived_skill_payload(skill: &compat_harness::ArchivedSkillSummary) -> serde_json::Value {
+    json!({
+        "name": skill.name,
+        "summary": skill.summary,
+        "source_hints": skill.source_hints,
+        "archived_file_count": skill.archived_file_count,
+    })
+}
+
+fn archived_skill_catalog_payload(catalog: &compat_harness::SkillCatalog) -> serde_json::Value {
+    json!({
+        "archive_name": catalog.archive_name,
+        "package_name": catalog.package_name,
+        "module_count": catalog.module_count,
+        "bundled_skill_sample_count": catalog.bundled_skill_samples.len(),
+        "support_module_count": catalog.support_modules.len(),
+        "bundled_skill_samples": catalog
+            .bundled_skill_samples
+            .iter()
+            .map(archived_skill_payload)
+            .collect::<Vec<_>>(),
+        "support_modules": catalog.support_modules,
+    })
 }
 
 fn plugin_surface_payload(surface: &compat_harness::PluginSurfaceSummary) -> serde_json::Value {
@@ -4389,18 +4437,12 @@ fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
         }
         "TaskListTool" => format_task_list_result(icon, &parsed),
         "TaskOutputTool" => format_task_output_result(icon, &parsed),
-        "LSPTool"
-        | "RemoteTriggerTool"
-        | "TeamCreateTool"
-        | "TeamDeleteTool"
-        | "CronCreateTool"
-        | "CronDeleteTool"
-        | "CronListTool"
-        | "EnterPlanModeTool"
-        | "ExitPlanModeV2Tool"
-        | "EnterWorktreeTool"
-        | "ExitWorktreeTool"
-        | "TestingPermissionTool" => format_stub_tool_result(icon, name, output),
+        "TestingPermissionTool" => format_testing_permission_result(icon, &parsed),
+        "LSPTool" | "RemoteTriggerTool" | "TeamCreateTool" | "TeamDeleteTool"
+        | "CronCreateTool" | "CronDeleteTool" | "CronListTool" | "EnterPlanModeTool"
+        | "ExitPlanModeV2Tool" | "EnterWorktreeTool" | "ExitWorktreeTool" => {
+            format_stub_tool_result(icon, name, output)
+        }
         "SyntheticOutputTool" => format_synthetic_output_result(icon, &parsed),
         _ if name.starts_with("mcp__") => format_mcp_tool_result(icon, name, &parsed),
         _ => {
@@ -4865,6 +4907,53 @@ fn format_synthetic_output_result(icon: &str, parsed: &serde_json::Value) -> Str
         "{icon} \x1b[38;5;245mSyntheticOutputTool\x1b[0m [{output_type}]\n  \x1b[2m{}\x1b[0m",
         truncate_for_summary(content, 100)
     )
+}
+
+fn format_testing_permission_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let action = parsed
+        .get("action")
+        .and_then(|value| value.as_str())
+        .unwrap_or("?");
+    let tool_name = parsed
+        .get("toolName")
+        .and_then(|value| value.as_str())
+        .unwrap_or("?");
+    let current_mode = parsed
+        .get("currentMode")
+        .and_then(|value| value.as_str())
+        .unwrap_or("?");
+    let required_mode = parsed
+        .get("requiredMode")
+        .and_then(|value| value.as_str())
+        .unwrap_or("?");
+    let outcome = parsed
+        .get("outcome")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let path = parsed
+        .get("path")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    let reason = parsed
+        .get("reason")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mTestingPermissionTool\x1b[0m {action} -> {tool_name} [{outcome}] {current_mode} -> {required_mode}"
+    )];
+    if !path.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mPath\x1b[0m {}",
+            truncate_for_summary(path, 100)
+        ));
+    }
+    if !reason.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mReason\x1b[0m {}",
+            truncate_for_summary(reason, 180)
+        ));
+    }
+    lines.join("\n")
 }
 
 fn format_ask_user_question_result(icon: &str, parsed: &serde_json::Value) -> String {
@@ -7014,7 +7103,10 @@ mod tests {
         assert_eq!(payload["operation"], json!("prompt"));
         assert_eq!(payload["model"], json!(DEFAULT_MODEL));
         assert_eq!(payload["provider"], json!("ollama"));
-        assert_eq!(payload["transport"]["active_transport_kind"], json!("api-stream"));
+        assert_eq!(
+            payload["transport"]["active_transport_kind"],
+            json!("api-stream")
+        );
         assert_eq!(
             payload["transport"]["provider_runtime"]["provider"],
             json!("ollama")
@@ -7512,6 +7604,19 @@ mod tests {
 }"#,
         )
         .expect("write cli snapshot");
+        fs::write(
+            subsystems.join("upstreamproxy.json"),
+            r#"{
+    "archive_name": "upstreamproxy",
+    "package_name": "upstreamproxy",
+    "module_count": 2,
+    "sample_files": [
+        "upstreamproxy/relay.ts",
+        "upstreamproxy/upstreamproxy.ts"
+    ]
+}"#,
+        )
+        .expect("write upstreamproxy snapshot");
     }
 
     fn write_tools_snapshot(repo_root: &std::path::Path) {
@@ -8071,6 +8176,129 @@ mod tests {
     }
 
     #[test]
+    fn skills_report_lists_archived_bundled_skill_samples() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("skills-archived-report");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let reference_data = repo_root.join("src/reference_data");
+        let subsystems_dir = reference_data.join("subsystems");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&subsystems_dir).expect("create subsystem dir");
+        fs::write(reference_data.join("commands_snapshot.json"), "[]\n")
+            .expect("write commands snapshot");
+        fs::write(
+            subsystems_dir.join("skills.json"),
+            r#"{
+  "archive_name": "skills",
+  "package_name": "skills",
+  "module_count": 6,
+  "sample_files": [
+    "skills/bundled/batch.ts",
+    "skills/bundled/verify.ts",
+    "skills/bundled/index.ts",
+    "skills/bundledSkills.ts",
+    "skills/loadSkillsDir.ts",
+    "skills/mcpSkillBuilders.ts"
+  ]
+}"#,
+        )
+        .expect("write skills snapshot");
+
+        {
+            let _codex_home_guard = ScopedEnvVar::remove("CODEX_HOME");
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report = render_skills_report(None).expect("skills report should render");
+            assert!(report.contains("Skills"));
+            assert!(report.contains("Local available  0"));
+            assert!(report.contains("Archived bundled samples"));
+            assert!(report.contains("verify"));
+            assert!(report.contains("skills/bundled/verify.ts"));
+            assert!(report.contains("Archived support modules"));
+            assert!(report.contains("skills/mcpSkillBuilders.ts"));
+
+            let payload = super::skills_payload(None).expect("skills payload should render");
+            assert_eq!(payload["type"], json!("skills"));
+            assert_eq!(payload["available_count"], json!(0));
+            assert_eq!(payload["archived"]["bundled_skill_sample_count"], json!(2));
+            assert_eq!(payload["archived"]["support_module_count"], json!(4));
+            assert!(payload["archived"]["bundled_skill_samples"]
+                .as_array()
+                .is_some_and(|skills| skills.iter().any(|skill| {
+                    skill["name"] == json!("verify")
+                        && skill["source_hints"].as_array().is_some_and(|hints| {
+                            hints
+                                .iter()
+                                .any(|hint| hint == &json!("skills/bundled/verify.ts"))
+                        })
+                })));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn skills_report_renders_selected_archived_skill_surface() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("skills-archived-selected");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let reference_data = repo_root.join("src/reference_data");
+        let subsystems_dir = reference_data.join("subsystems");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&subsystems_dir).expect("create subsystem dir");
+        fs::write(reference_data.join("commands_snapshot.json"), "[]\n")
+            .expect("write commands snapshot");
+        fs::write(
+            subsystems_dir.join("skills.json"),
+            r#"{
+  "archive_name": "skills",
+  "package_name": "skills",
+  "module_count": 2,
+  "sample_files": [
+    "skills/bundled/verify.ts",
+    "skills/bundled/index.ts"
+  ]
+}"#,
+        )
+        .expect("write skills snapshot");
+
+        {
+            let _codex_home_guard = ScopedEnvVar::remove("CODEX_HOME");
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report = render_skills_report(Some("verify"))
+                .expect("selected archived skill report should render");
+            assert!(report.contains("Skill"));
+            assert!(report.contains("Name             verify"));
+            assert!(report.contains("Rust status      inspection only"));
+            assert!(report.contains("Path             skills/bundled/verify.ts"));
+
+            let payload = super::skills_payload(Some("verify".to_string()))
+                .expect("selected archived skills payload should render");
+            assert_eq!(payload["type"], json!("skills"));
+            assert_eq!(payload["archived_skill"]["name"], json!("verify"));
+            assert_eq!(payload["archived_skill"]["archived_file_count"], json!(1));
+            assert!(payload["archived_skill"]["source_hints"]
+                .as_array()
+                .is_some_and(|hints| hints
+                    .iter()
+                    .any(|hint| hint == &json!("skills/bundled/verify.ts"))));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
     fn agents_report_lists_built_in_profiles_and_recent_tasks() {
         let _guard = env_lock()
             .lock()
@@ -8451,9 +8679,11 @@ mod tests {
                 payload["transport"]["capabilities"]["live_remote_transport_blocker_kind"],
                 json!("adapter-not-ported")
             );
-            assert!(payload["transport"]["capabilities"]["live_remote_transport_blocker_detail"]
-                .as_str()
-                .is_some_and(|detail| detail.contains("not ported in Rust")));
+            assert!(
+                payload["transport"]["capabilities"]["live_remote_transport_blocker_detail"]
+                    .as_str()
+                    .is_some_and(|detail| detail.contains("not ported in Rust"))
+            );
             assert_eq!(payload["transport"]["bootstrap"]["ready"], json!(true));
             assert_eq!(
                 payload["transport"]["bootstrap"]["websocket_probe"]["status"],
@@ -8504,13 +8734,16 @@ mod tests {
             assert!(report.contains("Remote enabled    yes"));
             assert!(report.contains("Session id        session-setup"));
             assert!(report.contains("Archive           cli"));
+            assert!(report.contains("Proxy archive     upstreamproxy"));
             assert!(report.contains("Archived files    3"));
             assert!(report.contains("Transport files   5"));
+            assert!(report.contains("Proxy files       2"));
             assert!(report.contains("Summary           remote setup flow"));
             assert!(report.contains("WS probe          skipped"));
             assert!(report.contains("Missing           <none>"));
             assert!(report.contains("commands/remote-setup/api.ts"));
             assert!(report.contains("cli/structuredIO.ts"));
+            assert!(report.contains("upstreamproxy/relay.ts"));
 
             let payload =
                 super::remote_setup_payload().expect("remote setup payload should render");
@@ -8536,9 +8769,11 @@ mod tests {
                 payload["transport"]["capabilities"]["live_remote_transport_blocker_kind"],
                 json!("adapter-not-ported")
             );
-            assert!(payload["transport"]["capabilities"]["live_remote_transport_blocker_detail"]
-                .as_str()
-                .is_some_and(|detail| detail.contains("not ported in Rust")));
+            assert!(
+                payload["transport"]["capabilities"]["live_remote_transport_blocker_detail"]
+                    .as_str()
+                    .is_some_and(|detail| detail.contains("not ported in Rust"))
+            );
             assert_eq!(
                 payload["transport"]["bootstrap"]["websocket_probe"]["status"],
                 json!("skipped")
@@ -8546,6 +8781,22 @@ mod tests {
             assert_eq!(payload["snapshot"]["archive_name"], json!("cli"));
             assert_eq!(payload["snapshot"]["package_name"], json!("cli"));
             assert_eq!(payload["snapshot"]["module_count"], json!(6));
+            assert_eq!(
+                payload["snapshot"]["upstream_proxy"]["archive_name"],
+                json!("upstreamproxy")
+            );
+            assert_eq!(
+                payload["snapshot"]["upstream_proxy"]["package_name"],
+                json!("upstreamproxy")
+            );
+            assert_eq!(
+                payload["snapshot"]["upstream_proxy"]["module_count"],
+                json!(2)
+            );
+            assert_eq!(
+                payload["snapshot"]["upstream_proxy"]["files"],
+                json!(["upstreamproxy/relay.ts", "upstreamproxy/upstreamproxy.ts",])
+            );
             assert_eq!(
                 payload["snapshot"]["transport_files"],
                 json!([
@@ -8627,9 +8878,11 @@ mod tests {
                 payload["transport"]["capabilities"]["live_remote_transport_blocker_kind"],
                 json!("probe-failed")
             );
-            assert!(payload["transport"]["capabilities"]["live_remote_transport_blocker_detail"]
-                .as_str()
-                .is_some_and(|detail| detail.contains("failed to connect")));
+            assert!(
+                payload["transport"]["capabilities"]["live_remote_transport_blocker_detail"]
+                    .as_str()
+                    .is_some_and(|detail| detail.contains("failed to connect"))
+            );
         }
 
         let _ = fs::remove_dir_all(root);
@@ -9263,7 +9516,8 @@ mod tests {
             let _session_id_guard = ScopedEnvVar::set("SIMCOE_AI_REMOTE_SESSION_ID", "session-123");
             let _base_url_guard = ScopedEnvVar::set("SIMCOE_AI_BASE_URL", "http://127.0.0.1:9");
             let _proxy_enabled_guard = ScopedEnvVar::set("CCR_UPSTREAM_PROXY_ENABLED", "1");
-            let _token_path_guard = ScopedEnvVar::set("CCR_SESSION_TOKEN_PATH", &session_token_path);
+            let _token_path_guard =
+                ScopedEnvVar::set("CCR_SESSION_TOKEN_PATH", &session_token_path);
             let _probe_guard = ScopedEnvVar::set("CCR_UPSTREAM_PROXY_PROBE", "1");
             let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
@@ -9277,20 +9531,35 @@ mod tests {
             let payload = super::doctor_payload().expect("doctor payload should render");
             assert_eq!(payload["remote"]["proxy_ready"], json!(true));
             assert_eq!(payload["remote"]["ws_path_ready"], json!(false));
-            assert_eq!(payload["remote"]["live_blocker_kind"], json!("probe-failed"));
+            assert_eq!(
+                payload["remote"]["live_blocker_kind"],
+                json!("probe-failed")
+            );
             assert!(payload["remote"]["live_blocker_detail"]
                 .as_str()
                 .is_some_and(|detail| detail.contains("failed to connect")));
-            assert_eq!(payload["remote"]["websocket_probe"]["requested"], json!(true));
-            assert_eq!(payload["remote"]["websocket_probe"]["attempted"], json!(true));
-            assert_eq!(payload["remote"]["websocket_probe"]["reachable"], json!(false));
-            assert_eq!(payload["remote"]["websocket_probe"]["status"], json!("failed"));
+            assert_eq!(
+                payload["remote"]["websocket_probe"]["requested"],
+                json!(true)
+            );
+            assert_eq!(
+                payload["remote"]["websocket_probe"]["attempted"],
+                json!(true)
+            );
+            assert_eq!(
+                payload["remote"]["websocket_probe"]["reachable"],
+                json!(false)
+            );
+            assert_eq!(
+                payload["remote"]["websocket_probe"]["status"],
+                json!("failed")
+            );
             assert!(payload["issues"]
                 .as_array()
                 .is_some_and(|issues| issues.iter().any(|issue| {
-                    issue.as_str().is_some_and(|text| {
-                        text.starts_with("remote websocket probe failed:")
-                    })
+                    issue
+                        .as_str()
+                        .is_some_and(|text| text.starts_with("remote websocket probe failed:"))
                 })));
         }
 
@@ -9319,7 +9588,8 @@ mod tests {
             let _session_id_guard = ScopedEnvVar::set("SIMCOE_AI_REMOTE_SESSION_ID", "session-456");
             let _base_url_guard = ScopedEnvVar::set("SIMCOE_AI_BASE_URL", "https://remote.test");
             let _proxy_enabled_guard = ScopedEnvVar::set("CCR_UPSTREAM_PROXY_ENABLED", "1");
-            let _token_path_guard = ScopedEnvVar::set("CCR_SESSION_TOKEN_PATH", &session_token_path);
+            let _token_path_guard =
+                ScopedEnvVar::set("CCR_SESSION_TOKEN_PATH", &session_token_path);
             let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
             let report = render_doctor_report().expect("doctor report should render");
@@ -9331,7 +9601,10 @@ mod tests {
             let payload = super::doctor_payload().expect("doctor payload should render");
             assert_eq!(payload["remote"]["proxy_ready"], json!(true));
             assert_eq!(payload["remote"]["ws_path_ready"], json!(true));
-            assert_eq!(payload["remote"]["live_blocker_kind"], json!("adapter-not-ported"));
+            assert_eq!(
+                payload["remote"]["live_blocker_kind"],
+                json!("adapter-not-ported")
+            );
             assert!(payload["remote"]["live_blocker_detail"]
                 .as_str()
                 .is_some_and(|detail| detail.contains("not ported in Rust")));
@@ -10207,15 +10480,9 @@ mod tests {
     fn run_live_provider_smoke(provider: RuntimeProvider, model_env: &str, default_model: &str) {
         let token = format!("SMOKE_OK_{}", provider.as_str().to_ascii_uppercase());
         let model = std::env::var(model_env).unwrap_or_else(|_| default_model.to_string());
-        let mut client = SimcoeRuntimeClient::new_with_provider(
-            model,
-            provider,
-            false,
-            false,
-            None,
-            None,
-        )
-        .expect("live runtime client should initialize");
+        let mut client =
+            SimcoeRuntimeClient::new_with_provider(model, provider, false, false, None, None)
+                .expect("live runtime client should initialize");
         let mut out = Vec::new();
         let events = client
             .stream_with_writer(live_smoke_request(&token), &mut out)
@@ -10227,7 +10494,9 @@ mod tests {
             text.to_ascii_uppercase().contains(&token),
             "expected live provider response to include {token}, got {text:?}"
         );
-        assert!(events.iter().any(|event| matches!(event, AssistantEvent::MessageStop)));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, AssistantEvent::MessageStop)));
         assert!(client.last_delivery_mode().is_some());
     }
 
@@ -10237,10 +10506,7 @@ mod tests {
         let _guard = env_lock()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if !should_run_live_provider_smoke(
-            "CLAW_LIVE_ANTHROPIC_SMOKE",
-            &["ANTHROPIC_API_KEY"],
-        ) {
+        if !should_run_live_provider_smoke("CLAW_LIVE_ANTHROPIC_SMOKE", &["ANTHROPIC_API_KEY"]) {
             return;
         }
 
@@ -10839,6 +11105,19 @@ mod tests {
         assert!(mcp_auth_save.contains("save 1 server (1 executable, 0 blocked)"));
         assert!(mcp_auth_save.contains("Servers"));
         assert!(mcp_auth_save.contains("vendor [ready] oauth, stored-credentials, refresh-token"));
+
+        let testing_permission = format_tool_result(
+            "TestingPermissionTool",
+            r#"{"action":"bash","path":"/tmp/demo","toolName":"bash","currentMode":"workspace-write","requiredMode":"danger-full-access","outcome":"prompt","reason":"tool 'bash' requires approval to escalate from workspace-write to danger-full-access"}"#,
+            false,
+        );
+        assert!(testing_permission.contains("TestingPermissionTool"));
+        assert!(testing_permission
+            .contains("bash -> bash [prompt] workspace-write -> danger-full-access"));
+        assert!(testing_permission.contains("Path"));
+        assert!(testing_permission.contains("/tmp/demo"));
+        assert!(testing_permission.contains("Reason"));
+        assert!(testing_permission.contains("requires approval to escalate"));
     }
 
     #[test]

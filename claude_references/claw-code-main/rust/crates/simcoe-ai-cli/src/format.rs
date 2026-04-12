@@ -8,10 +8,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::args::brand_model_name;
 use commands::render_slash_command_help;
 use compat_harness::{
-    load_plugin_catalog_from_cwd, load_plugin_surface_from_cwd, load_remote_catalog_from_cwd,
-    load_remote_command_from_cwd, load_tool_catalog_from_cwd, load_tool_family_from_cwd,
+    load_archived_skill_from_cwd, load_plugin_catalog_from_cwd, load_plugin_surface_from_cwd,
+    load_remote_catalog_from_cwd, load_remote_command_from_cwd, load_skill_catalog_from_cwd,
+    load_tool_catalog_from_cwd, load_tool_family_from_cwd, ArchivedSkillSummary,
     ArchivedToolFamilySummary, PluginCatalog, PluginSurfaceKind, PluginSurfaceSummary,
-    RemoteCatalog, RemoteCommandSummary, ToolCatalog,
+    RemoteCatalog, RemoteCommandSummary, SkillCatalog, ToolCatalog,
 };
 use runtime::{
     credentials_path, inherited_upstream_proxy_env, load_oauth_credentials,
@@ -256,7 +257,9 @@ pub(crate) struct AgentProfileListEntrySnapshot {
 #[derive(Debug, Clone)]
 pub(crate) struct SkillsReportSnapshot {
     pub(crate) selected_skill: Option<LoadedSkill>,
+    pub(crate) selected_archived_skill: Option<ArchivedSkillSummary>,
     pub(crate) skills: Vec<SkillSummary>,
+    pub(crate) archived_catalog: Option<SkillCatalog>,
 }
 
 #[derive(Debug, Clone)]
@@ -1215,7 +1218,8 @@ pub(crate) fn doctor_snapshot() -> Result<DoctorSnapshot, Box<dyn std::error::Er
                 .unwrap_or_else(|| String::from("probe failed"))
         ));
     }
-    let live_remote_transport = runtime::upstream_proxy_live_transport_status(&bootstrap, &websocket_probe);
+    let live_remote_transport =
+        runtime::upstream_proxy_live_transport_status(&bootstrap, &websocket_probe);
     if remote.enabled && live_remote_transport.blocker_kind == "adapter-not-ported" {
         issues.push(format!(
             "remote live transport blocked: {}",
@@ -1851,11 +1855,19 @@ pub(crate) fn render_remote_setup_report_from_snapshot(
     } else {
         remote.base_url.clone()
     };
+    let proxy_archive = snapshot.catalog.upstream_proxy.as_ref().map_or_else(
+        || String::from("<none>"),
+        |proxy| proxy.archive_name.clone(),
+    );
+    let proxy_hints = snapshot.catalog.upstream_proxy.as_ref().map_or_else(
+        || String::from("  - <none>"),
+        |proxy| render_bulleted_items(&proxy.files),
+    );
     let source_hints = render_bulleted_items(&snapshot.command.source_hints);
     let transport_hints = render_bulleted_items(&snapshot.catalog.transport_files);
 
     format!(
-        "Remote setup\n  Rust status       bootstrap foundation only\n  Proxy ready       {proxy_ready}\n  WS path ready     {ws_path_ready}\n  Live blocker      {live_blocker}\n  Remote enabled    {remote_enabled}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Token present     {token_present}\n  WS probe          {websocket_probe}\n  Archive           {archive}\n  Package           {package}\n  Archived files    {archived_files}\n  Transport files   {transport_files}\n  Summary           {summary}\n  Missing           {missing}\n  Usage             /remote-env\n\nSource hints\n{source_hints}\n\nTransport hints\n{transport_hints}",
+        "Remote setup\n  Rust status       bootstrap foundation only\n  Proxy ready       {proxy_ready}\n  WS path ready     {ws_path_ready}\n  Live blocker      {live_blocker}\n  Remote enabled    {remote_enabled}\n  Session id        {session_id}\n  Base URL          {base_url}\n  Token present     {token_present}\n  WS probe          {websocket_probe}\n  Archive           {archive}\n  Package           {package}\n  Proxy archive     {proxy_archive}\n  Archived files    {archived_files}\n  Transport files   {transport_files}\n  Proxy files       {proxy_files}\n  Summary           {summary}\n  Missing           {missing}\n  Usage             /remote-env\n\nSource hints\n{source_hints}\n\nTransport hints\n{transport_hints}\n\nUpstream proxy hints\n{proxy_hints}",
         proxy_ready = yes_no(bootstrap.should_enable()),
         ws_path_ready = ws_path_ready,
         live_blocker = live_blocker,
@@ -1866,12 +1878,19 @@ pub(crate) fn render_remote_setup_report_from_snapshot(
         websocket_probe = websocket_probe,
         archive = snapshot.catalog.archive_name,
         package = snapshot.catalog.package_name,
+        proxy_archive = proxy_archive,
         archived_files = snapshot.command.archived_file_count,
         transport_files = snapshot.catalog.transport_files.len(),
+        proxy_files = snapshot
+            .catalog
+            .upstream_proxy
+            .as_ref()
+            .map_or(0, |proxy| proxy.files.len()),
         summary = snapshot.command.summary,
         missing = missing,
         source_hints = source_hints,
         transport_hints = transport_hints,
+        proxy_hints = proxy_hints,
     )
 }
 
@@ -2232,16 +2251,31 @@ pub(crate) fn skills_report_snapshot(
     let requested = trimmed_non_empty(skill);
 
     if let Some(requested) = requested {
-        let loaded = load_skill(requested, None).map_err(not_found_io_error)?;
-        return Ok(SkillsReportSnapshot {
-            selected_skill: Some(loaded),
-            skills: Vec::new(),
-        });
+        return match load_skill(requested, None) {
+            Ok(loaded) => Ok(SkillsReportSnapshot {
+                selected_skill: Some(loaded),
+                selected_archived_skill: None,
+                skills: Vec::new(),
+                archived_catalog: None,
+            }),
+            Err(local_error) => {
+                let archived = load_archived_skill_from_cwd(requested)
+                    .map_err(|_| not_found_io_error(local_error.clone()))?;
+                Ok(SkillsReportSnapshot {
+                    selected_skill: None,
+                    selected_archived_skill: Some(archived),
+                    skills: Vec::new(),
+                    archived_catalog: None,
+                })
+            }
+        };
     }
 
     Ok(SkillsReportSnapshot {
         selected_skill: None,
+        selected_archived_skill: None,
         skills: list_skills(),
+        archived_catalog: load_skill_catalog_from_cwd().ok(),
     })
 }
 
@@ -2269,13 +2303,129 @@ Prompt
         );
     }
 
+    if let Some(archived) = snapshot.selected_archived_skill.as_ref() {
+        let source_hints = render_bulleted_items(&archived.source_hints);
+        let primary_source = archived
+            .source_hints
+            .first()
+            .map(String::as_str)
+            .unwrap_or("<unknown>");
+        return format!(
+            "Skill
+  Name             {name}
+  Path             {path}
+  Rust status      inspection only
+  Archived files   {archived_files}
+  Summary          {summary}
+
+Source hints
+{source_hints}",
+            name = archived.name,
+            path = primary_source,
+            archived_files = archived.archived_file_count,
+            summary = archived.summary,
+            source_hints = source_hints,
+        );
+    }
+
     let skill_count = snapshot.skills.len();
-    if snapshot.skills.is_empty() {
+    let archived_catalog = snapshot.archived_catalog.as_ref();
+    if snapshot.skills.is_empty()
+        && archived_catalog.is_none_or(|catalog| {
+            catalog.bundled_skill_samples.is_empty() && catalog.support_modules.is_empty()
+        })
+    {
         return String::from(
             "Skills
   Available        0
   Usage            /skills <name>
     Search paths     ./skills/*.md, CODEX_HOME/skills/<name>/SKILL.md",
+        );
+    }
+
+    if let Some(catalog) = archived_catalog {
+        let local_entries = if snapshot.skills.is_empty() {
+            String::from("  <none>")
+        } else {
+            let width = snapshot
+                .skills
+                .iter()
+                .map(|entry| entry.name.len())
+                .max()
+                .unwrap_or(5)
+                + 2;
+            snapshot
+                .skills
+                .iter()
+                .map(|entry| {
+                    let summary = entry.description.as_deref().unwrap_or(entry.path.as_str());
+                    format!(
+                        "  {name:<width$}{summary}",
+                        name = entry.name,
+                        width = width
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let bundled_entries = if catalog.bundled_skill_samples.is_empty() {
+            String::from("  <none>")
+        } else {
+            let width = catalog
+                .bundled_skill_samples
+                .iter()
+                .map(|entry| entry.name.len())
+                .max()
+                .unwrap_or(7)
+                + 2;
+            catalog
+                .bundled_skill_samples
+                .iter()
+                .map(|entry| {
+                    let source = entry
+                        .source_hints
+                        .first()
+                        .map(String::as_str)
+                        .unwrap_or(entry.summary.as_str());
+                    format!("  {name:<width$}{source}", name = entry.name, width = width)
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let support_modules = if catalog.support_modules.is_empty() {
+            String::from("  <none>")
+        } else {
+            catalog
+                .support_modules
+                .iter()
+                .map(|module| format!("  {module}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        return format!(
+            "Skills
+  Local available  {local_count}
+  Archived modules {module_count}
+  Bundled samples  {bundled_count}
+  Support modules  {support_count}
+  Usage            /skills <name>
+
+Local entries
+{local_entries}
+
+Archived bundled samples
+{bundled_entries}
+
+Archived support modules
+{support_modules}",
+            local_count = skill_count,
+            module_count = catalog.module_count,
+            bundled_count = catalog.bundled_skill_samples.len(),
+            support_count = catalog.support_modules.len(),
+            local_entries = local_entries,
+            bundled_entries = bundled_entries,
+            support_modules = support_modules,
         );
     }
 

@@ -390,9 +390,11 @@ mod tests {
             transport["capabilities"]["live_remote_transport_blocker_kind"],
             json!("adapter-not-ported")
         );
-        assert!(transport["capabilities"]["live_remote_transport_blocker_detail"]
-            .as_str()
-            .is_some_and(|detail| detail.contains("not ported in Rust")));
+        assert!(
+            transport["capabilities"]["live_remote_transport_blocker_detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("not ported in Rust"))
+        );
         assert_eq!(transport["bootstrap"]["remote_enabled"], json!(true));
         assert_eq!(transport["bootstrap"]["ready"], json!(true));
         assert_eq!(
@@ -440,9 +442,11 @@ mod tests {
             metadata["capabilities"]["live_remote_transport_blocker_kind"],
             json!("disabled")
         );
-        assert!(metadata["capabilities"]["live_remote_transport_blocker_detail"]
-            .as_str()
-            .is_some_and(|detail| detail.contains("SIMCOE_AI_REMOTE disabled")));
+        assert!(
+            metadata["capabilities"]["live_remote_transport_blocker_detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("SIMCOE_AI_REMOTE disabled"))
+        );
         assert_eq!(metadata["bootstrap"]["remote_enabled"], json!(false));
         assert_eq!(metadata["bootstrap"]["ready"], json!(false));
         assert_eq!(
@@ -545,9 +549,11 @@ mod tests {
             metadata["capabilities"]["live_remote_transport_blocker_kind"],
             json!("probe-failed")
         );
-        assert!(metadata["capabilities"]["live_remote_transport_blocker_detail"]
-            .as_str()
-            .is_some_and(|detail| detail.contains("failed to connect")));
+        assert!(
+            metadata["capabilities"]["live_remote_transport_blocker_detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("failed to connect"))
+        );
 
         let _ = fs::remove_dir_all(token_dir);
     }

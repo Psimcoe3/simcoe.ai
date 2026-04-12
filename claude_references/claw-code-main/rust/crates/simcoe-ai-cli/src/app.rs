@@ -1166,7 +1166,10 @@ mod tests {
 
         assert_eq!(payload["provider"], json!("openai"));
         assert_eq!(payload["transport"]["kind"], json!("provider-direct"));
-        assert_eq!(payload["transport"]["provider_runtime"]["provider"], json!("openai"));
+        assert_eq!(
+            payload["transport"]["provider_runtime"]["provider"],
+            json!("openai")
+        );
         assert_eq!(
             payload["transport"]["provider_runtime"]["family"],
             json!("openai-compatible")
@@ -1211,7 +1214,10 @@ mod tests {
             records[0]["transport"]["provider_runtime"]["delivery_mode"],
             json!("buffered-json-fallback")
         );
-        assert_eq!(records.last().expect("summary record")["type"], json!("turn_summary"));
+        assert_eq!(
+            records.last().expect("summary record")["type"],
+            json!("turn_summary")
+        );
         assert_eq!(
             records.last().expect("summary record")["summary"]["provider"],
             json!("anthropic")

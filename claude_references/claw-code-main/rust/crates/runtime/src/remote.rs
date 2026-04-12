@@ -347,7 +347,9 @@ fn connect_upstream_proxy_websocket(
         )
     })?;
     let header_value = tungstenite::http::HeaderValue::from_str(&format!("Bearer {token}"))
-        .map_err(|error| format!("failed to encode upstream proxy authorization header: {error}"))?;
+        .map_err(|error| {
+            format!("failed to encode upstream proxy authorization header: {error}")
+        })?;
     request
         .headers_mut()
         .insert(tungstenite::http::header::AUTHORIZATION, header_value);
@@ -768,7 +770,10 @@ mod tests {
         assert!(probe.attempted);
         assert!(probe.reachable);
         assert_eq!(probe.status, "reachable");
-        assert_eq!(server.authorization().as_deref(), Some("Bearer secret-token"));
+        assert_eq!(
+            server.authorization().as_deref(),
+            Some("Bearer secret-token")
+        );
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }

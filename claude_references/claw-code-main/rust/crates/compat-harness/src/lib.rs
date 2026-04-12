@@ -66,9 +66,21 @@ impl UpstreamPaths {
     }
 
     #[must_use]
+    pub fn skills_snapshot_path(&self) -> PathBuf {
+        self.repo_root
+            .join("src/reference_data/subsystems/skills.json")
+    }
+
+    #[must_use]
     pub fn cli_snapshot_path(&self) -> PathBuf {
         self.repo_root
             .join("src/reference_data/subsystems/cli.json")
+    }
+
+    #[must_use]
+    pub fn upstreamproxy_snapshot_path(&self) -> PathBuf {
+        self.repo_root
+            .join("src/reference_data/subsystems/upstreamproxy.json")
     }
 
     #[must_use]
@@ -120,6 +132,23 @@ pub struct PluginCatalog {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchivedSkillSummary {
+    pub name: String,
+    pub summary: String,
+    pub source_hints: Vec<String>,
+    pub archived_file_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillCatalog {
+    pub archive_name: String,
+    pub package_name: String,
+    pub module_count: usize,
+    pub bundled_skill_samples: Vec<ArchivedSkillSummary>,
+    pub support_modules: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemoteCommandSummary {
     pub name: String,
     pub summary: String,
@@ -128,11 +157,20 @@ pub struct RemoteCommandSummary {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchivedRemoteProxyCatalog {
+    pub archive_name: String,
+    pub package_name: String,
+    pub module_count: usize,
+    pub files: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemoteCatalog {
     pub archive_name: String,
     pub package_name: String,
     pub module_count: usize,
     pub transport_files: Vec<String>,
+    pub upstream_proxy: Option<ArchivedRemoteProxyCatalog>,
     pub commands: Vec<RemoteCommandSummary>,
 }
 
@@ -351,9 +389,95 @@ pub fn load_plugin_surface_from_cwd(requested: &str) -> Result<PluginSurfaceSumm
     }
 }
 
+pub fn load_skill_catalog(paths: &UpstreamPaths) -> std::io::Result<SkillCatalog> {
+    let subsystem = read_json::<ArchivedSubsystemSnapshot>(&paths.skills_snapshot_path())?;
+    let mut bundled_skill_samples = subsystem
+        .sample_files
+        .iter()
+        .filter(|sample| is_bundled_skill_sample_file(sample))
+        .map(|sample| ArchivedSkillSummary {
+            name: skill_surface_name_from_path(sample),
+            summary: format!(
+                "Archived bundled skill sample from {}",
+                subsystem.archive_name
+            ),
+            source_hints: vec![sample.clone()],
+            archived_file_count: 1,
+        })
+        .collect::<Vec<_>>();
+    bundled_skill_samples.sort_by(|left, right| left.name.cmp(&right.name));
+
+    let mut support_modules = subsystem
+        .sample_files
+        .iter()
+        .filter(|sample| !is_bundled_skill_sample_file(sample))
+        .cloned()
+        .collect::<Vec<_>>();
+    support_modules.sort();
+
+    Ok(SkillCatalog {
+        archive_name: subsystem.archive_name,
+        package_name: subsystem.package_name,
+        module_count: subsystem.module_count,
+        bundled_skill_samples,
+        support_modules,
+    })
+}
+
+pub fn load_skill_catalog_from_cwd() -> std::io::Result<SkillCatalog> {
+    let cwd = std::env::current_dir()?;
+    let repo_root = find_snapshot_repo_root(&cwd, "skills.json").ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "could not locate archived skill snapshots from the current directory",
+        )
+    })?;
+    load_skill_catalog(&UpstreamPaths::from_repo_root(repo_root))
+}
+
+pub fn load_archived_skill_from_cwd(requested: &str) -> Result<ArchivedSkillSummary, String> {
+    let requested = requested.trim();
+    if requested.is_empty() {
+        return Err(String::from("skill name must not be empty"));
+    }
+
+    let catalog = load_skill_catalog_from_cwd().map_err(|error| error.to_string())?;
+    let wanted = canonical_token(requested);
+    let matches = catalog
+        .bundled_skill_samples
+        .into_iter()
+        .filter(|skill| {
+            canonical_token(&skill.name) == wanted
+                || skill
+                    .source_hints
+                    .iter()
+                    .any(|hint| canonical_token(hint) == wanted)
+        })
+        .collect::<Vec<_>>();
+
+    match matches.as_slice() {
+        [skill] => Ok(skill.clone()),
+        [] => Err(format!("unknown archived bundled skill: {requested}")),
+        _ => Err(format!(
+            "multiple archived bundled skills matched '{requested}'; use a more specific name"
+        )),
+    }
+}
+
 pub fn load_remote_catalog(paths: &UpstreamPaths) -> std::io::Result<RemoteCatalog> {
     let subsystem = read_json::<ArchivedSubsystemSnapshot>(&paths.cli_snapshot_path())?;
     let commands = read_json::<Vec<SnapshotEntry>>(&paths.commands_snapshot_path())?;
+    let upstream_proxy =
+        match read_json::<ArchivedSubsystemSnapshot>(&paths.upstreamproxy_snapshot_path()) {
+            Ok(snapshot) => Some(ArchivedRemoteProxyCatalog {
+                archive_name: snapshot.archive_name,
+                package_name: snapshot.package_name,
+                module_count: snapshot.module_count,
+                files: snapshot.sample_files,
+            }),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error),
+        };
 
     let mut grouped = std::collections::BTreeMap::<String, RemoteCommandSummary>::new();
 
@@ -399,6 +523,7 @@ pub fn load_remote_catalog(paths: &UpstreamPaths) -> std::io::Result<RemoteCatal
         package_name: subsystem.package_name,
         module_count: subsystem.module_count,
         transport_files,
+        upstream_proxy,
         commands: command_surfaces,
     })
 }
@@ -793,10 +918,26 @@ fn tool_surface_name_from_path(path: &str) -> String {
     }
 }
 
+fn skill_surface_name_from_path(path: &str) -> String {
+    let path = Path::new(path);
+    match path.file_stem().and_then(|stem| stem.to_str()) {
+        Some(stem) => stem.to_string(),
+        None => path.to_string_lossy().to_string(),
+    }
+}
+
 fn is_remote_transport_sample_file(path: &str) -> bool {
     path == "cli/remoteIO.ts"
         || path == "cli/structuredIO.ts"
         || path.starts_with("cli/transports/")
+}
+
+fn is_bundled_skill_sample_file(path: &str) -> bool {
+    path.starts_with("skills/bundled/")
+        && Path::new(path)
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .is_some_and(|stem| stem != "index")
 }
 
 fn canonical_token(value: &str) -> String {
@@ -970,6 +1111,77 @@ mod tests {
     }
 
     #[test]
+    fn loads_skill_catalog_and_archived_skill_from_snapshots() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let root = std::env::temp_dir().join(format!(
+            "compat-harness-skills-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        let reference_data = root.join("src/reference_data");
+        let subsystems_dir = reference_data.join("subsystems");
+        let rust_dir = root.join("rust");
+        fs::create_dir_all(&subsystems_dir).expect("create snapshot dirs");
+        fs::create_dir_all(&rust_dir).expect("create rust dir");
+        fs::write(reference_data.join("commands_snapshot.json"), "[]\n")
+            .expect("write command snapshot");
+        fs::write(
+            subsystems_dir.join("skills.json"),
+            r#"{
+  "archive_name": "skills",
+  "package_name": "skills",
+  "module_count": 6,
+  "sample_files": [
+    "skills/bundled/batch.ts",
+    "skills/bundled/verify.ts",
+    "skills/bundled/index.ts",
+    "skills/bundledSkills.ts",
+    "skills/loadSkillsDir.ts",
+    "skills/mcpSkillBuilders.ts"
+  ]
+}"#,
+        )
+        .expect("write skills snapshot");
+
+        let catalog =
+            load_skill_catalog(&UpstreamPaths::from_repo_root(&root)).expect("catalog should load");
+        assert_eq!(catalog.archive_name, "skills");
+        assert_eq!(catalog.module_count, 6);
+        assert_eq!(catalog.bundled_skill_samples.len(), 2);
+        assert!(catalog
+            .bundled_skill_samples
+            .iter()
+            .any(|skill| skill.name == "batch"));
+        assert!(catalog
+            .bundled_skill_samples
+            .iter()
+            .any(|skill| skill.name == "verify"));
+        assert!(catalog
+            .support_modules
+            .iter()
+            .any(|module| module == "skills/loadSkillsDir.ts"));
+
+        let original_cwd = std::env::current_dir().expect("cwd");
+        std::env::set_current_dir(&rust_dir).expect("set cwd");
+
+        let verify =
+            load_archived_skill_from_cwd("verify").expect("archived bundled skill should load");
+        assert_eq!(verify.name, "verify");
+        assert_eq!(verify.archived_file_count, 1);
+        assert_eq!(
+            verify.source_hints,
+            vec![String::from("skills/bundled/verify.ts")]
+        );
+
+        std::env::set_current_dir(&original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn loads_remote_catalog_and_command_from_snapshots() {
         let _guard = env_lock()
             .lock()
@@ -1014,12 +1226,42 @@ mod tests {
 }"#,
         )
         .expect("write cli snapshot");
+        fs::write(
+            subsystems_dir.join("upstreamproxy.json"),
+            r#"{
+  "archive_name": "upstreamproxy",
+  "package_name": "upstreamproxy",
+  "module_count": 2,
+  "sample_files": [
+    "upstreamproxy/relay.ts",
+    "upstreamproxy/upstreamproxy.ts"
+  ]
+}"#,
+        )
+        .expect("write upstreamproxy snapshot");
 
         let catalog = load_remote_catalog(&UpstreamPaths::from_repo_root(&root))
             .expect("catalog should load");
         assert_eq!(catalog.archive_name, "cli");
         assert_eq!(catalog.module_count, 5);
         assert_eq!(catalog.transport_files.len(), 4);
+        assert_eq!(
+            catalog
+                .upstream_proxy
+                .as_ref()
+                .map(|proxy| proxy.module_count),
+            Some(2)
+        );
+        assert_eq!(
+            catalog
+                .upstream_proxy
+                .as_ref()
+                .map(|proxy| proxy.files.clone()),
+            Some(vec![
+                String::from("upstreamproxy/relay.ts"),
+                String::from("upstreamproxy/upstreamproxy.ts"),
+            ])
+        );
         assert!(catalog
             .commands
             .iter()
