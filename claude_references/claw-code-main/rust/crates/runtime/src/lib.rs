@@ -91,7 +91,7 @@ pub use usage::{
 };
 pub use workspace::{
     active_worktree_root, clear_active_worktree_root, effective_current_dir,
-    set_active_worktree_root,
+    plan_mode_active, set_active_worktree_root, set_plan_mode_active,
 };
 
 #[cfg(test)]

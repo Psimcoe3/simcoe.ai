@@ -4438,12 +4438,13 @@ fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
         "TaskListTool" => format_task_list_result(icon, &parsed),
         "TaskOutputTool" => format_task_output_result(icon, &parsed),
         "TestingPermissionTool" => format_testing_permission_result(icon, &parsed),
+        "TeamCreateTool" | "TeamDeleteTool" => format_team_result(icon, name, &parsed),
         "CronCreateTool" | "CronDeleteTool" => format_cron_result(icon, name, &parsed),
         "CronListTool" => format_cron_list_result(icon, &parsed),
-        "LSPTool" | "RemoteTriggerTool" | "TeamCreateTool" | "TeamDeleteTool"
-        | "EnterPlanModeTool" | "ExitPlanModeV2Tool" | "EnterWorktreeTool" | "ExitWorktreeTool" => {
-            format_stub_tool_result(icon, name, output)
-        }
+        "EnterPlanModeTool" | "ExitPlanModeV2Tool" => format_plan_mode_result(icon, name, &parsed),
+        "EnterWorktreeTool" | "ExitWorktreeTool" => format_worktree_result(icon, name, &parsed),
+        "LSPTool" => format_lsp_result(icon, &parsed),
+        "RemoteTriggerTool" => format_remote_trigger_result(icon, &parsed),
         "SyntheticOutputTool" => format_synthetic_output_result(icon, &parsed),
         _ if name.starts_with("mcp__") => format_mcp_tool_result(icon, name, &parsed),
         _ => {
@@ -4889,6 +4890,47 @@ fn format_task_output_result(icon: &str, parsed: &serde_json::Value) -> String {
     lines.join("\n")
 }
 
+fn format_team_result(icon: &str, label: &str, parsed: &serde_json::Value) -> String {
+    let team_id = parsed.get("teamId").and_then(|v| v.as_str()).unwrap_or("?");
+    let name = parsed.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+    let description = parsed
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let created_at = parsed
+        .get("createdAt")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let deleted_at = parsed.get("deletedAt").and_then(|v| v.as_str());
+    let message = parsed.get("message").and_then(|v| v.as_str()).unwrap_or("");
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245m{label}\x1b[0m {}",
+        truncate_for_summary(name, 40)
+    )];
+    lines.push(format!(
+        "  \x1b[2mid:\x1b[0m {}",
+        truncate_for_summary(team_id, 40)
+    ));
+    lines.push(format!("  \x1b[2mcreated:\x1b[0m {created_at}"));
+    if let Some(deleted_at) = deleted_at {
+        lines.push(format!("  \x1b[2mdeleted:\x1b[0m {deleted_at}"));
+    }
+    if !description.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mdescription:\x1b[0m {}",
+            truncate_for_summary(description, 72)
+        ));
+    }
+    if !message.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mnote:\x1b[0m {}",
+            truncate_for_summary(message, 96)
+        ));
+    }
+    lines.join("\n")
+}
+
 fn format_cron_result(icon: &str, label: &str, parsed: &serde_json::Value) -> String {
     let cron_id = parsed.get("cronId").and_then(|v| v.as_str()).unwrap_or("?");
     let schedule = parsed
@@ -4966,6 +5008,72 @@ fn format_cron_list_result(icon: &str, parsed: &serde_json::Value) -> String {
     lines.join("\n")
 }
 
+fn format_worktree_result(icon: &str, label: &str, parsed: &serde_json::Value) -> String {
+    let active = parsed
+        .get("active")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let worktree_path = parsed
+        .get("worktreePath")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    let previous_path = parsed
+        .get("previousPath")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    let message = parsed
+        .get("message")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+
+    let mut lines = vec![if active {
+        format!(
+            "{icon} \x1b[38;5;245m{label}\x1b[0m active {}",
+            truncate_for_summary(worktree_path, 72)
+        )
+    } else {
+        format!("{icon} \x1b[38;5;245m{label}\x1b[0m inactive")
+    }];
+    if !worktree_path.is_empty() {
+        lines.push(format!("  \x1b[2mworktree:\x1b[0m {worktree_path}"));
+    }
+    if !previous_path.is_empty() {
+        lines.push(format!("  \x1b[2mprevious:\x1b[0m {previous_path}"));
+    }
+    if !message.is_empty() {
+        lines.push(format!("  \x1b[2mnote:\x1b[0m {message}"));
+    }
+    lines.join("\n")
+}
+
+fn format_plan_mode_result(icon: &str, label: &str, parsed: &serde_json::Value) -> String {
+    let active = parsed
+        .get("active")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let previous_active = parsed
+        .get("previousActive")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let message = parsed
+        .get("message")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245m{label}\x1b[0m {}",
+        if active { "active" } else { "inactive" }
+    )];
+    lines.push(format!(
+        "  \x1b[2mprevious:\x1b[0m {}",
+        if previous_active { "active" } else { "inactive" }
+    ));
+    if !message.is_empty() {
+        lines.push(format!("  \x1b[2mnote:\x1b[0m {message}"));
+    }
+    lines.join("\n")
+}
+
 fn format_stub_tool_result(icon: &str, name: &str, output: &str) -> String {
     let summary = truncate_for_summary(output.trim(), 120);
     if summary.is_empty() {
@@ -4985,6 +5093,111 @@ fn format_synthetic_output_result(icon: &str, parsed: &serde_json::Value) -> Str
         "{icon} \x1b[38;5;245mSyntheticOutputTool\x1b[0m [{output_type}]\n  \x1b[2m{}\x1b[0m",
         truncate_for_summary(content, 100)
     )
+}
+
+fn format_lsp_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let command = parsed.get("command").and_then(|v| v.as_str()).unwrap_or("?");
+    let connected = parsed
+        .get("connected")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let reason_kind = parsed
+        .get("reasonKind")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let message = parsed.get("message").and_then(|v| v.as_str()).unwrap_or("");
+    let supported = parsed
+        .get("supportedCommands")
+        .and_then(|v| v.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mLSPTool\x1b[0m {command} [{}]",
+        if connected { "connected" } else { reason_kind }
+    )];
+    if !supported.is_empty() {
+        lines.push(format!(
+            "  \x1b[2msupported:\x1b[0m {}",
+            truncate_for_summary(&supported, 100)
+        ));
+    }
+    if !message.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mnote:\x1b[0m {}",
+            truncate_for_summary(message, 100)
+        ));
+    }
+    lines.join("\n")
+}
+
+fn format_remote_trigger_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let event = parsed.get("event").and_then(|v| v.as_str()).unwrap_or("?");
+    let triggered = parsed
+        .get("triggered")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let remote_enabled = parsed
+        .get("remoteEnabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let path_ready = parsed
+        .get("pathReady")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let session_id = parsed.get("sessionId").and_then(|v| v.as_str()).unwrap_or("");
+    let base_url = parsed.get("baseUrl").and_then(|v| v.as_str()).unwrap_or("");
+    let blocker_kind = parsed
+        .get("blockerKind")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let blocker_detail = parsed
+        .get("blockerDetail")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let message = parsed.get("message").and_then(|v| v.as_str()).unwrap_or("");
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mRemoteTriggerTool\x1b[0m '{}' [{}]",
+        truncate_for_summary(event, 40),
+        if triggered { "triggered" } else { blocker_kind }
+    )];
+    lines.push(format!(
+        "  \x1b[2mremote:\x1b[0m {} | \x1b[2mpath:\x1b[0m {}",
+        if remote_enabled { "enabled" } else { "disabled" },
+        if path_ready { "ready" } else { "blocked" }
+    ));
+    if !session_id.is_empty() {
+        lines.push(format!(
+            "  \x1b[2msession:\x1b[0m {}",
+            truncate_for_summary(session_id, 48)
+        ));
+    }
+    if !base_url.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mbase:\x1b[0m {}",
+            truncate_for_summary(base_url, 80)
+        ));
+    }
+    if !blocker_detail.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mblocker:\x1b[0m {}",
+            truncate_for_summary(blocker_detail, 100)
+        ));
+    }
+    if !message.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mnote:\x1b[0m {}",
+            truncate_for_summary(message, 100)
+        ));
+    }
+    lines.join("\n")
 }
 
 fn format_testing_permission_result(icon: &str, parsed: &serde_json::Value) -> String {
@@ -11197,6 +11410,56 @@ mod tests {
         assert!(testing_permission.contains("Reason"));
         assert!(testing_permission.contains("requires approval to escalate"));
 
+        let team_created = format_tool_result(
+            "TeamCreateTool",
+            r#"{"teamId":"team-123","name":"alpha","description":"First responders","createdAt":"1775962415","message":"stored in the local team registry only; no connected backend collaboration service or multi-user sync is active"}"#,
+            false,
+        );
+        assert!(team_created.contains("TeamCreateTool"));
+        assert!(team_created.contains("alpha"));
+        assert!(team_created.contains("id:"));
+        assert!(team_created.contains("team-123"));
+        assert!(team_created.contains("description:"));
+        assert!(team_created.contains("First responders"));
+        assert!(team_created.contains("local team registry"));
+
+        let team_deleted = format_tool_result(
+            "TeamDeleteTool",
+            r#"{"teamId":"team-123","name":"alpha","createdAt":"1775962415","deletedAt":"1775962999","message":"removed from the local team registry; no backend collaboration service was managing this team"}"#,
+            false,
+        );
+        assert!(team_deleted.contains("TeamDeleteTool"));
+        assert!(team_deleted.contains("alpha"));
+        assert!(team_deleted.contains("deleted:"));
+        assert!(team_deleted.contains("1775962999"));
+        assert!(team_deleted.contains("removed from the local team registry"));
+
+        let remote_trigger = format_tool_result(
+            "RemoteTriggerTool",
+            r#"{"event":"sync","triggered":false,"remoteEnabled":true,"sessionId":"session-123","baseUrl":"http://127.0.0.1:8765","pathReady":true,"blockerKind":"adapter-not-ported","blockerDetail":"upstream proxy websocket/session adapter is not ported in Rust","message":"remote trigger transport path is configured, but the upstream websocket/session adapter is not ported in Rust yet"}"#,
+            false,
+        );
+        assert!(remote_trigger.contains("RemoteTriggerTool"));
+        assert!(remote_trigger.contains("sync"));
+        assert!(remote_trigger.contains("adapter-not-ported"));
+        assert!(remote_trigger.contains("remote:"));
+        assert!(remote_trigger.contains("path:"));
+        assert!(remote_trigger.contains("session-123"));
+        assert!(remote_trigger.contains("127.0.0.1:8765"));
+        assert!(remote_trigger.contains("adapter is not ported"));
+
+        let lsp_diagnostic = format_tool_result(
+            "LSPTool",
+            r#"{"command":"diagnostics","connected":false,"reasonKind":"unsupported-runtime","supportedCommands":["diagnostics","hover","completions","definition","references"],"message":"no language server is connected in this Rust session; attach an LSP-aware editor or connect via the remote transport"}"#,
+            false,
+        );
+        assert!(lsp_diagnostic.contains("LSPTool"));
+        assert!(lsp_diagnostic.contains("diagnostics"));
+        assert!(lsp_diagnostic.contains("unsupported-runtime"));
+        assert!(lsp_diagnostic.contains("supported:"));
+        assert!(lsp_diagnostic.contains("hover"));
+        assert!(lsp_diagnostic.contains("no language server is connected"));
+
         let cron_created = format_tool_result(
             "CronCreateTool",
             r#"{"cronId":"cron-123","schedule":"0 * * * *","command":"backup --now","description":"Hourly backup","createdAt":"1775962415","message":"stored in the local cron registry only; no scheduler service is executing jobs"}"#,
@@ -11220,6 +11483,49 @@ mod tests {
         assert!(cron_list.contains("cron-123"));
         assert!(cron_list.contains("backup --now"));
         assert!(cron_list.contains("not executed by a scheduler service"));
+
+        let plan_mode_entered = format_tool_result(
+            "EnterPlanModeTool",
+            r#"{"active":true,"previousActive":false,"message":"plan mode enabled; state-changing tools are now blocked"}"#,
+            false,
+        );
+        assert!(plan_mode_entered.contains("EnterPlanModeTool"));
+        assert!(plan_mode_entered.contains("active"));
+        assert!(plan_mode_entered.contains("previous:"));
+        assert!(plan_mode_entered.contains("inactive"));
+        assert!(plan_mode_entered.contains("state-changing tools are now blocked"));
+
+        let plan_mode_exited = format_tool_result(
+            "ExitPlanModeV2Tool",
+            r#"{"active":false,"previousActive":true,"message":"plan mode disabled; state-changing tools may run again"}"#,
+            false,
+        );
+        assert!(plan_mode_exited.contains("ExitPlanModeV2Tool"));
+        assert!(plan_mode_exited.contains("inactive"));
+        assert!(plan_mode_exited.contains("previous:"));
+        assert!(plan_mode_exited.contains("active"));
+        assert!(plan_mode_exited.contains("may run again"));
+
+        let worktree_entered = format_tool_result(
+            "EnterWorktreeTool",
+            r#"{"active":true,"worktreePath":"/tmp/repo","message":"relative bash and file tools now resolve from the active git worktree root"}"#,
+            false,
+        );
+        assert!(worktree_entered.contains("EnterWorktreeTool"));
+        assert!(worktree_entered.contains("active /tmp/repo"));
+        assert!(worktree_entered.contains("worktree:"));
+        assert!(worktree_entered.contains("relative bash and file tools now resolve"));
+
+        let worktree_exited = format_tool_result(
+            "ExitWorktreeTool",
+            r#"{"active":false,"previousPath":"/tmp/repo","message":"cleared the active git worktree override; relative bash and file tools now resolve from the process cwd"}"#,
+            false,
+        );
+        assert!(worktree_exited.contains("ExitWorktreeTool"));
+        assert!(worktree_exited.contains("inactive"));
+        assert!(worktree_exited.contains("previous:"));
+        assert!(worktree_exited.contains("/tmp/repo"));
+        assert!(worktree_exited.contains("process cwd"));
     }
 
     #[test]

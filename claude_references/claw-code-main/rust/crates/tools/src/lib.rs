@@ -11,15 +11,17 @@ use api::{
 };
 use reqwest::blocking::Client;
 use runtime::{
-    active_worktree_root, clear_mcp_oauth_credentials, clear_active_worktree_root, edit_file,
+    active_worktree_root, clear_active_worktree_root, clear_mcp_oauth_credentials, edit_file,
     effective_current_dir, execute_bash, glob_search, grep_search, load_mcp_oauth_credentials,
-    load_system_prompt, mcp_reason_remediation_hint, read_file, save_mcp_oauth_credentials,
-    set_active_worktree_root, write_file, ApiClient, ApiRequest, AssistantEvent,
-    BashCommandInput, ConfigLoader, ContentBlock, ConversationMessage, ConversationRuntime,
-    GrepSearchInput, McpClientTransport, McpRemoteServerConfig, McpServerConfig, McpServerManager,
-    McpWebSocketServerConfig, MessageRole, OAuthRefreshRequest, OAuthTokenSet, PermissionMode,
-    PermissionOutcome, PermissionPolicy, RuntimeConfig, RuntimeError, Session, TokenUsage,
-    ToolError, ToolExecutor,
+    load_system_prompt, mcp_reason_remediation_hint, plan_mode_active, read_file,
+    save_mcp_oauth_credentials, set_active_worktree_root, set_plan_mode_active, write_file,
+    ApiClient, ApiRequest, AssistantEvent, BashCommandInput, ConfigLoader, ContentBlock,
+    ConversationMessage, ConversationRuntime, GrepSearchInput, McpClientTransport,
+    McpRemoteServerConfig, McpServerConfig, McpServerManager, McpWebSocketServerConfig,
+    MessageRole, OAuthRefreshRequest, OAuthTokenSet, PermissionMode, PermissionOutcome,
+    PermissionPolicy, RuntimeConfig, RuntimeError, Session, TokenUsage, ToolError,
+    ToolExecutor, UpstreamProxyBootstrap, upstream_proxy_live_transport_status,
+    upstream_proxy_websocket_probe,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -125,7 +127,11 @@ pub fn tool_output_schema(tool_name: &str) -> Option<Value> {
         "TaskCreateTool" | "TaskGetTool" | "TaskStopTool" | "TaskUpdateTool" => {
             Some(agent_task_manifest_output_schema())
         }
+        "LSPTool" => Some(lsp_tool_output_schema()),
+        "RemoteTriggerTool" => Some(remote_trigger_output_schema()),
+        "TeamCreateTool" | "TeamDeleteTool" => Some(team_output_schema()),
         "CronCreateTool" | "CronDeleteTool" => Some(cron_job_output_schema()),
+        "EnterPlanModeTool" | "ExitPlanModeV2Tool" => Some(plan_mode_output_schema()),
         "EnterWorktreeTool" | "ExitWorktreeTool" => Some(worktree_context_output_schema()),
         "TaskListTool" => Some(task_list_output_schema()),
         "TaskOutputTool" => Some(task_output_output_schema()),
@@ -309,6 +315,66 @@ fn cron_job_output_schema() -> Value {
     })
 }
 
+fn team_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "teamId": { "type": "string" },
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "createdAt": { "type": "string" },
+            "deletedAt": { "type": "string" },
+            "message": { "type": "string" }
+        },
+        "required": ["teamId", "name", "createdAt"],
+        "additionalProperties": false
+    })
+}
+
+fn lsp_tool_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "command": { "type": "string" },
+            "connected": { "type": "boolean" },
+            "reasonKind": { "type": "string" },
+            "supportedCommands": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "message": { "type": "string" }
+        },
+        "required": ["command", "connected", "reasonKind", "supportedCommands", "message"],
+        "additionalProperties": false
+    })
+}
+
+fn remote_trigger_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "event": { "type": "string" },
+            "triggered": { "type": "boolean" },
+            "remoteEnabled": { "type": "boolean" },
+            "sessionId": { "type": "string" },
+            "baseUrl": { "type": "string" },
+            "pathReady": { "type": "boolean" },
+            "blockerKind": { "type": "string" },
+            "blockerDetail": { "type": "string" },
+            "message": { "type": "string" }
+        },
+        "required": [
+            "event",
+            "triggered",
+            "remoteEnabled",
+            "pathReady",
+            "blockerKind",
+            "message"
+        ],
+        "additionalProperties": false
+    })
+}
+
 fn cron_list_output_schema() -> Value {
     json!({
         "type": "object",
@@ -332,6 +398,19 @@ fn worktree_context_output_schema() -> Value {
             "message": { "type": "string" }
         },
         "required": ["active", "message"],
+        "additionalProperties": false
+    })
+}
+
+fn plan_mode_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "active": { "type": "boolean" },
+            "previousActive": { "type": "boolean" },
+            "message": { "type": "string" }
+        },
+        "required": ["active", "previousActive", "message"],
         "additionalProperties": false
     })
 }
@@ -1212,7 +1291,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "LSPTool",
-            description: "Query a language server for diagnostics, hover info, completions, or go-to-definition. Requires an attached LSP server.",
+            description: "Inspect whether an LSP command can run in the current Rust session and report why it is unavailable when no language server is attached.",
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -1226,7 +1305,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "RemoteTriggerTool",
-            description: "Trigger a named event on the active remote session. Requires an active remote connection.",
+            description: "Inspect whether a named event can be triggered on the active remote session and report live transport blockers when Rust cannot execute it.",
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -1240,7 +1319,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "TeamCreateTool",
-            description: "Create a new team in the connected backend service. Requires a configured team backend.",
+            description: "Create a new team in the local team registry for this workspace.",
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -1254,7 +1333,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "TeamDeleteTool",
-            description: "Delete a team from the connected backend service. Requires a configured team backend.",
+            description: "Delete a team from the local team registry for this workspace.",
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -1454,6 +1533,10 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
 }
 
 pub fn execute_tool(name: &str, input: &Value) -> Result<String, String> {
+    if let Some(error) = plan_mode_blocking_error(name) {
+        return Err(error);
+    }
+
     match name {
         "bash" => from_value::<BashCommandInput>(input).and_then(run_bash),
         "read_file" => from_value::<ReadFileInput>(input).and_then(run_read_file),
@@ -1519,6 +1602,33 @@ pub fn execute_tool(name: &str, input: &Value) -> Result<String, String> {
 
 fn from_value<T: for<'de> Deserialize<'de>>(input: &Value) -> Result<T, String> {
     serde_json::from_value(input.clone()).map_err(|error| error.to_string())
+}
+
+fn plan_mode_blocking_error(name: &str) -> Option<String> {
+    if !plan_mode_active() || !tool_is_blocked_in_plan_mode(name) {
+        return None;
+    }
+
+    Some(format!(
+        "{name} is blocked while plan mode is active; exit plan mode before executing state-changing tools"
+    ))
+}
+
+fn tool_is_blocked_in_plan_mode(name: &str) -> bool {
+    if matches!(name, "EnterPlanModeTool" | "ExitPlanModeV2Tool") {
+        return false;
+    }
+    if matches!(name, "EnterWorktreeTool" | "ExitWorktreeTool") {
+        return true;
+    }
+    if is_dynamic_mcp_tool_name(name) {
+        return true;
+    }
+
+    mvp_tool_specs()
+        .into_iter()
+        .find(|spec| spec.name == name)
+        .is_some_and(|spec| spec.required_permission != PermissionMode::ReadOnly)
 }
 
 fn run_bash(input: BashCommandInput) -> Result<String, String> {
@@ -2147,6 +2257,21 @@ struct TaskOutputOutput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct TeamOutput {
+    #[serde(rename = "teamId")]
+    team_id: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(rename = "createdAt")]
+    created_at: String,
+    #[serde(rename = "deletedAt", skip_serializing_if = "Option::is_none")]
+    deleted_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct CronJobOutput {
     #[serde(rename = "cronId")]
     cron_id: String,
@@ -2177,6 +2302,44 @@ struct WorktreeContextOutput {
     worktree_path: Option<String>,
     #[serde(rename = "previousPath", skip_serializing_if = "Option::is_none")]
     previous_path: Option<String>,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct PlanModeOutput {
+    active: bool,
+    #[serde(rename = "previousActive")]
+    previous_active: bool,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct RemoteTriggerOutput {
+    event: String,
+    triggered: bool,
+    #[serde(rename = "remoteEnabled")]
+    remote_enabled: bool,
+    #[serde(rename = "sessionId", skip_serializing_if = "Option::is_none")]
+    session_id: Option<String>,
+    #[serde(rename = "baseUrl", skip_serializing_if = "Option::is_none")]
+    base_url: Option<String>,
+    #[serde(rename = "pathReady")]
+    path_ready: bool,
+    #[serde(rename = "blockerKind")]
+    blocker_kind: String,
+    #[serde(rename = "blockerDetail", skip_serializing_if = "Option::is_none")]
+    blocker_detail: Option<String>,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct LspToolOutput {
+    command: String,
+    connected: bool,
+    #[serde(rename = "reasonKind")]
+    reason_kind: String,
+    #[serde(rename = "supportedCommands")]
+    supported_commands: Vec<&'static str>,
     message: String,
 }
 
@@ -5785,6 +5948,17 @@ fn cron_store_dir() -> Result<std::path::PathBuf, String> {
     Ok(cwd.join(".clawd-crons"))
 }
 
+fn team_store_dir() -> Result<std::path::PathBuf, String> {
+    if let Ok(path) = std::env::var("CLAWD_TEAM_STORE") {
+        return Ok(std::path::PathBuf::from(path));
+    }
+    let cwd = std::env::current_dir().map_err(|error| error.to_string())?;
+    if let Some(workspace_root) = cwd.ancestors().nth(2) {
+        return Ok(workspace_root.join(".clawd-teams"));
+    }
+    Ok(cwd.join(".clawd-teams"))
+}
+
 fn make_agent_id() -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -5801,14 +5975,37 @@ fn make_cron_id() -> String {
     format!("cron-{nanos}")
 }
 
+fn make_team_id() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("team-{nanos}")
+}
+
 fn cron_manifest_path(cron_id: &str) -> Result<std::path::PathBuf, String> {
     Ok(cron_store_dir()?.join(format!("{cron_id}.json")))
+}
+
+fn team_manifest_path(team_id: &str) -> Result<std::path::PathBuf, String> {
+    Ok(team_store_dir()?.join(format!("{team_id}.json")))
 }
 
 fn write_cron_manifest(manifest: &CronJobOutput) -> Result<(), String> {
     let store_dir = cron_store_dir()?;
     std::fs::create_dir_all(&store_dir).map_err(|error| error.to_string())?;
     let path = store_dir.join(format!("{}.json", manifest.cron_id));
+    std::fs::write(
+        path,
+        serde_json::to_string_pretty(manifest).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())
+}
+
+fn write_team_manifest(manifest: &TeamOutput) -> Result<(), String> {
+    let store_dir = team_store_dir()?;
+    std::fs::create_dir_all(&store_dir).map_err(|error| error.to_string())?;
+    let path = store_dir.join(format!("{}.json", manifest.team_id));
     std::fs::write(
         path,
         serde_json::to_string_pretty(manifest).map_err(|error| error.to_string())?,
@@ -5846,6 +6043,36 @@ fn list_cron_manifests() -> Result<Vec<CronJobOutput>, String> {
     Ok(crons)
 }
 
+fn list_team_manifests() -> Result<Vec<TeamOutput>, String> {
+    let store_dir = team_store_dir()?;
+    if !store_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut teams = Vec::new();
+    for entry in std::fs::read_dir(&store_dir).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let contents = std::fs::read_to_string(&path)
+            .map_err(|error| format!("failed to read team manifest {}: {error}", path.display()))?;
+        let manifest = serde_json::from_str::<TeamOutput>(&contents).map_err(|error| {
+            format!("failed to parse team manifest {}: {error}", path.display())
+        })?;
+        teams.push(manifest);
+    }
+
+    teams.sort_by(|left, right| {
+        right
+            .created_at
+            .cmp(&left.created_at)
+            .then_with(|| left.team_id.cmp(&right.team_id))
+    });
+    Ok(teams)
+}
+
 fn load_cron_manifest(requested: &str) -> Result<CronJobOutput, String> {
     let requested = requested.trim();
     if requested.is_empty() {
@@ -5879,6 +6106,43 @@ fn load_cron_manifest(requested: &str) -> Result<CronJobOutput, String> {
             "multiple cron jobs matched '{requested}'; use a longer cron id"
         )),
     }
+}
+
+fn load_team_manifest(requested: &str) -> Result<TeamOutput, String> {
+    let requested = requested.trim();
+    if requested.is_empty() {
+        return Err(String::from("team id must not be empty"));
+    }
+
+    let teams = list_team_manifests()?;
+    let exact = teams
+        .iter()
+        .filter(|entry| entry.team_id.eq_ignore_ascii_case(requested))
+        .cloned()
+        .collect::<Vec<_>>();
+    if let [team] = exact.as_slice() {
+        return Ok(team.clone());
+    }
+    if exact.len() > 1 {
+        return Err(format!(
+            "multiple teams matched '{requested}'; use a full team id"
+        ));
+    }
+
+    let prefix_matches = teams
+        .into_iter()
+        .filter(|entry| entry.team_id.starts_with(requested))
+        .collect::<Vec<_>>();
+    if let [team] = prefix_matches.as_slice() {
+        return Ok(team.clone());
+    }
+    if prefix_matches.len() > 1 {
+        return Err(format!(
+            "multiple teams matched '{requested}'; use a longer team id prefix"
+        ));
+    }
+
+    Err(format!("no local team manifest found for '{requested}'"))
 }
 
 fn resolve_worktree_candidate(requested: Option<&str>) -> Result<PathBuf, String> {
@@ -6301,35 +6565,88 @@ fn execute_task_update(input: TaskUpdateInput) -> Result<AgentOutput, String> {
 }
 
 fn execute_lsp_tool(input: LspToolInput) -> Result<String, String> {
-    Err(format!(
-        "LSPTool: no language server is connected in this session (command: {}); \
-         attach an LSP-aware editor or connect via the remote transport",
-        input.command
-    ))
+    to_pretty_json(LspToolOutput {
+        command: input.command,
+        connected: false,
+        reason_kind: String::from("unsupported-runtime"),
+        supported_commands: vec![
+            "diagnostics",
+            "hover",
+            "completions",
+            "definition",
+            "references",
+        ],
+        message: String::from(
+            "no language server is connected in this Rust session; attach an LSP-aware editor or connect via the remote transport",
+        ),
+    })
 }
 
 fn execute_remote_trigger(input: RemoteTriggerInput) -> Result<String, String> {
-    Err(format!(
-        "RemoteTriggerTool: no active remote session for event '{}'; \
-         establish a remote connection first (`/remote-setup`)",
-        input.event
-    ))
+    let bootstrap = UpstreamProxyBootstrap::from_env();
+    let websocket_probe = upstream_proxy_websocket_probe(&bootstrap, true);
+    let live_status = upstream_proxy_live_transport_status(&bootstrap, &websocket_probe);
+    let blocker_kind = live_status.blocker_kind.to_string();
+    let blocker_detail = live_status.blocker_detail.clone();
+    let message = match live_status.blocker_kind {
+        "disabled" | "bootstrap-incomplete" => {
+            String::from("remote trigger unavailable until `/remote-setup` requirements are satisfied")
+        }
+        "probe-blocked" | "probe-failed" => String::from(
+            "remote trigger unavailable because the upstream proxy websocket path is not reachable",
+        ),
+        "adapter-not-ported" => String::from(
+            "remote trigger transport path is configured, but the upstream websocket/session adapter is not ported in Rust yet",
+        ),
+        _ => String::from("remote trigger is unavailable in the current Rust runtime"),
+    };
+
+    to_pretty_json(RemoteTriggerOutput {
+        event: input.event,
+        triggered: false,
+        remote_enabled: bootstrap.remote.enabled,
+        session_id: bootstrap.remote.session_id.clone(),
+        base_url: (!bootstrap.remote.base_url.is_empty()).then(|| bootstrap.remote.base_url.clone()),
+        path_ready: live_status.path_ready,
+        blocker_kind,
+        blocker_detail,
+        message,
+    })
 }
 
 fn execute_team_create(input: TeamCreateInput) -> Result<String, String> {
-    Err(format!(
-        "TeamCreateTool: team collaboration features require a connected backend service \
-         (team name: '{}')",
-        input.name
-    ))
+    let name = input.name.trim();
+    if name.is_empty() {
+        return Err(String::from("team name must not be empty"));
+    }
+
+    let manifest = TeamOutput {
+        team_id: make_team_id(),
+        name: name.to_string(),
+        description: input.description.and_then(|value| {
+            let trimmed = value.trim().to_string();
+            (!trimmed.is_empty()).then_some(trimmed)
+        }),
+        created_at: iso8601_now(),
+        deleted_at: None,
+        message: Some(String::from(
+            "stored in the local team registry only; no connected backend collaboration service or multi-user sync is active",
+        )),
+    };
+    write_team_manifest(&manifest)?;
+    to_pretty_json(manifest)
 }
 
 fn execute_team_delete(input: TeamDeleteInput) -> Result<String, String> {
-    Err(format!(
-        "TeamDeleteTool: team collaboration features require a connected backend service \
-         (team_id: '{}')",
-        input.team_id
-    ))
+    let mut manifest = load_team_manifest(&input.team_id)?;
+    let path = team_manifest_path(&manifest.team_id)?;
+    std::fs::remove_file(&path)
+        .map_err(|error| format!("failed to delete team manifest {}: {error}", path.display()))?;
+    manifest.deleted_at = Some(iso8601_now());
+    manifest.message = Some(String::from(
+        "removed from the local team registry; no backend collaboration service was managing this team",
+    ));
+    to_pretty_json(manifest)
 }
 
 fn execute_cron_create(input: CronCreateInput) -> Result<String, String> {
@@ -6392,15 +6709,33 @@ fn execute_cron_list(_input: CronListInput) -> Result<String, String> {
 }
 
 fn execute_enter_plan_mode(_input: EnterPlanModeInput) -> Result<String, String> {
-    Err(String::from(
-        "EnterPlanModeTool: plan mode state management requires a connected session runtime",
-    ))
+    let previous_active = set_plan_mode_active(true);
+    let message = if previous_active {
+        String::from("plan mode already active; state-changing tools remain blocked")
+    } else {
+        String::from("plan mode enabled; state-changing tools are now blocked")
+    };
+
+    to_pretty_json(PlanModeOutput {
+        active: true,
+        previous_active,
+        message,
+    })
 }
 
 fn execute_exit_plan_mode(_input: ExitPlanModeInput) -> Result<String, String> {
-    Err(String::from(
-        "ExitPlanModeV2Tool: plan mode state management requires a connected session runtime",
-    ))
+    let previous_active = set_plan_mode_active(false);
+    let message = if previous_active {
+        String::from("plan mode disabled; state-changing tools may run again")
+    } else {
+        String::from("plan mode was not active")
+    };
+
+    to_pretty_json(PlanModeOutput {
+        active: false,
+        previous_active,
+        message,
+    })
 }
 
 fn execute_enter_worktree(input: EnterWorktreeInput) -> Result<String, String> {
@@ -6412,9 +6747,7 @@ fn execute_enter_worktree(input: EnterWorktreeInput) -> Result<String, String> {
             "worktree context already active; relative bash and file tools continue to resolve from this git worktree",
         )
     } else {
-        String::from(
-            "relative bash and file tools now resolve from the active git worktree root",
-        )
+        String::from("relative bash and file tools now resolve from the active git worktree root")
     };
 
     to_pretty_json(WorktreeContextOutput {
@@ -7186,6 +7519,7 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::{SocketAddr, TcpListener};
     use std::path::{Path, PathBuf};
+    use std::process::Command;
     use std::sync::{Arc, Mutex, OnceLock};
     use std::thread;
     use std::time::Duration;
@@ -7197,7 +7531,10 @@ mod tests {
         persist_agent_terminal_state, runtime_tool_definitions, AgentInput, AgentJob,
         SubagentToolExecutor,
     };
-    use runtime::{ApiRequest, AssistantEvent, ConversationRuntime, RuntimeError, Session};
+    use runtime::{
+        clear_active_worktree_root, set_plan_mode_active, ApiRequest, AssistantEvent,
+        ConversationRuntime, RuntimeError, Session,
+    };
     use serde_json::json;
     use tungstenite::{accept_hdr, Message as WebSocketMessage};
 
@@ -7218,6 +7555,26 @@ mod tests {
         let original = std::env::current_dir().expect("current dir");
         std::env::set_current_dir(path).expect("set current dir");
         original
+    }
+
+    fn restore_env_var(name: &str, original: Option<String>) {
+        if let Some(value) = original {
+            std::env::set_var(name, value);
+        } else {
+            std::env::remove_var(name);
+        }
+    }
+
+    fn spawn_remote_probe_server() -> (String, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind websocket server");
+        let address = listener.local_addr().expect("local addr");
+        let handle = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept websocket client");
+            let mut websocket = accept_hdr(stream, |_request, response| Ok(response))
+                .expect("accept websocket");
+            let _ = websocket.close(None);
+        });
+        (format!("http://{address}"), handle)
     }
 
     fn write_tools_mcp_server_script() -> PathBuf {
@@ -7383,28 +7740,59 @@ mod tests {
     }
 
     #[test]
-    fn plan_mode_worktree_stubs_and_permission_diagnostics_behave_as_expected() {
-        let enter_plan = execute_tool("EnterPlanModeTool", &json!({}))
-            .expect_err("EnterPlanModeTool should error");
-        assert!(
-            enter_plan.contains("session runtime"),
-            "unexpected: {enter_plan}"
-        );
+    fn plan_mode_and_permission_diagnostics_behave_as_expected() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ = set_plan_mode_active(false);
 
-        let exit_plan = execute_tool("ExitPlanModeV2Tool", &json!({}))
-            .expect_err("ExitPlanModeV2Tool should error");
-        assert!(
-            exit_plan.contains("session runtime"),
-            "unexpected: {exit_plan}"
-        );
+        let root = temp_path("plan-mode");
+        fs::create_dir_all(&root).expect("create root");
+        fs::write(root.join("note.txt"), "plan mode\n").expect("write note");
+        let original_dir = set_test_cwd(&root);
 
-        let enter_tree = execute_tool("EnterWorktreeTool", &json!({"worktree_path": "/tmp/wt"}))
-            .expect_err("EnterWorktreeTool should error");
-        assert!(enter_tree.contains("worktree"), "unexpected: {enter_tree}");
+        let enter_plan: serde_json::Value = serde_json::from_str(
+            &execute_tool("EnterPlanModeTool", &json!({}))
+                .expect("EnterPlanModeTool should succeed"),
+        )
+        .expect("json");
+        assert_eq!(enter_plan["active"], json!(true));
+        assert_eq!(enter_plan["previousActive"], json!(false));
+        assert!(enter_plan["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("state-changing tools are now blocked")));
 
-        let exit_tree = execute_tool("ExitWorktreeTool", &json!({}))
-            .expect_err("ExitWorktreeTool should error");
-        assert!(exit_tree.contains("worktree"), "unexpected: {exit_tree}");
+        let read_output: serde_json::Value = serde_json::from_str(
+            &execute_tool("read_file", &json!({ "path": "note.txt" }))
+                .expect("read_file should remain allowed in plan mode"),
+        )
+        .expect("json");
+        assert_eq!(read_output["file"]["content"], json!("plan mode"));
+
+        let write_err = execute_tool(
+            "write_file",
+            &json!({ "path": "blocked.txt", "content": "nope\n" }),
+        )
+        .expect_err("write_file should be blocked in plan mode");
+        assert!(write_err.contains("plan mode"), "unexpected: {write_err}");
+
+        let exit_plan: serde_json::Value = serde_json::from_str(
+            &execute_tool("ExitPlanModeV2Tool", &json!({}))
+                .expect("ExitPlanModeV2Tool should succeed"),
+        )
+        .expect("json");
+        assert_eq!(exit_plan["active"], json!(false));
+        assert_eq!(exit_plan["previousActive"], json!(true));
+        assert!(exit_plan["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("may run again")));
+
+        execute_tool(
+            "write_file",
+            &json!({ "path": "allowed.txt", "content": "ok\n" }),
+        )
+        .expect("write_file should succeed after exiting plan mode");
+        assert!(root.join("allowed.txt").exists());
 
         let perm: serde_json::Value = serde_json::from_str(
             &execute_tool(
@@ -7434,6 +7822,96 @@ mod tests {
         assert_eq!(synth["content"], json!("hello"));
         assert_eq!(synth["synthetic"], json!(true));
         assert_eq!(synth["outputType"], json!("text"));
+
+        let _ = set_plan_mode_active(false);
+        std::env::set_current_dir(&original_dir).expect("restore cwd");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn worktree_tools_switch_local_runtime_context() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ = clear_active_worktree_root();
+
+        let repo_root = temp_path("worktree-repo");
+        let outside = temp_path("worktree-outside");
+        fs::create_dir_all(&repo_root).expect("create repo root");
+        fs::create_dir_all(&outside).expect("create outside root");
+        fs::write(repo_root.join("tracked.txt"), "hello from worktree\n")
+            .expect("write tracked file");
+
+        let git_init = Command::new("git")
+            .arg("init")
+            .current_dir(&repo_root)
+            .output()
+            .expect("run git init");
+        assert!(
+            git_init.status.success(),
+            "git init failed: {}",
+            String::from_utf8_lossy(&git_init.stderr)
+        );
+
+        let original_dir = set_test_cwd(&outside);
+        let canonical_repo_root = repo_root.canonicalize().expect("canonical repo root");
+
+        let entered: serde_json::Value = serde_json::from_str(
+            &execute_tool(
+                "EnterWorktreeTool",
+                &json!({ "worktree_path": canonical_repo_root.display().to_string() }),
+            )
+            .expect("EnterWorktreeTool should succeed"),
+        )
+        .expect("json");
+        assert_eq!(entered["active"], json!(true));
+        assert_eq!(
+            entered["worktreePath"],
+            json!(canonical_repo_root.display().to_string())
+        );
+
+        let bash_output: serde_json::Value = serde_json::from_str(
+            &execute_tool("bash", &json!({ "command": "pwd" })).expect("bash should succeed"),
+        )
+        .expect("json");
+        let expected_pwd = canonical_repo_root.display().to_string();
+        assert_eq!(
+            bash_output["stdout"].as_str().map(str::trim),
+            Some(expected_pwd.as_str())
+        );
+
+        let read_output: serde_json::Value = serde_json::from_str(
+            &execute_tool("read_file", &json!({ "path": "tracked.txt" }))
+                .expect("read_file should resolve against worktree"),
+        )
+        .expect("json");
+        assert_eq!(read_output["file"]["content"], json!("hello from worktree"));
+
+        let glob_output: serde_json::Value = serde_json::from_str(
+            &execute_tool("glob_search", &json!({ "pattern": "*.txt" }))
+                .expect("glob_search should resolve against worktree"),
+        )
+        .expect("json");
+        assert_eq!(glob_output["numFiles"], json!(1));
+
+        let exited: serde_json::Value = serde_json::from_str(
+            &execute_tool("ExitWorktreeTool", &json!({})).expect("ExitWorktreeTool should succeed"),
+        )
+        .expect("json");
+        assert_eq!(exited["active"], json!(false));
+        assert_eq!(
+            exited["previousPath"],
+            json!(canonical_repo_root.display().to_string())
+        );
+
+        let read_err = execute_tool("read_file", &json!({ "path": "tracked.txt" }))
+            .expect_err("read_file should stop resolving against worktree after exit");
+        assert!(!read_err.is_empty());
+
+        let _ = clear_active_worktree_root();
+        std::env::set_current_dir(&original_dir).expect("restore cwd");
+        let _ = fs::remove_dir_all(&repo_root);
+        let _ = fs::remove_dir_all(&outside);
     }
 
     #[test]
@@ -7665,24 +8143,130 @@ mod tests {
     }
 
     #[test]
-    fn stub_tools_return_unavailable_errors() {
-        let lsp_err = execute_tool("LSPTool", &json!({ "command": "diagnostics" }))
-            .expect_err("LSPTool should error");
-        assert!(lsp_err.contains("language server"), "unexpected: {lsp_err}");
+    fn lsp_tool_reports_unavailable_runtime() {
+        let lsp: serde_json::Value = serde_json::from_str(
+            &execute_tool("LSPTool", &json!({ "command": "diagnostics" }))
+                .expect("LSPTool should return structured diagnostics"),
+        )
+        .unwrap();
+        assert_eq!(lsp["command"], json!("diagnostics"));
+        assert_eq!(lsp["connected"], json!(false));
+        assert_eq!(lsp["reasonKind"], json!("unsupported-runtime"));
+        assert_eq!(lsp["supportedCommands"][0], json!("diagnostics"));
+        assert!(lsp["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("no language server is connected")));
+    }
 
-        let remote_err = execute_tool("RemoteTriggerTool", &json!({ "event": "ping" }))
-            .expect_err("RemoteTriggerTool should error");
-        assert!(
-            remote_err.contains("remote session"),
-            "unexpected: {remote_err}"
-        );
+    #[test]
+    fn remote_trigger_reports_bootstrap_and_adapter_blockers() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-        let team_err = execute_tool("TeamCreateTool", &json!({ "name": "alpha" }))
-            .expect_err("TeamCreateTool should error");
-        assert!(
-            team_err.contains("backend service"),
-            "unexpected: {team_err}"
-        );
+        let original_remote = std::env::var("SIMCOE_AI_REMOTE").ok();
+        let original_session = std::env::var("SIMCOE_AI_REMOTE_SESSION_ID").ok();
+        let original_base_url = std::env::var("SIMCOE_AI_BASE_URL").ok();
+        let original_proxy = std::env::var("CCR_UPSTREAM_PROXY_ENABLED").ok();
+        let original_token_path = std::env::var("CCR_SESSION_TOKEN_PATH").ok();
+
+        std::env::remove_var("SIMCOE_AI_REMOTE");
+        std::env::remove_var("SIMCOE_AI_REMOTE_SESSION_ID");
+        std::env::remove_var("SIMCOE_AI_BASE_URL");
+        std::env::remove_var("CCR_UPSTREAM_PROXY_ENABLED");
+        std::env::remove_var("CCR_SESSION_TOKEN_PATH");
+
+        let blocked: serde_json::Value = serde_json::from_str(
+            &execute_tool("RemoteTriggerTool", &json!({ "event": "ping" }))
+                .expect("RemoteTriggerTool should return structured diagnostics"),
+        )
+        .unwrap();
+        assert_eq!(blocked["event"], json!("ping"));
+        assert_eq!(blocked["triggered"], json!(false));
+        assert_eq!(blocked["remoteEnabled"], json!(false));
+        assert_eq!(blocked["pathReady"], json!(false));
+        assert_eq!(blocked["blockerKind"], json!("disabled"));
+        assert!(blocked["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("/remote-setup")));
+
+        let token_file = temp_path("remote-trigger-token");
+        fs::write(&token_file, "token-123\n").expect("write token");
+        let (base_url, handle) = spawn_remote_probe_server();
+
+        std::env::set_var("SIMCOE_AI_REMOTE", "1");
+        std::env::set_var("SIMCOE_AI_REMOTE_SESSION_ID", "session-123");
+        std::env::set_var("SIMCOE_AI_BASE_URL", &base_url);
+        std::env::set_var("CCR_UPSTREAM_PROXY_ENABLED", "1");
+        std::env::set_var("CCR_SESSION_TOKEN_PATH", &token_file);
+
+        let adapter_blocked: serde_json::Value = serde_json::from_str(
+            &execute_tool("RemoteTriggerTool", &json!({ "event": "sync" }))
+                .expect("RemoteTriggerTool should report adapter status"),
+        )
+        .unwrap();
+        assert_eq!(adapter_blocked["event"], json!("sync"));
+        assert_eq!(adapter_blocked["triggered"], json!(false));
+        assert_eq!(adapter_blocked["remoteEnabled"], json!(true));
+        assert_eq!(adapter_blocked["sessionId"], json!("session-123"));
+        assert_eq!(adapter_blocked["baseUrl"], json!(base_url));
+        assert_eq!(adapter_blocked["pathReady"], json!(true));
+        assert_eq!(adapter_blocked["blockerKind"], json!("adapter-not-ported"));
+        assert!(adapter_blocked["blockerDetail"]
+            .as_str()
+            .is_some_and(|detail| detail.contains("adapter is not ported")));
+
+        handle.join().expect("join websocket server");
+        let _ = fs::remove_file(&token_file);
+        restore_env_var("SIMCOE_AI_REMOTE", original_remote);
+        restore_env_var("SIMCOE_AI_REMOTE_SESSION_ID", original_session);
+        restore_env_var("SIMCOE_AI_BASE_URL", original_base_url);
+        restore_env_var("CCR_UPSTREAM_PROXY_ENABLED", original_proxy);
+        restore_env_var("CCR_SESSION_TOKEN_PATH", original_token_path);
+    }
+
+    #[test]
+    fn team_tools_manage_local_registry() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let dir = temp_path("team-store");
+        std::env::set_var("CLAWD_TEAM_STORE", &dir);
+
+        let created: serde_json::Value = serde_json::from_str(
+            &execute_tool(
+                "TeamCreateTool",
+                &json!({
+                    "name": "alpha",
+                    "description": "First responders"
+                }),
+            )
+            .expect("TeamCreateTool should succeed"),
+        )
+        .unwrap();
+        let team_id = created["teamId"].as_str().expect("team id");
+        assert!(team_id.starts_with("team-"));
+        assert_eq!(created["name"], json!("alpha"));
+        assert_eq!(created["description"], json!("First responders"));
+        assert!(created["message"].as_str().is_some_and(|message| {
+            message.contains("local team registry") && message.contains("multi-user sync")
+        }));
+        assert!(dir.join(format!("{team_id}.json")).exists());
+
+        let deleted: serde_json::Value = serde_json::from_str(
+            &execute_tool("TeamDeleteTool", &json!({ "team_id": team_id })).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(deleted["teamId"], created["teamId"]);
+        assert_eq!(deleted["name"], json!("alpha"));
+        assert!(deleted["deletedAt"].as_str().is_some());
+        assert!(deleted["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("removed from the local team registry")));
+        assert!(!dir.join(format!("{team_id}.json")).exists());
+
+        std::env::remove_var("CLAWD_TEAM_STORE");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -7775,6 +8359,33 @@ mod tests {
             json!("string")
         );
 
+        let team_schema = tool_output_schema("TeamCreateTool").unwrap();
+        assert_eq!(team_schema["properties"]["teamId"]["type"], json!("string"));
+        assert_eq!(team_schema["properties"]["name"]["type"], json!("string"));
+        assert_eq!(
+            team_schema["properties"]["deletedAt"]["type"],
+            json!("string")
+        );
+
+        let lsp_schema = tool_output_schema("LSPTool").unwrap();
+        assert_eq!(lsp_schema["properties"]["command"]["type"], json!("string"));
+        assert_eq!(lsp_schema["properties"]["connected"]["type"], json!("boolean"));
+        assert_eq!(
+            lsp_schema["properties"]["reasonKind"]["type"],
+            json!("string")
+        );
+
+        let remote_schema = tool_output_schema("RemoteTriggerTool").unwrap();
+        assert_eq!(remote_schema["properties"]["event"]["type"], json!("string"));
+        assert_eq!(
+            remote_schema["properties"]["blockerKind"]["type"],
+            json!("string")
+        );
+        assert_eq!(
+            remote_schema["properties"]["pathReady"]["type"],
+            json!("boolean")
+        );
+
         let cron_list_schema = tool_output_schema("CronListTool").unwrap();
         assert_eq!(
             cron_list_schema["properties"]["crons"]["type"],
@@ -7783,6 +8394,26 @@ mod tests {
         assert_eq!(
             cron_list_schema["properties"]["total"]["type"],
             json!("integer")
+        );
+
+        let worktree_schema = tool_output_schema("EnterWorktreeTool").unwrap();
+        assert_eq!(
+            worktree_schema["properties"]["active"]["type"],
+            json!("boolean")
+        );
+        assert_eq!(
+            worktree_schema["properties"]["worktreePath"]["type"],
+            json!("string")
+        );
+
+        let plan_mode_schema = tool_output_schema("EnterPlanModeTool").unwrap();
+        assert_eq!(
+            plan_mode_schema["properties"]["active"]["type"],
+            json!("boolean")
+        );
+        assert_eq!(
+            plan_mode_schema["properties"]["previousActive"]["type"],
+            json!("boolean")
         );
     }
 
