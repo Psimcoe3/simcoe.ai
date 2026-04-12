@@ -4438,9 +4438,10 @@ fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
         "TaskListTool" => format_task_list_result(icon, &parsed),
         "TaskOutputTool" => format_task_output_result(icon, &parsed),
         "TestingPermissionTool" => format_testing_permission_result(icon, &parsed),
+        "CronCreateTool" | "CronDeleteTool" => format_cron_result(icon, name, &parsed),
+        "CronListTool" => format_cron_list_result(icon, &parsed),
         "LSPTool" | "RemoteTriggerTool" | "TeamCreateTool" | "TeamDeleteTool"
-        | "CronCreateTool" | "CronDeleteTool" | "CronListTool" | "EnterPlanModeTool"
-        | "ExitPlanModeV2Tool" | "EnterWorktreeTool" | "ExitWorktreeTool" => {
+        | "EnterPlanModeTool" | "ExitPlanModeV2Tool" | "EnterWorktreeTool" | "ExitWorktreeTool" => {
             format_stub_tool_result(icon, name, output)
         }
         "SyntheticOutputTool" => format_synthetic_output_result(icon, &parsed),
@@ -4884,6 +4885,83 @@ fn format_task_output_result(icon: &str, parsed: &serde_json::Value) -> String {
             "  \x1b[2moutput:\x1b[0m {}",
             truncate_for_summary(output.trim(), 120)
         ));
+    }
+    lines.join("\n")
+}
+
+fn format_cron_result(icon: &str, label: &str, parsed: &serde_json::Value) -> String {
+    let cron_id = parsed.get("cronId").and_then(|v| v.as_str()).unwrap_or("?");
+    let schedule = parsed
+        .get("schedule")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let command = parsed
+        .get("command")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let description = parsed
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let created_at = parsed
+        .get("createdAt")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let deleted_at = parsed.get("deletedAt").and_then(|v| v.as_str());
+    let message = parsed.get("message").and_then(|v| v.as_str()).unwrap_or("");
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245m{label}\x1b[0m [{schedule}] {}",
+        truncate_for_summary(command, 60)
+    )];
+    lines.push(format!(
+        "  \x1b[2mid:\x1b[0m {}",
+        truncate_for_summary(cron_id, 40)
+    ));
+    lines.push(format!("  \x1b[2mcreated:\x1b[0m {created_at}"));
+    if let Some(deleted_at) = deleted_at {
+        lines.push(format!("  \x1b[2mdeleted:\x1b[0m {deleted_at}"));
+    }
+    if !description.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mdescription:\x1b[0m {}",
+            truncate_for_summary(description, 72)
+        ));
+    }
+    if !message.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mnote:\x1b[0m {}",
+            truncate_for_summary(message, 96)
+        ));
+    }
+    lines.join("\n")
+}
+
+fn format_cron_list_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let total = parsed.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
+    let crons = parsed
+        .get("crons")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.as_slice())
+        .unwrap_or(&[]);
+    let message = parsed.get("message").and_then(|v| v.as_str()).unwrap_or("");
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mCronListTool\x1b[0m \x1b[2m({total} jobs)\x1b[0m"
+    )];
+    for cron in crons.iter().take(5) {
+        let cron_id = cron.get("cronId").and_then(|v| v.as_str()).unwrap_or("?");
+        let schedule = cron.get("schedule").and_then(|v| v.as_str()).unwrap_or("?");
+        let command = cron.get("command").and_then(|v| v.as_str()).unwrap_or("?");
+        lines.push(format!(
+            "  \x1b[2m{}\x1b[0m [{schedule}] {}",
+            truncate_for_summary(cron_id, 20),
+            truncate_for_summary(command, 40)
+        ));
+    }
+    if total > 5 {
+        lines.push(format!("  \x1b[2m+{} more\x1b[0m", total - 5));
+    }
+    if !message.is_empty() {
+        lines.push(format!("  \x1b[2m{message}\x1b[0m"));
     }
     lines.join("\n")
 }
@@ -11118,6 +11196,30 @@ mod tests {
         assert!(testing_permission.contains("/tmp/demo"));
         assert!(testing_permission.contains("Reason"));
         assert!(testing_permission.contains("requires approval to escalate"));
+
+        let cron_created = format_tool_result(
+            "CronCreateTool",
+            r#"{"cronId":"cron-123","schedule":"0 * * * *","command":"backup --now","description":"Hourly backup","createdAt":"1775962415","message":"stored in the local cron registry only; no scheduler service is executing jobs"}"#,
+            false,
+        );
+        assert!(cron_created.contains("CronCreateTool"));
+        assert!(cron_created.contains("[0 * * * *] backup --now"));
+        assert!(cron_created.contains("id:"));
+        assert!(cron_created.contains("cron-123"));
+        assert!(cron_created.contains("description:"));
+        assert!(cron_created.contains("Hourly backup"));
+        assert!(cron_created.contains("local cron registry"));
+
+        let cron_list = format_tool_result(
+            "CronListTool",
+            r#"{"crons":[{"cronId":"cron-123","schedule":"0 * * * *","command":"backup --now","createdAt":"1775962415"}],"total":1,"message":"local cron registry only; stored schedules are not executed by a scheduler service"}"#,
+            false,
+        );
+        assert!(cron_list.contains("CronListTool"));
+        assert!(cron_list.contains("(1 jobs)"));
+        assert!(cron_list.contains("cron-123"));
+        assert!(cron_list.contains("backup --now"));
+        assert!(cron_list.contains("not executed by a scheduler service"));
     }
 
     #[test]

@@ -11,9 +11,10 @@ use api::{
 };
 use reqwest::blocking::Client;
 use runtime::{
-    clear_mcp_oauth_credentials, edit_file, execute_bash, glob_search, grep_search,
-    load_mcp_oauth_credentials, load_system_prompt, mcp_reason_remediation_hint, read_file,
-    save_mcp_oauth_credentials, write_file, ApiClient, ApiRequest, AssistantEvent,
+    active_worktree_root, clear_mcp_oauth_credentials, clear_active_worktree_root, edit_file,
+    effective_current_dir, execute_bash, glob_search, grep_search, load_mcp_oauth_credentials,
+    load_system_prompt, mcp_reason_remediation_hint, read_file, save_mcp_oauth_credentials,
+    set_active_worktree_root, write_file, ApiClient, ApiRequest, AssistantEvent,
     BashCommandInput, ConfigLoader, ContentBlock, ConversationMessage, ConversationRuntime,
     GrepSearchInput, McpClientTransport, McpRemoteServerConfig, McpServerConfig, McpServerManager,
     McpWebSocketServerConfig, MessageRole, OAuthRefreshRequest, OAuthTokenSet, PermissionMode,
@@ -124,6 +125,8 @@ pub fn tool_output_schema(tool_name: &str) -> Option<Value> {
         "TaskCreateTool" | "TaskGetTool" | "TaskStopTool" | "TaskUpdateTool" => {
             Some(agent_task_manifest_output_schema())
         }
+        "CronCreateTool" | "CronDeleteTool" => Some(cron_job_output_schema()),
+        "EnterWorktreeTool" | "ExitWorktreeTool" => Some(worktree_context_output_schema()),
         "TaskListTool" => Some(task_list_output_schema()),
         "TaskOutputTool" => Some(task_output_output_schema()),
         "TestingPermissionTool" => Some(testing_permission_output_schema()),
@@ -289,14 +292,46 @@ fn testing_permission_output_schema() -> Value {
     })
 }
 
+fn cron_job_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "cronId": { "type": "string" },
+            "schedule": { "type": "string" },
+            "command": { "type": "string" },
+            "description": { "type": "string" },
+            "createdAt": { "type": "string" },
+            "deletedAt": { "type": "string" },
+            "message": { "type": "string" }
+        },
+        "required": ["cronId", "schedule", "command", "createdAt"],
+        "additionalProperties": false
+    })
+}
+
 fn cron_list_output_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
-            "crons": { "type": "array", "items": { "type": "object" } },
+            "crons": { "type": "array", "items": cron_job_output_schema() },
+            "total": { "type": "integer", "minimum": 0 },
             "message": { "type": "string" }
         },
-        "required": ["crons"],
+        "required": ["crons", "total"],
+        "additionalProperties": false
+    })
+}
+
+fn worktree_context_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "active": { "type": "boolean" },
+            "worktreePath": { "type": "string" },
+            "previousPath": { "type": "string" },
+            "message": { "type": "string" }
+        },
+        "required": ["active", "message"],
         "additionalProperties": false
     })
 }
@@ -1232,7 +1267,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "CronCreateTool",
-            description: "Schedule a command to run on a cron schedule. Requires a connected scheduler service.",
+            description: "Register a local cron schedule manifest for later inspection. This does not execute jobs by itself.",
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -1247,7 +1282,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "CronDeleteTool",
-            description: "Delete a scheduled cron job by its id. Requires a connected scheduler service.",
+            description: "Delete a local cron schedule manifest by its id.",
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -1260,7 +1295,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "CronListTool",
-            description: "List all scheduled cron jobs. Returns an empty list if no scheduler service is connected.",
+            description: "List local cron schedule manifests.",
             input_schema: json!({
                 "type": "object",
                 "properties": {},
@@ -1892,7 +1927,6 @@ struct TeamDeleteInput {
 struct CronCreateInput {
     schedule: String,
     command: String,
-    #[allow(dead_code)]
     description: Option<String>,
 }
 
@@ -2110,6 +2144,40 @@ struct TaskOutputOutput {
     task_id: String,
     status: String,
     output: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CronJobOutput {
+    #[serde(rename = "cronId")]
+    cron_id: String,
+    schedule: String,
+    command: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(rename = "createdAt")]
+    created_at: String,
+    #[serde(rename = "deletedAt", skip_serializing_if = "Option::is_none")]
+    deleted_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct CronListOutput {
+    crons: Vec<CronJobOutput>,
+    total: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct WorktreeContextOutput {
+    active: bool,
+    #[serde(rename = "worktreePath", skip_serializing_if = "Option::is_none")]
+    worktree_path: Option<String>,
+    #[serde(rename = "previousPath", skip_serializing_if = "Option::is_none")]
+    previous_path: Option<String>,
+    message: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -5706,12 +5774,163 @@ fn agent_store_dir() -> Result<std::path::PathBuf, String> {
     Ok(cwd.join(".clawd-agents"))
 }
 
+fn cron_store_dir() -> Result<std::path::PathBuf, String> {
+    if let Ok(path) = std::env::var("CLAWD_CRON_STORE") {
+        return Ok(std::path::PathBuf::from(path));
+    }
+    let cwd = std::env::current_dir().map_err(|error| error.to_string())?;
+    if let Some(workspace_root) = cwd.ancestors().nth(2) {
+        return Ok(workspace_root.join(".clawd-crons"));
+    }
+    Ok(cwd.join(".clawd-crons"))
+}
+
 fn make_agent_id() -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
     format!("agent-{nanos}")
+}
+
+fn make_cron_id() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("cron-{nanos}")
+}
+
+fn cron_manifest_path(cron_id: &str) -> Result<std::path::PathBuf, String> {
+    Ok(cron_store_dir()?.join(format!("{cron_id}.json")))
+}
+
+fn write_cron_manifest(manifest: &CronJobOutput) -> Result<(), String> {
+    let store_dir = cron_store_dir()?;
+    std::fs::create_dir_all(&store_dir).map_err(|error| error.to_string())?;
+    let path = store_dir.join(format!("{}.json", manifest.cron_id));
+    std::fs::write(
+        path,
+        serde_json::to_string_pretty(manifest).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())
+}
+
+fn list_cron_manifests() -> Result<Vec<CronJobOutput>, String> {
+    let store_dir = cron_store_dir()?;
+    if !store_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut crons = Vec::new();
+    for entry in std::fs::read_dir(&store_dir).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let contents = std::fs::read_to_string(&path)
+            .map_err(|error| format!("failed to read cron manifest {}: {error}", path.display()))?;
+        let manifest = serde_json::from_str::<CronJobOutput>(&contents).map_err(|error| {
+            format!("failed to parse cron manifest {}: {error}", path.display())
+        })?;
+        crons.push(manifest);
+    }
+
+    crons.sort_by(|left, right| {
+        right
+            .created_at
+            .cmp(&left.created_at)
+            .then_with(|| left.cron_id.cmp(&right.cron_id))
+    });
+    Ok(crons)
+}
+
+fn load_cron_manifest(requested: &str) -> Result<CronJobOutput, String> {
+    let requested = requested.trim();
+    if requested.is_empty() {
+        return Err(String::from("cron id must not be empty"));
+    }
+
+    let crons = list_cron_manifests()?;
+    let exact = crons
+        .iter()
+        .filter(|entry| entry.cron_id.eq_ignore_ascii_case(requested))
+        .cloned()
+        .collect::<Vec<_>>();
+    if let [cron] = exact.as_slice() {
+        return Ok(cron.clone());
+    }
+    if exact.len() > 1 {
+        return Err(format!(
+            "multiple cron jobs matched '{requested}'; use a full cron id"
+        ));
+    }
+
+    let partial = crons
+        .iter()
+        .filter(|entry| entry.cron_id.starts_with(requested))
+        .cloned()
+        .collect::<Vec<_>>();
+    match partial.as_slice() {
+        [cron] => Ok(cron.clone()),
+        [] => Err(format!("unknown cron job: {requested}")),
+        _ => Err(format!(
+            "multiple cron jobs matched '{requested}'; use a longer cron id"
+        )),
+    }
+}
+
+fn resolve_worktree_candidate(requested: Option<&str>) -> Result<PathBuf, String> {
+    let base = effective_current_dir().map_err(|error| error.to_string())?;
+    match requested.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(path) => {
+            let candidate = if Path::new(path).is_absolute() {
+                PathBuf::from(path)
+            } else {
+                base.join(path)
+            };
+            candidate.canonicalize().map_err(|error| {
+                format!(
+                    "failed to resolve worktree path {}: {error}",
+                    candidate.display()
+                )
+            })
+        }
+        None => Ok(base),
+    }
+}
+
+fn detect_git_worktree_root(candidate: &Path) -> Result<PathBuf, String> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(candidate)
+        .output()
+        .map_err(|error| format!("failed to run git for {}: {error}", candidate.display()))?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let detail = if detail.is_empty() {
+            String::from("git did not recognize the path as a worktree")
+        } else {
+            detail
+        };
+        return Err(format!(
+            "EnterWorktreeTool: {} is not inside a git worktree ({detail})",
+            candidate.display()
+        ));
+    }
+
+    let root = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if root.is_empty() {
+        return Err(format!(
+            "EnterWorktreeTool: git did not report a worktree root for {}",
+            candidate.display()
+        ));
+    }
+
+    PathBuf::from(root)
+        .canonicalize()
+        .map_err(|error| format!("failed to canonicalize git worktree root: {error}"))
 }
 
 fn slugify_agent_name(description: &str) -> String {
@@ -6114,26 +6333,62 @@ fn execute_team_delete(input: TeamDeleteInput) -> Result<String, String> {
 }
 
 fn execute_cron_create(input: CronCreateInput) -> Result<String, String> {
-    Err(format!(
-        "CronCreateTool: cron scheduling requires a connected scheduler service \
-         (schedule: '{}', command: '{}')",
-        input.schedule, input.command
-    ))
+    let schedule = input.schedule.trim();
+    if schedule.is_empty() {
+        return Err(String::from("schedule must not be empty"));
+    }
+    let command = input.command.trim();
+    if command.is_empty() {
+        return Err(String::from("command must not be empty"));
+    }
+
+    let manifest = CronJobOutput {
+        cron_id: make_cron_id(),
+        schedule: schedule.to_string(),
+        command: command.to_string(),
+        description: input.description.and_then(|value| {
+            let trimmed = value.trim().to_string();
+            (!trimmed.is_empty()).then_some(trimmed)
+        }),
+        created_at: iso8601_now(),
+        deleted_at: None,
+        message: Some(String::from(
+            "stored in the local cron registry only; no scheduler service is executing jobs",
+        )),
+    };
+    write_cron_manifest(&manifest)?;
+    to_pretty_json(manifest)
 }
 
 fn execute_cron_delete(input: CronDeleteInput) -> Result<String, String> {
-    Err(format!(
-        "CronDeleteTool: cron scheduling requires a connected scheduler service \
-         (cron_id: '{}')",
-        input.cron_id
-    ))
+    let mut manifest = load_cron_manifest(&input.cron_id)?;
+    let path = cron_manifest_path(&manifest.cron_id)?;
+    std::fs::remove_file(&path)
+        .map_err(|error| format!("failed to delete cron manifest {}: {error}", path.display()))?;
+    manifest.deleted_at = Some(iso8601_now());
+    manifest.message = Some(String::from(
+        "removed from the local cron registry; no scheduler service was managing this job",
+    ));
+    to_pretty_json(manifest)
 }
 
 fn execute_cron_list(_input: CronListInput) -> Result<String, String> {
-    to_pretty_json(serde_json::json!({
-        "crons": [],
-        "message": "no scheduler service connected; cron list is empty"
-    }))
+    let crons = list_cron_manifests()?;
+    let total = crons.len();
+    let message = if total == 0 {
+        Some(String::from(
+            "local cron registry is empty; no scheduler service is executing jobs",
+        ))
+    } else {
+        Some(String::from(
+            "local cron registry only; stored schedules are not executed by a scheduler service",
+        ))
+    };
+    to_pretty_json(CronListOutput {
+        crons,
+        total,
+        message,
+    })
 }
 
 fn execute_enter_plan_mode(_input: EnterPlanModeInput) -> Result<String, String> {
@@ -6149,16 +6404,43 @@ fn execute_exit_plan_mode(_input: ExitPlanModeInput) -> Result<String, String> {
 }
 
 fn execute_enter_worktree(input: EnterWorktreeInput) -> Result<String, String> {
-    let path = input.worktree_path.as_deref().unwrap_or("(unspecified)");
-    Err(format!(
-        "EnterWorktreeTool: git worktree session management is not yet implemented (path: '{path}')"
-    ))
+    let requested = resolve_worktree_candidate(input.worktree_path.as_deref())?;
+    let worktree_root = detect_git_worktree_root(&requested)?;
+    let previous = set_active_worktree_root(Some(worktree_root.clone()));
+    let message = if previous.as_ref() == Some(&worktree_root) {
+        String::from(
+            "worktree context already active; relative bash and file tools continue to resolve from this git worktree",
+        )
+    } else {
+        String::from(
+            "relative bash and file tools now resolve from the active git worktree root",
+        )
+    };
+
+    to_pretty_json(WorktreeContextOutput {
+        active: true,
+        worktree_path: Some(worktree_root.to_string_lossy().into_owned()),
+        previous_path: previous.map(|path| path.to_string_lossy().into_owned()),
+        message,
+    })
 }
 
 fn execute_exit_worktree(_input: ExitWorktreeInput) -> Result<String, String> {
-    Err(String::from(
-        "ExitWorktreeTool: git worktree session management is not yet implemented",
-    ))
+    let previous = clear_active_worktree_root();
+    let message = if previous.is_some() {
+        String::from(
+            "cleared the active git worktree override; relative bash and file tools now resolve from the process cwd",
+        )
+    } else {
+        String::from("no active git worktree override was set")
+    };
+
+    to_pretty_json(WorktreeContextOutput {
+        active: false,
+        worktree_path: active_worktree_root().map(|path| path.to_string_lossy().into_owned()),
+        previous_path: previous.map(|path| path.to_string_lossy().into_owned()),
+        message,
+    })
 }
 
 fn execute_synthetic_output(input: SyntheticOutputInput) -> Result<String, String> {
@@ -7401,21 +7683,60 @@ mod tests {
             team_err.contains("backend service"),
             "unexpected: {team_err}"
         );
+    }
 
-        let cron_err = execute_tool(
-            "CronCreateTool",
-            &json!({ "schedule": "0 * * * *", "command": "backup" }),
+    #[test]
+    fn cron_tools_manage_local_registry() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let dir = temp_path("cron-store");
+        std::env::set_var("CLAWD_CRON_STORE", &dir);
+
+        let created: serde_json::Value = serde_json::from_str(
+            &execute_tool(
+                "CronCreateTool",
+                &json!({
+                    "schedule": "0 * * * *",
+                    "command": "backup --now",
+                    "description": "Hourly backup"
+                }),
+            )
+            .expect("CronCreateTool should succeed"),
         )
-        .expect_err("CronCreateTool should error");
-        assert!(
-            cron_err.contains("scheduler service"),
-            "unexpected: {cron_err}"
-        );
+        .unwrap();
+        let cron_id = created["cronId"].as_str().expect("cron id");
+        assert!(cron_id.starts_with("cron-"));
+        assert_eq!(created["schedule"], json!("0 * * * *"));
+        assert_eq!(created["command"], json!("backup --now"));
+        assert_eq!(created["description"], json!("Hourly backup"));
+        assert!(created["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("local cron registry")));
 
-        // CronListTool returns Ok with empty list
-        let cron_list: serde_json::Value =
+        let listed: serde_json::Value =
             serde_json::from_str(&execute_tool("CronListTool", &json!({})).unwrap()).unwrap();
-        assert_eq!(cron_list["crons"], json!([]));
+        assert_eq!(listed["total"], json!(1));
+        assert_eq!(listed["crons"].as_array().map_or(0, Vec::len), 1);
+        assert_eq!(listed["crons"][0]["cronId"], created["cronId"]);
+
+        let deleted: serde_json::Value = serde_json::from_str(
+            &execute_tool("CronDeleteTool", &json!({ "cron_id": cron_id })).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(deleted["cronId"], created["cronId"]);
+        assert!(deleted["deletedAt"].is_string());
+        assert!(deleted["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("removed from the local cron registry")));
+
+        let remaining: serde_json::Value =
+            serde_json::from_str(&execute_tool("CronListTool", &json!({})).unwrap()).unwrap();
+        assert_eq!(remaining["total"], json!(0));
+        assert_eq!(remaining["crons"], json!([]));
+
+        std::env::remove_var("CLAWD_CRON_STORE");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -7445,6 +7766,23 @@ mod tests {
         assert_eq!(
             permission_schema["properties"]["outcome"]["enum"],
             json!(["allow", "prompt", "deny"])
+        );
+
+        let cron_schema = tool_output_schema("CronCreateTool").unwrap();
+        assert_eq!(cron_schema["properties"]["cronId"]["type"], json!("string"));
+        assert_eq!(
+            cron_schema["properties"]["deletedAt"]["type"],
+            json!("string")
+        );
+
+        let cron_list_schema = tool_output_schema("CronListTool").unwrap();
+        assert_eq!(
+            cron_list_schema["properties"]["crons"]["type"],
+            json!("array")
+        );
+        assert_eq!(
+            cron_list_schema["properties"]["total"]["type"],
+            json!("integer")
         );
     }
 

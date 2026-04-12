@@ -1,0 +1,7 @@
+{
+  "cronId": "cron-1775962415354795669",
+  "schedule": "0 * * * *",
+  "command": "backup",
+  "createdAt": "1775962415",
+  "message": "stored in the local cron registry only; no scheduler service is executing jobs"
+}

@@ -4,6 +4,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use crate::effective_current_dir;
 use glob::Pattern;
 use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
@@ -222,7 +223,7 @@ pub fn glob_search(pattern: &str, path: Option<&str>) -> io::Result<GlobSearchOu
     let base_dir = path
         .map(normalize_path)
         .transpose()?
-        .unwrap_or(std::env::current_dir()?);
+        .unwrap_or(effective_current_dir()?);
     let search_pattern = if Path::new(pattern).is_absolute() {
         pattern.to_owned()
     } else {
@@ -266,7 +267,7 @@ pub fn grep_search(input: &GrepSearchInput) -> io::Result<GrepSearchOutput> {
         .as_deref()
         .map(normalize_path)
         .transpose()?
-        .unwrap_or(std::env::current_dir()?);
+        .unwrap_or(effective_current_dir()?);
 
     let regex = RegexBuilder::new(&input.pattern)
         .case_insensitive(input.case_insensitive.unwrap_or(false))
@@ -449,7 +450,7 @@ fn normalize_path(path: &str) -> io::Result<PathBuf> {
     let candidate = if Path::new(path).is_absolute() {
         PathBuf::from(path)
     } else {
-        std::env::current_dir()?.join(path)
+        effective_current_dir()?.join(path)
     };
     candidate.canonicalize()
 }
@@ -458,7 +459,7 @@ fn normalize_path_allow_missing(path: &str) -> io::Result<PathBuf> {
     let candidate = if Path::new(path).is_absolute() {
         PathBuf::from(path)
     } else {
-        std::env::current_dir()?.join(path)
+        effective_current_dir()?.join(path)
     };
 
     if let Ok(canonical) = candidate.canonicalize() {

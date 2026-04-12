@@ -8,6 +8,7 @@ use tokio::process::Command as TokioCommand;
 use tokio::runtime::Builder;
 use tokio::time::timeout;
 
+use crate::effective_current_dir;
 use crate::sandbox::{
     build_linux_sandbox_command, resolve_sandbox_status_for_request, FilesystemIsolationMode,
     SandboxConfig, SandboxStatus,
@@ -65,7 +66,7 @@ pub struct BashCommandOutput {
 }
 
 pub fn execute_bash(input: BashCommandInput) -> io::Result<BashCommandOutput> {
-    let cwd = env::current_dir()?;
+    let cwd = effective_current_dir()?;
     let sandbox_status = sandbox_status_for_input(&input, &cwd);
 
     if input.run_in_background.unwrap_or(false) {

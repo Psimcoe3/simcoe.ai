@@ -16,6 +16,7 @@ mod remote;
 pub mod sandbox;
 mod session;
 mod usage;
+mod workspace;
 
 pub use bash::{execute_bash, BashCommandInput, BashCommandOutput};
 pub use bootstrap::{BootstrapPhase, BootstrapPlan};
@@ -87,6 +88,10 @@ pub use remote::{
 pub use session::{ContentBlock, ConversationMessage, MessageRole, Session, SessionError};
 pub use usage::{
     format_usd, pricing_for_model, ModelPricing, TokenUsage, UsageCostEstimate, UsageTracker,
+};
+pub use workspace::{
+    active_worktree_root, clear_active_worktree_root, effective_current_dir,
+    set_active_worktree_root,
 };
 
 #[cfg(test)]
