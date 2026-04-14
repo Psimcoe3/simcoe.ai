@@ -8911,9 +8911,9 @@ mod tests {
             let report = render_skills_report(None).expect("skills report should render");
             assert!(report.contains("Skills"));
             assert!(report.contains("Available        2"));
-            assert!(report.contains("electrical-estimating"));
+            assert!(report.contains("electrical-estimating (estimate)"));
             assert!(report.contains("Structure estimate answers around scope and uncertainty."));
-            assert!(report.contains("revit-family-reference"));
+            assert!(report.contains("revit-family-reference (revit)"));
             assert!(report.contains("Present Revit answers with exact family and type labels."));
 
             let payload = super::skills_payload(None).expect("skills payload should render");
@@ -8924,6 +8924,7 @@ mod tests {
                 .as_array()
                 .is_some_and(|skills| skills.iter().any(|skill| {
                     skill["name"] == json!("electrical-estimating")
+                        && skill["aliases"] == json!(["estimate"])
                         && skill["description"]
                             == json!("Structure estimate answers around scope and uncertainty.")
                 })));
@@ -8955,17 +8956,19 @@ mod tests {
             let _codex_home_guard = ScopedEnvVar::remove("CODEX_HOME");
             let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-            let report = render_skills_report(Some("context-map"))
+            let report = render_skills_report(Some("map"))
                 .expect("selected skill report should render");
             assert!(report.contains("Skill"));
             assert!(report.contains("Name             context-map"));
             assert!(report.contains("Description      Map relevant files before editing."));
+            assert!(report.contains("Aliases          map"));
             assert!(report.contains("Prompt text"));
 
-            let payload = super::skills_payload(Some("context-map".to_string()))
+            let payload = super::skills_payload(Some("map".to_string()))
                 .expect("selected skills payload should render");
             assert_eq!(payload["type"], json!("skills"));
             assert_eq!(payload["skill"]["skill"], json!("context-map"));
+            assert_eq!(payload["skill"]["aliases"], json!(["map"]));
             assert_eq!(
                 payload["skill"]["description"],
                 json!("Map relevant files before editing.")

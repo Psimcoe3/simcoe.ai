@@ -2285,17 +2285,23 @@ pub(crate) fn render_skills_report_from_snapshot(snapshot: &SkillsReportSnapshot
             .trim_start_matches('$')
             .to_string();
         let description = loaded.description.as_deref().unwrap_or("not provided");
+        let aliases = if loaded.aliases.is_empty() {
+            String::new()
+        } else {
+            format!("\n  Aliases          {}", loaded.aliases.join(", "))
+        };
         return format!(
             "Skill
   Name             {name}
   Path             {path}
-  Description      {description}
+  Description      {description}{aliases}
 
 Prompt
 {prompt}",
             name = name,
             path = loaded.path,
             description = description,
+            aliases = aliases,
             prompt = loaded.prompt.trim_end(),
         );
     }
@@ -2344,21 +2350,27 @@ Source hints
         let local_entries = if snapshot.skills.is_empty() {
             String::from("  <none>")
         } else {
-            let width = snapshot
-                .skills
-                .iter()
-                .map(|entry| entry.name.len())
-                .max()
-                .unwrap_or(5)
-                + 2;
-            snapshot
+            let display_names = snapshot
                 .skills
                 .iter()
                 .map(|entry| {
+                    if entry.aliases.is_empty() {
+                        entry.name.clone()
+                    } else {
+                        format!("{} ({})", entry.name, entry.aliases.join(", "))
+                    }
+                })
+                .collect::<Vec<_>>();
+            let width = display_names.iter().map(String::len).max().unwrap_or(5) + 2;
+            snapshot
+                .skills
+                .iter()
+                .zip(display_names.iter())
+                .map(|(entry, display_name)| {
                     let summary = entry.description.as_deref().unwrap_or(entry.path.as_str());
                     format!(
                         "  {name:<width$}{summary}",
-                        name = entry.name,
+                        name = display_name,
                         width = width
                     )
                 })
@@ -2426,21 +2438,27 @@ Archived support modules
         );
     }
 
-    let width = snapshot
-        .skills
-        .iter()
-        .map(|entry| entry.name.len())
-        .max()
-        .unwrap_or(5)
-        + 2;
-    let entries = snapshot
+    let display_names = snapshot
         .skills
         .iter()
         .map(|entry| {
+            if entry.aliases.is_empty() {
+                entry.name.clone()
+            } else {
+                format!("{} ({})", entry.name, entry.aliases.join(", "))
+            }
+        })
+        .collect::<Vec<_>>();
+    let width = display_names.iter().map(String::len).max().unwrap_or(5) + 2;
+    let entries = snapshot
+        .skills
+        .iter()
+        .zip(display_names.iter())
+        .map(|(entry, display_name)| {
             let summary = entry.description.as_deref().unwrap_or(entry.path.as_str());
             format!(
                 "  {name:<width$}{summary}",
-                name = entry.name,
+                name = display_name,
                 width = width
             )
         })

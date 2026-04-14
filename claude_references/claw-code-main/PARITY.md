@@ -145,6 +145,7 @@ Evidence:
 Evidence:
 - `Skill` tool in `rust/crates/tools/src/lib.rs` resolves and reads local `SKILL.md` files and repo-local frontmatter skills under ancestor `skills/*.md` catalogs.
 - Rust now has a `/skills` command in `rust/crates/simcoe-ai-cli/src/main.rs` with shared rendering in `rust/crates/simcoe-ai-cli/src/format.rs`, and JSON/NDJSON now emit dedicated skill list/detail fields instead of only wrapped text content.
+- Repo-local skill aliases are now surfaced as first-class inspection metadata too: `crates/tools/src/lib.rs` carries alias lists through `SkillSummary` and `LoadedSkill`, `/skills` text output in `crates/simcoe-ai-cli/src/format.rs` shows aliases in both the default local listing and selected-skill detail, and the structured payload in `crates/simcoe-ai-cli/src/main.rs` now exposes those same aliases instead of only silently accepting them during lookup.
 - `/skills` now also inspects archived bundled skill samples from `src/reference_data/subsystems/skills.json` via `rust/crates/compat-harness/src/lib.rs`, so the Rust CLI can list inspection-only bundled skill surfaces and render a selected archived bundled skill module even though it still cannot execute TS bundled or MCP-built skills.
 - CLAUDE.md discovery is implemented in `rust/crates/runtime/src/prompt.rs`.
 - Rust supports `/memory` and `/init` via `rust/crates/commands/src/lib.rs` and `rust/crates/simcoe-ai-cli/src/main.rs`; `/memory` JSON/NDJSON now emit dedicated project-context fields instead of only wrapped text content.

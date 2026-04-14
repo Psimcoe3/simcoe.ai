@@ -1256,6 +1256,7 @@ fn mcp_resource_contents_output_schema() -> Value {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SkillSummary {
     pub name: String,
+    pub aliases: Vec<String>,
     pub path: String,
     pub description: Option<String>,
 }
@@ -1263,6 +1264,7 @@ pub struct SkillSummary {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct LoadedSkill {
     pub skill: String,
+    pub aliases: Vec<String>,
     pub path: String,
     pub args: Option<String>,
     pub description: Option<String>,
@@ -5134,6 +5136,7 @@ pub fn list_skills() -> Vec<SkillSummary> {
             key,
             SkillSummary {
                 name: skill.name,
+                aliases: skill.aliases,
                 path: skill.path.display().to_string(),
                 description: skill.description,
             },
@@ -5165,6 +5168,7 @@ pub fn list_skills() -> Vec<SkillSummary> {
                 key,
                 SkillSummary {
                     name,
+                    aliases: Vec::new(),
                     path: path.display().to_string(),
                     description,
                 },
@@ -5179,6 +5183,7 @@ pub fn load_skill(skill: &str, args: Option<String>) -> Result<LoadedSkill, Stri
     if let Some(skill) = find_repo_skill(skill) {
         return Ok(LoadedSkill {
             skill: skill.name,
+            aliases: skill.aliases,
             path: skill.path.display().to_string(),
             args,
             description: skill.description,
@@ -5192,6 +5197,7 @@ pub fn load_skill(skill: &str, args: Option<String>) -> Result<LoadedSkill, Stri
 
     Ok(LoadedSkill {
         skill: skill.to_string(),
+        aliases: Vec::new(),
         path: skill_path.display().to_string(),
         args,
         description,
