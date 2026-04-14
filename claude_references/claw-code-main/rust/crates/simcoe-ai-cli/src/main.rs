@@ -62,8 +62,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use session_manager::{
     list_managed_sessions, load_active_session_handle, render_session_list,
-    resolve_session_reference, session_handle_from_path, sessions_dir, set_active_session_handle,
-    ManagedSessionSummary, SessionHandle,
+    resolve_session_reference, session_handle_from_path, sessions_dir, ManagedSessionSummary,
+    SessionHandle,
 };
 use tools::{
     execute_tool, mvp_tool_specs, runtime_tool_definitions, tool_name_is_allowed, InspectableTool,
@@ -656,7 +656,7 @@ fn render_cli_error(args: &[String], error: &(dyn std::error::Error + 'static)) 
 fn filter_tool_specs(allowed_tools: Option<&AllowedToolSet>) -> Vec<tools::ToolSpec> {
     mvp_tool_specs()
         .into_iter()
-        .filter(|spec| allowed_tools.is_none_or(|allowed| allowed.contains(spec.name)))
+    .filter(|spec| allowed_tools.is_none_or(|allowed| tool_name_is_allowed(allowed, spec.name)))
         .collect()
 }
 
@@ -784,10 +784,7 @@ fn session_list_payload() -> Result<serde_json::Value, Box<dyn std::error::Error
 fn switch_managed_session(
     target: &str,
 ) -> Result<(SessionHandle, usize), Box<dyn std::error::Error>> {
-    let handle = resolve_session_reference(target)?;
-    let message_count = Session::load_from_path(&handle.path)?.messages.len();
-    set_active_session_handle(&handle)?;
-    Ok((handle, message_count))
+    runtime::switch_managed_session(target)
 }
 
 fn session_switch_payload(
@@ -1502,6 +1499,7 @@ fn rust_tool_summary_payload(spec: &InspectableTool) -> serde_json::Value {
     json!({
         "name": spec.name,
         "description": spec.description,
+        "aliases": spec.aliases,
         "source": spec.source.as_str(),
         "required_permission": spec.required_permission.as_str(),
     })
@@ -1516,6 +1514,7 @@ fn rust_tool_detail_payload(spec: &InspectableTool) -> serde_json::Value {
             "required_permission".to_string(),
             json!(spec.required_permission.as_str()),
         ),
+        ("aliases".to_string(), json!(spec.aliases)),
         ("input_schema".to_string(), spec.input_schema.clone()),
     ]);
     if let Some(output_schema) = spec.output_schema.clone() {
@@ -1905,17 +1904,6 @@ fn run_tasks(
     run_selector_text_or_structured_command(task, output_format, render_tasks_report, tasks_payload)
 }
 
-fn load_active_managed_session() -> Result<(SessionHandle, Session), Box<dyn std::error::Error>> {
-    let handle = load_active_session_handle()?.ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::NotFound,
-            "no active managed session; start the REPL or run `claw session switch <session-id>` first",
-        )
-    })?;
-    let session = Session::load_from_path(&handle.path)?;
-    Ok((handle, session))
-}
-
 fn export_report(export_path: &Path, message_count: usize) -> String {
     format!(
         "Export\n  Result           wrote transcript\n  File             {}\n  Messages         {}",
@@ -1946,10 +1934,7 @@ fn export_payload(
 fn export_active_session(
     requested_path: Option<String>,
 ) -> Result<(SessionHandle, PathBuf, usize), Box<dyn std::error::Error>> {
-    let (handle, session) = load_active_managed_session()?;
-    let export_path = resolve_export_path(requested_path.as_deref(), &session)?;
-    fs::write(&export_path, render_export_text(&session))?;
-    Ok((handle, export_path, session.messages.len()))
+    runtime::export_active_session(requested_path.as_deref())
 }
 
 fn run_export(
@@ -2819,90 +2804,14 @@ fn parse_titled_body(value: &str) -> Option<(String, String)> {
 }
 
 fn render_export_text(session: &Session) -> String {
-    let mut lines = vec!["# Conversation Export".to_string(), String::new()];
-    for (index, message) in session.messages.iter().enumerate() {
-        let role = match message.role {
-            MessageRole::System => "system",
-            MessageRole::User => "user",
-            MessageRole::Assistant => "assistant",
-            MessageRole::Tool => "tool",
-        };
-        lines.push(format!("## {}. {role}", index + 1));
-        for block in &message.blocks {
-            match block {
-                ContentBlock::Text { text } => lines.push(text.clone()),
-                ContentBlock::ToolUse { id, name, input } => {
-                    lines.push(format!("[tool_use id={id} name={name}] {input}"));
-                }
-                ContentBlock::ToolResult {
-                    tool_use_id,
-                    tool_name,
-                    output,
-                    is_error,
-                } => {
-                    lines.push(format!(
-                        "[tool_result id={tool_use_id} name={tool_name} error={is_error}] {output}"
-                    ));
-                }
-            }
-        }
-        lines.push(String::new());
-    }
-    lines.join("\n")
-}
-
-fn default_export_filename(session: &Session) -> String {
-    let stem = session
-        .messages
-        .iter()
-        .find_map(|message| match message.role {
-            MessageRole::User => message.blocks.iter().find_map(|block| match block {
-                ContentBlock::Text { text } => Some(text.as_str()),
-                _ => None,
-            }),
-            _ => None,
-        })
-        .map_or("conversation", |text| {
-            text.lines().next().unwrap_or("conversation")
-        })
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() {
-                ch.to_ascii_lowercase()
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>()
-        .split('-')
-        .filter(|part| !part.is_empty())
-        .take(8)
-        .collect::<Vec<_>>()
-        .join("-");
-    let fallback = if stem.is_empty() {
-        "conversation"
-    } else {
-        &stem
-    };
-    format!("{fallback}.txt")
+    runtime::render_export_text(session)
 }
 
 fn resolve_export_path(
     requested_path: Option<&str>,
     session: &Session,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let cwd = current_working_directory()?;
-    let file_name =
-        requested_path.map_or_else(|| default_export_filename(session), ToOwned::to_owned);
-    let final_name = if Path::new(&file_name)
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("txt"))
-    {
-        file_name
-    } else {
-        format!("{file_name}.txt")
-    };
-    Ok(cwd.join(final_name))
+    runtime::resolve_export_path(requested_path, session)
 }
 
 fn build_system_prompt() -> Result<Vec<String>, Box<dyn std::error::Error>> {
@@ -4221,12 +4130,53 @@ fn slash_command_completion_candidates() -> Vec<String> {
         .collect()
 }
 
+fn resolve_tool_render_name(name: &str) -> &str {
+    let mut canonical = name
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .flat_map(char::to_lowercase)
+        .collect::<String>();
+    if let Some(stripped) = canonical.strip_suffix("tool") {
+        canonical = stripped.to_string();
+    }
+
+    match canonical.as_str() {
+        "agent" => "Agent",
+        "askuserquestion" => "AskUserQuestionTool",
+        "bash" => "bash",
+        "brief" | "sendmessage" | "sendusermessage" => "SendUserMessage",
+        "config" => "Config",
+        "edit" | "editfile" | "fileedit" => "edit_file",
+        "glob" | "globsearch" => "glob_search",
+        "grep" | "grepsearch" => "grep_search",
+        "notebookedit" => "NotebookEdit",
+        "powershell" => "PowerShell",
+        "read" | "readfile" | "fileread" => "read_file",
+        "repl" => "REPL",
+        "sessionexport" => "SessionExportTool",
+        "skill" => "Skill",
+        "sleep" => "Sleep",
+        "todowrite" => "TodoWrite",
+        "toolsearch" => "ToolSearch",
+        "webfetch" => "WebFetch",
+        "websearch" => "WebSearch",
+        "write" | "writefile" | "filewrite" => "write_file",
+        "enterplanmode" => "EnterPlanModeTool",
+        "exitplanmode" | "exitplanmodev2" => "ExitPlanModeV2Tool",
+        "enterworktree" => "EnterWorktreeTool",
+        "exitworktree" => "ExitWorktreeTool",
+        _ => name,
+    }
+}
+
 fn format_tool_call_start(name: &str, input: &str) -> String {
+    let resolved_name = resolve_tool_render_name(name);
     let parsed: serde_json::Value =
         serde_json::from_str(input).unwrap_or(serde_json::Value::String(input.to_string()));
 
-    let detail = match name {
-        "bash" | "Bash" => format_bash_call(&parsed),
+    let detail = match resolved_name {
+        "bash" | "Bash" => format_shell_call("$", &parsed),
+        "PowerShell" => format_shell_call("PS>", &parsed),
         "read_file" | "Read" => {
             let path = extract_tool_path(&parsed);
             format!("\x1b[2m📄 Reading {path}…\x1b[0m")
@@ -4260,12 +4210,116 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
         }
         "glob_search" | "Glob" => format_search_start("🔎 Glob", &parsed),
         "grep_search" | "Grep" => format_search_start("🔎 Grep", &parsed),
+        "WebFetch" => {
+            let url = parsed.get("url").and_then(|v| v.as_str()).unwrap_or("?");
+            format!(
+                "\x1b[2m↯ WebFetch {}\x1b[0m",
+                truncate_for_summary(url, 80)
+            )
+        }
+        "StructuredOutput" => {
+            let fields = parsed.as_object().map(|items| items.len()).unwrap_or(0);
+            format!("\x1b[2m⬢ StructuredOutput ({fields} fields)\x1b[0m")
+        }
+        "REPL" => {
+            let language = parsed
+                .get("language")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!("\x1b[2m⌁ REPL {language}\x1b[0m")
+        }
+        "SyntheticOutputTool" => {
+            let output_type = parsed
+                .get("outputType")
+                .and_then(|v| v.as_str())
+                .unwrap_or("text");
+            format!("\x1b[2m~ SyntheticOutputTool [{output_type}]\x1b[0m")
+        }
+        "Sleep" => {
+            let duration = parsed
+                .get("duration_ms")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            format!("\x1b[2m⏱ Sleep {duration}ms\x1b[0m")
+        }
+        "TodoWrite" => {
+            let todos = parsed
+                .get("todos")
+                .and_then(|v| v.as_array())
+                .map(|items| items.len())
+                .unwrap_or(0);
+            format!("\x1b[2m☑ TodoWrite ({todos} items)\x1b[0m")
+        }
+        "Skill" => {
+            let skill = parsed.get("skill").and_then(|v| v.as_str()).unwrap_or("?");
+            format!("\x1b[2m✦ Skill {skill}\x1b[0m")
+        }
+        "SessionExportTool" => {
+            let path = parsed.get("path").and_then(|v| v.as_str()).unwrap_or("(auto)");
+            format!(
+                "\x1b[2m⇪ SessionExportTool {}\x1b[0m",
+                truncate_for_summary(path, 80)
+            )
+        }
+        "NotebookEdit" => {
+            let notebook_path = parsed
+                .get("notebook_path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let edit_mode = parsed
+                .get("edit_mode")
+                .and_then(|v| v.as_str())
+                .unwrap_or("replace");
+            format!(
+                "\x1b[2m✎ NotebookEdit [{edit_mode}] {}\x1b[0m",
+                truncate_for_summary(notebook_path, 80)
+            )
+        }
+        "Config" => {
+            let setting = parsed
+                .get("setting")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let value = parsed.get("value").or_else(|| parsed.get("newValue"));
+            let value_summary = value
+                .map(summarize_json_value)
+                .filter(|summary| !summary.is_empty())
+                .unwrap_or_default();
+            if value_summary.is_empty() {
+                format!("\x1b[2m⚙ Config {setting}\x1b[0m")
+            } else {
+                format!(
+                    "\x1b[2m⚙ Config {setting}: {}\x1b[0m",
+                    truncate_for_summary(&value_summary, 80)
+                )
+            }
+        }
         "AskUserQuestionTool" => {
             let question = parsed
                 .get("question")
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
             format!("\x1b[1;36m? {}\x1b[0m", truncate_for_summary(question, 120))
+        }
+        "SendUserMessage" | "Brief" | "BriefTool" => {
+            let message = parsed
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!(
+                "\x1b[2m✉ {name}: {}\x1b[0m",
+                truncate_for_summary(message, 120)
+            )
+        }
+        "Agent" => {
+            let description = parsed
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!(
+                "\x1b[38;5;99m⊕ Launching agent:\x1b[0m {}",
+                truncate_for_summary(description, 100)
+            )
         }
         "TaskCreateTool" => {
             let description = parsed
@@ -4370,13 +4424,6 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
             )
         }
         "ExitWorktreeTool" => format!("\x1b[2m⎇ ExitWorktree\x1b[0m"),
-        "SyntheticOutputTool" => {
-            let content = parsed.get("content").and_then(|v| v.as_str()).unwrap_or("");
-            format!(
-                "\x1b[2m~ synthetic: {}\x1b[0m",
-                truncate_for_summary(content, 60)
-            )
-        }
         "TestingPermissionTool" => {
             let action = parsed.get("action").and_then(|v| v.as_str()).unwrap_or("?");
             format!("\x1b[2m⚑ TestingPermission: {action}\x1b[0m")
@@ -4396,6 +4443,7 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
 }
 
 fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
+    let resolved_name = resolve_tool_render_name(name);
     let icon = if is_error {
         "\x1b[1;31m✗\x1b[0m"
     } else {
@@ -4419,8 +4467,9 @@ fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
 
     let parsed: serde_json::Value =
         serde_json::from_str(output).unwrap_or(serde_json::Value::String(output.to_string()));
-    match name {
+    match resolved_name {
         "bash" | "Bash" => format_bash_result(icon, &parsed),
+        "PowerShell" => format_powershell_result(icon, &parsed),
         "read_file" | "Read" => format_read_result(icon, &parsed),
         "write_file" | "Write" => format_write_result(icon, &parsed),
         "edit_file" | "Edit" => format_edit_result(icon, &parsed),
@@ -4430,13 +4479,25 @@ fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
         "ReadMcpResourceTool" => format_read_mcp_resource_result(icon, &parsed),
         "MCPTool" => format_mcp_tool_result(icon, "MCPTool", &parsed),
         "McpAuthTool" => format_mcp_auth_result(icon, &parsed),
+        "WebFetch" => format_web_fetch_result(icon, &parsed),
+        "web_search" | "WebSearch" => format_web_search_result(icon, &parsed),
+        "StructuredOutput" => format_structured_output_result(icon, &parsed),
+        "REPL" => format_repl_result(icon, &parsed),
+        "Sleep" => format_sleep_result(icon, &parsed),
+        "TodoWrite" => format_todo_write_result(icon, &parsed),
+        "Skill" => format_skill_result(icon, &parsed),
+        "SessionExportTool" => format_session_export_result(icon, &parsed),
         "ToolSearch" => format_tool_search_result(icon, &parsed),
+        "NotebookEdit" => format_notebook_edit_result(icon, &parsed),
+        "Config" => format_config_result(icon, &parsed),
         "AskUserQuestionTool" => format_ask_user_question_result(icon, &parsed),
+        "Agent" => format_task_manifest_result(icon, name, &parsed),
         "TaskCreateTool" | "TaskGetTool" | "TaskStopTool" | "TaskUpdateTool" => {
             format_task_manifest_result(icon, name, &parsed)
         }
         "TaskListTool" => format_task_list_result(icon, &parsed),
         "TaskOutputTool" => format_task_output_result(icon, &parsed),
+        "SendUserMessage" | "Brief" | "BriefTool" => format_brief_result(icon, name, &parsed),
         "TestingPermissionTool" => format_testing_permission_result(icon, &parsed),
         "TeamCreateTool" | "TeamDeleteTool" => format_team_result(icon, name, &parsed),
         "CronCreateTool" | "CronDeleteTool" => format_cron_result(icon, name, &parsed),
@@ -4447,10 +4508,7 @@ fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
         "RemoteTriggerTool" => format_remote_trigger_result(icon, &parsed),
         "SyntheticOutputTool" => format_synthetic_output_result(icon, &parsed),
         _ if name.starts_with("mcp__") => format_mcp_tool_result(icon, name, &parsed),
-        _ => {
-            let summary = truncate_for_summary(output.trim(), 200);
-            format!("{icon} \x1b[38;5;245m{name}:\x1b[0m {summary}")
-        }
+        _ => format_stub_tool_result(icon, name, output),
     }
 }
 
@@ -4487,7 +4545,7 @@ fn format_patch_preview(old_value: &str, new_value: &str) -> Option<String> {
     ))
 }
 
-fn format_bash_call(parsed: &serde_json::Value) -> String {
+fn format_shell_call(prompt: &str, parsed: &serde_json::Value) -> String {
     let command = parsed
         .get("command")
         .and_then(|value| value.as_str())
@@ -4496,7 +4554,7 @@ fn format_bash_call(parsed: &serde_json::Value) -> String {
         String::new()
     } else {
         format!(
-            "\x1b[48;5;236;38;5;255m $ {} \x1b[0m",
+            "\x1b[48;5;236;38;5;255m {prompt} {} \x1b[0m",
             truncate_for_summary(command, 160)
         )
     }
@@ -4508,8 +4566,8 @@ fn first_visible_line(text: &str) -> &str {
         .unwrap_or(text)
 }
 
-fn format_bash_result(icon: &str, parsed: &serde_json::Value) -> String {
-    let mut lines = vec![format!("{icon} \x1b[38;5;245mbash\x1b[0m")];
+fn format_shell_result(icon: &str, label: &str, parsed: &serde_json::Value) -> String {
+    let mut lines = vec![format!("{icon} \x1b[38;5;245m{label}\x1b[0m")];
     if let Some(task_id) = parsed
         .get("backgroundTaskId")
         .and_then(|value| value.as_str())
@@ -4535,6 +4593,14 @@ fn format_bash_result(icon: &str, parsed: &serde_json::Value) -> String {
     }
 
     lines.join("\n\n")
+}
+
+fn format_bash_result(icon: &str, parsed: &serde_json::Value) -> String {
+    format_shell_result(icon, "bash", parsed)
+}
+
+fn format_powershell_result(icon: &str, parsed: &serde_json::Value) -> String {
+    format_shell_result(icon, "PowerShell", parsed)
 }
 
 fn format_read_result(icon: &str, parsed: &serde_json::Value) -> String {
@@ -4730,6 +4796,21 @@ fn format_tool_search_result(icon: &str, parsed: &serde_json::Value) -> String {
             .take(4)
             .filter_map(|detail| {
                 let name = detail.get("name")?.as_str()?;
+                let aliases = detail
+                    .get("aliases")
+                    .and_then(|value| value.as_array())
+                    .map(|entries| {
+                        entries
+                            .iter()
+                            .filter_map(|entry| entry.as_str())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                let name = if aliases.is_empty() {
+                    name.to_string()
+                } else {
+                    format!("{name} ({})", aliases.join(", "))
+                };
                 let source = detail
                     .get("source")
                     .and_then(|value| value.as_str())
@@ -4824,6 +4905,10 @@ fn format_task_manifest_result(icon: &str, label: &str, parsed: &serde_json::Val
         .unwrap_or("?");
     let status = parsed.get("status").and_then(|v| v.as_str()).unwrap_or("?");
     let name = parsed.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let description = parsed
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let status_color = match status {
         "completed" => "\x1b[1;32m",
         "running" => "\x1b[1;33m",
@@ -4836,10 +4921,17 @@ fn format_task_manifest_result(icon: &str, label: &str, parsed: &serde_json::Val
     } else {
         format!(" {name}")
     };
-    format!(
+    let mut lines = vec![format!(
         "{icon} \x1b[38;5;245m{label}\x1b[0m{name_suffix}\n  \x1b[2mid:\x1b[0m {}\n  \x1b[2mstatus:\x1b[0m {status_color}{status}\x1b[0m",
         truncate_for_summary(agent_id, 40)
-    )
+    )];
+    if !description.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mdescription:\x1b[0m {}",
+            truncate_for_summary(description, 100)
+        ));
+    }
+    lines.join("\n")
 }
 
 fn format_task_list_result(icon: &str, parsed: &serde_json::Value) -> String {
@@ -5081,6 +5173,412 @@ fn format_stub_tool_result(icon: &str, name: &str, output: &str) -> String {
     } else {
         format!("{icon} \x1b[38;5;245m{name}\x1b[0m\n  \x1b[2m{summary}\x1b[0m")
     }
+}
+
+fn format_brief_result(icon: &str, label: &str, parsed: &serde_json::Value) -> String {
+    let message = parsed.get("message").and_then(|v| v.as_str()).unwrap_or("");
+    let sent_at = parsed.get("sentAt").and_then(|v| v.as_str()).unwrap_or("?");
+    let attachments = parsed
+        .get("attachments")
+        .and_then(|v| v.as_array())
+        .map(|items| items.as_slice())
+        .unwrap_or(&[]);
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245m{label}\x1b[0m {}",
+        truncate_for_summary(message, 100)
+    )];
+    lines.push(format!("  \x1b[2msent:\x1b[0m {sent_at}"));
+    if !attachments.is_empty() {
+        let preview = attachments
+            .iter()
+            .take(3)
+            .filter_map(|item| item.get("path").and_then(|v| v.as_str()))
+            .map(|path| truncate_for_summary(path, 40))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let suffix = if attachments.len() > 3 {
+            format!(" (+{} more)", attachments.len() - 3)
+        } else {
+            String::new()
+        };
+        lines.push(format!(
+            "  \x1b[2mattachments:\x1b[0m {} {}{}",
+            attachments.len(),
+            preview,
+            suffix
+        ));
+    }
+    lines.join("\n")
+}
+
+fn format_notebook_edit_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let notebook_path = parsed
+        .get("notebook_path")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let edit_mode = parsed
+        .get("edit_mode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let cell_id = parsed.get("cell_id").and_then(|v| v.as_str()).unwrap_or("(new cell)");
+    let cell_type = parsed
+        .get("cell_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("none");
+    let language = parsed
+        .get("language")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let new_source = parsed
+        .get("new_source")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let error = parsed.get("error").and_then(|v| v.as_str()).unwrap_or("");
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mNotebookEdit\x1b[0m [{edit_mode}] {}",
+        truncate_for_summary(notebook_path, 80)
+    )];
+    lines.push(format!(
+        "  \x1b[2mcell:\x1b[0m {} [{} / {}]",
+        truncate_for_summary(cell_id, 40),
+        cell_type,
+        language
+    ));
+    if !new_source.is_empty() {
+        lines.push(format!(
+            "  \x1b[2msource:\x1b[0m {}",
+            truncate_for_summary(new_source, 100)
+        ));
+    }
+    if !error.is_empty() {
+        lines.push(format!(
+            "  \x1b[2merror:\x1b[0m {}",
+            truncate_for_summary(error, 100)
+        ));
+    }
+    lines.join("\n")
+}
+
+fn format_config_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let success = parsed
+        .get("success")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let operation = parsed
+        .get("operation")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let setting = parsed
+        .get("setting")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let error = parsed.get("error").and_then(|v| v.as_str()).unwrap_or("");
+    let value = parsed.get("value").map(summarize_json_value).unwrap_or_default();
+    let previous_value = parsed
+        .get("previousValue")
+        .map(summarize_json_value)
+        .unwrap_or_default();
+    let new_value = parsed
+        .get("newValue")
+        .map(summarize_json_value)
+        .unwrap_or_default();
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mConfig\x1b[0m {setting} [{}]",
+        if success { operation } else { "error" }
+    )];
+    if !value.is_empty() && value != "null" {
+        lines.push(format!(
+            "  \x1b[2mvalue:\x1b[0m {}",
+            truncate_for_summary(&value, 100)
+        ));
+    }
+    if !previous_value.is_empty() && previous_value != "null" {
+        lines.push(format!(
+            "  \x1b[2mprevious:\x1b[0m {}",
+            truncate_for_summary(&previous_value, 100)
+        ));
+    }
+    if !new_value.is_empty() && new_value != "null" {
+        lines.push(format!(
+            "  \x1b[2mnew:\x1b[0m {}",
+            truncate_for_summary(&new_value, 100)
+        ));
+    }
+    if !error.is_empty() {
+        lines.push(format!(
+            "  \x1b[2merror:\x1b[0m {}",
+            truncate_for_summary(error, 100)
+        ));
+    }
+    lines.join("\n")
+}
+
+fn format_todo_write_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let old_todos = parsed
+        .get("oldTodos")
+        .and_then(|v| v.as_array())
+        .map(|items| items.as_slice())
+        .unwrap_or(&[]);
+    let new_todos = parsed
+        .get("newTodos")
+        .and_then(|v| v.as_array())
+        .map(|items| items.as_slice())
+        .unwrap_or(&[]);
+    let verification_nudge_needed = parsed
+        .get("verificationNudgeNeeded")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mTodoWrite\x1b[0m \x1b[2m({} -> {} items)\x1b[0m",
+        old_todos.len(),
+        new_todos.len()
+    )];
+
+    for todo in new_todos.iter().take(3) {
+        let status = todo.get("status").and_then(|v| v.as_str()).unwrap_or("?");
+        let content = todo.get("content").and_then(|v| v.as_str()).unwrap_or("?");
+        lines.push(format!(
+            "  \x1b[2m[{status}]\x1b[0m {}",
+            truncate_for_summary(content, 80)
+        ));
+    }
+    if new_todos.len() > 3 {
+        lines.push(format!("  \x1b[2m+{} more\x1b[0m", new_todos.len() - 3));
+    }
+    if verification_nudge_needed {
+        lines.push(String::from(
+            "  \x1b[2mverification nudge suggested before marking everything complete\x1b[0m",
+        ));
+    }
+
+    lines.join("\n")
+}
+
+fn format_skill_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let skill = parsed.get("skill").and_then(|v| v.as_str()).unwrap_or("?");
+    let path = parsed.get("path").and_then(|v| v.as_str()).unwrap_or("?");
+    let args = parsed.get("args").and_then(|v| v.as_str()).unwrap_or("");
+    let description = parsed
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let prompt = parsed.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mSkill\x1b[0m {skill}"
+    )];
+    lines.push(format!(
+        "  \x1b[2mpath:\x1b[0m {}",
+        truncate_for_summary(path, 80)
+    ));
+    if !args.is_empty() {
+        lines.push(format!(
+            "  \x1b[2margs:\x1b[0m {}",
+            truncate_for_summary(args, 80)
+        ));
+    }
+    if !description.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mdescription:\x1b[0m {}",
+            truncate_for_summary(description, 100)
+        ));
+    }
+    if !prompt.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mprompt:\x1b[0m {}",
+            truncate_for_summary(prompt, 100)
+        ));
+    }
+
+    lines.join("\n")
+}
+
+fn format_session_export_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let session_id = parsed.get("sessionId").and_then(|v| v.as_str()).unwrap_or("?");
+    let session_path = parsed
+        .get("sessionPath")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let export_path = parsed
+        .get("exportPath")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let message_count = parsed
+        .get("messageCount")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mSessionExportTool\x1b[0m {session_id} \x1b[2m({message_count} messages)\x1b[0m"
+    )];
+    lines.push(format!(
+        "  \x1b[2mfile:\x1b[0m {}",
+        truncate_for_summary(export_path, 100)
+    ));
+    if !session_path.is_empty() {
+        lines.push(format!(
+            "  \x1b[2msession:\x1b[0m {}",
+            truncate_for_summary(session_path, 100)
+        ));
+    }
+    lines.join("\n")
+}
+
+fn format_web_fetch_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let url = parsed.get("url").and_then(|v| v.as_str()).unwrap_or("?");
+    let code = parsed.get("code").and_then(|v| v.as_u64()).unwrap_or(0);
+    let code_text = parsed
+        .get("codeText")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let bytes = parsed.get("bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+    let duration_ms = parsed
+        .get("durationMs")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let result = parsed.get("result").and_then(|v| v.as_str()).unwrap_or("");
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mWebFetch\x1b[0m [{code} {code_text}] {}",
+        truncate_for_summary(url, 80)
+    )];
+    lines.push(format!("  \x1b[2mbytes:\x1b[0m {bytes}"));
+    lines.push(format!("  \x1b[2mduration:\x1b[0m {duration_ms}ms"));
+    if !result.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mresult:\x1b[0m {}",
+            truncate_for_summary(result, 100)
+        ));
+    }
+    lines.join("\n")
+}
+
+fn format_web_search_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let query = parsed.get("query").and_then(|v| v.as_str()).unwrap_or("?");
+    let duration_seconds = parsed
+        .get("durationSeconds")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let results = parsed
+        .get("results")
+        .and_then(|v| v.as_array())
+        .map(|items| items.as_slice())
+        .unwrap_or(&[]);
+
+    let mut commentary = String::new();
+    let mut hits: Vec<&serde_json::Value> = Vec::new();
+    for item in results {
+        if let Some(text) = item.as_str() {
+            if commentary.is_empty() {
+                commentary = text.to_string();
+            }
+            continue;
+        }
+        if let Some(content) = item.get("content").and_then(|v| v.as_array()) {
+            hits.extend(content.iter());
+        }
+    }
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mWebSearch\x1b[0m {} \x1b[2m({:.2}s, {} hits)\x1b[0m",
+        truncate_for_summary(query, 80),
+        duration_seconds,
+        hits.len()
+    )];
+    if !commentary.is_empty() {
+        lines.push(format!(
+            "  \x1b[2msummary:\x1b[0m {}",
+            truncate_for_summary(&commentary, 100)
+        ));
+    }
+    for hit in hits.iter().take(3) {
+        let title = hit.get("title").and_then(|v| v.as_str()).unwrap_or("?");
+        let url = hit.get("url").and_then(|v| v.as_str()).unwrap_or("?");
+        lines.push(format!(
+            "  \x1b[2m•\x1b[0m {} {}",
+            truncate_for_summary(title, 50),
+            truncate_for_summary(url, 60)
+        ));
+    }
+    if hits.len() > 3 {
+        lines.push(format!("  \x1b[2m+{} more hits\x1b[0m", hits.len() - 3));
+    }
+    lines.join("\n")
+}
+
+fn format_structured_output_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let data = parsed.get("data").and_then(|v| v.as_str()).unwrap_or("");
+    let structured = parsed
+        .get("structured_output")
+        .map(summarize_json_value)
+        .unwrap_or_default();
+
+    let mut lines = vec![format!("{icon} \x1b[38;5;245mStructuredOutput\x1b[0m")];
+    if !data.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mdata:\x1b[0m {}",
+            truncate_for_summary(data, 100)
+        ));
+    }
+    if !structured.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mstructured:\x1b[0m {}",
+            truncate_for_summary(&structured, 100)
+        ));
+    }
+    lines.join("\n")
+}
+
+fn format_repl_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let language = parsed
+        .get("language")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let exit_code = parsed
+        .get("exitCode")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(1);
+    let duration_ms = parsed
+        .get("durationMs")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let stdout = parsed.get("stdout").and_then(|v| v.as_str()).unwrap_or("");
+    let stderr = parsed.get("stderr").and_then(|v| v.as_str()).unwrap_or("");
+
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mREPL\x1b[0m {language} [exit {exit_code}]"
+    )];
+    lines.push(format!("  \x1b[2mduration:\x1b[0m {duration_ms}ms"));
+    if !stdout.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mstdout:\x1b[0m {}",
+            truncate_for_summary(stdout, 100)
+        ));
+    }
+    if !stderr.is_empty() {
+        lines.push(format!(
+            "  \x1b[2mstderr:\x1b[0m {}",
+            truncate_for_summary(stderr, 100)
+        ));
+    }
+    lines.join("\n")
+}
+
+fn format_sleep_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let duration_ms = parsed
+        .get("duration_ms")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let message = parsed.get("message").and_then(|v| v.as_str()).unwrap_or("");
+
+    format!(
+        "{icon} \x1b[38;5;245mSleep\x1b[0m {duration_ms}ms\n  \x1b[2m{}\x1b[0m",
+        truncate_for_summary(message, 100)
+    )
 }
 
 fn format_synthetic_output_result(icon: &str, parsed: &serde_json::Value) -> String {
@@ -5414,6 +5912,16 @@ fn format_list_mcp_resources_result(icon: &str, parsed: &serde_json::Value) -> S
     }
 
     lines.join("\n")
+}
+
+fn summarize_json_value(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Null => String::from("null"),
+        serde_json::Value::Bool(flag) => flag.to_string(),
+        serde_json::Value::Number(number) => number.to_string(),
+        serde_json::Value::String(text) => text.clone(),
+        _ => serde_json::to_string(value).unwrap_or_default(),
+    }
 }
 
 fn format_read_mcp_resource_result(icon: &str, parsed: &serde_json::Value) -> String {
@@ -6066,7 +6574,7 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
         out,
         "  --dangerously-skip-permissions  Skip all permission checks"
     )?;
-    writeln!(out, "  --allowedTools TOOLS       Restrict enabled tools (repeatable; comma-separated aliases supported)")?;
+    writeln!(out, "  --allowedTools TOOLS       Restrict enabled tools (repeatable; aliases supported, e.g. read or FileReadTool)")?;
     writeln!(
         out,
         "  --version, -V              Print version and build information locally"
@@ -6166,7 +6674,7 @@ mod tests {
         PermissionMode, ScopedMcpServerConfig,
     };
     use serde_json::json;
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::io::{Read, Write};
     use std::net::TcpListener;
@@ -6898,7 +7406,7 @@ mod tests {
     fn parses_allowed_tools_flags_with_aliases_and_lists() {
         let args = vec![
             "--allowedTools".to_string(),
-            "read,glob".to_string(),
+            "read,glob,FileReadTool,SendMessageTool,ExitPlanModeTool".to_string(),
             "--allowed-tools=write_file".to_string(),
         ];
         assert_eq!(
@@ -6907,7 +7415,13 @@ mod tests {
                 model: DEFAULT_MODEL.to_string(),
                 provider: None,
                 allowed_tools: Some(
-                    ["glob_search", "read_file", "write_file"]
+                    [
+                        "ExitPlanModeV2Tool",
+                        "SendUserMessage",
+                        "glob_search",
+                        "read_file",
+                        "write_file",
+                    ]
                         .into_iter()
                         .map(str::to_string)
                         .collect()
@@ -7534,7 +8048,7 @@ mod tests {
 
     #[test]
     fn filtered_tool_specs_respect_allowlist() {
-        let allowed = ["read_file", "grep_search"]
+        let allowed = ["FileReadTool", "grep_search"]
             .into_iter()
             .map(str::to_string)
             .collect();
@@ -8329,6 +8843,7 @@ mod tests {
         print_help_to(&mut help).expect("help should render");
         let help = String::from_utf8(help).expect("help should be utf8");
         assert!(help.contains("claw init"));
+        assert!(help.contains("FileReadTool"));
         assert!(help.contains("text, json, or ndjson"));
         assert!(help.contains("claw config [env|hooks|model|provider]"));
         assert!(help.contains("claw hooks [pre|post]"));
@@ -9199,6 +9714,7 @@ mod tests {
             assert!(report.contains("Archived files     4"));
             assert!(report.contains("Rust registry"));
             assert!(report.contains("bash"));
+            assert!(report.contains("read_file (FileReadTool)"));
             assert!(report.contains("ToolSearchTool"));
 
             let payload = super::tools_payload(None).expect("tools payload should render");
@@ -9230,6 +9746,12 @@ mod tests {
                 .is_some_and(|tools| tools.iter().any(|tool| {
                     tool["name"] == json!("bash")
                         && tool["required_permission"] == json!("danger-full-access")
+                })));
+            assert!(payload["rust_registry"]["tools"]
+                .as_array()
+                .is_some_and(|tools| tools.iter().any(|tool| {
+                    tool["name"] == json!("read_file")
+                        && tool["aliases"] == json!(["FileReadTool"])
                 })));
         }
 
@@ -9280,6 +9802,34 @@ mod tests {
         }
 
         let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn tools_report_matches_live_rust_tool_aliases() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cwd = temp_path("tools-selected-alias");
+        fs::create_dir_all(&cwd).expect("create cwd");
+
+        {
+            let _cwd_guard = ScopedCurrentDir::change_to(&cwd);
+
+            let report = render_tools_report(Some("FileReadTool"))
+                .expect("selected alias tools report should render");
+            assert!(report.contains("Tool"));
+            assert!(report.contains("Name             read_file"));
+            assert!(report.contains("Source           rust tool registry"));
+            assert!(report.contains("Aliases          FileReadTool"));
+
+            let payload = super::tools_payload(Some("FileReadTool".to_string()))
+                .expect("selected alias tools payload should render");
+            assert_eq!(payload["requested"], json!("FileReadTool"));
+            assert_eq!(payload["rust_tool"]["name"], json!("read_file"));
+            assert_eq!(payload["rust_tool"]["aliases"], json!(["FileReadTool"]));
+        }
+
+        let _ = fs::remove_dir_all(cwd);
     }
 
     #[test]
@@ -9422,6 +9972,7 @@ mod tests {
             assert!(report.contains("Name             ToolSearch"));
             assert!(report.contains("Output schema"));
             assert!(report.contains("match_details"));
+            assert!(report.contains("aliases"));
             assert!(report.contains("pending_mcp_server_details"));
             assert!(report.contains("reason_kind"));
 
@@ -9432,6 +9983,11 @@ mod tests {
             assert_eq!(payload["rust_tool"]["name"], json!("ToolSearch"));
             assert_eq!(
                 payload["rust_tool"]["output_schema"]["properties"]["match_details"]["type"],
+                json!("array")
+            );
+            assert_eq!(
+                payload["rust_tool"]["output_schema"]["properties"]["match_details"]["items"]
+                    ["properties"]["aliases"]["type"],
                 json!("array")
             );
             assert_eq!(
@@ -10856,6 +11412,32 @@ mod tests {
     }
 
     #[test]
+    fn tool_executor_allows_archived_alias_when_canonical_tool_is_allowed() {
+        let path = temp_path("cli-tool-executor-allowed-alias.txt");
+        std::fs::write(&path, "alias executor").expect("write input file");
+
+        let mut executor = CliToolExecutor::new(
+            Some(BTreeSet::from([String::from("read_file")])),
+            false,
+        );
+        let mut out = Vec::new();
+        let output = executor
+            .execute_with_writer(
+                "FileReadTool",
+                &format!(r#"{{"path":"{}"}}"#, path.display()),
+                &mut out,
+            )
+            .expect("archived alias should be allowed when canonical tool is enabled");
+
+        assert!(out.is_empty());
+        let payload = serde_json::from_str::<serde_json::Value>(&output).expect("valid json");
+        assert_eq!(payload["file"]["filePath"], json!(path.display().to_string()));
+        assert_eq!(payload["file"]["content"], json!("alias executor"));
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn model_switch_report_preserves_context_summary() {
         let report = format_model_switch_report("simcoe-sonnet", "simcoe-opus", 9);
         assert!(report.contains("Model updated"));
@@ -11234,6 +11816,101 @@ mod tests {
         assert!(start.contains("read_file"));
         assert!(start.contains("src/main.rs"));
 
+        let powershell_start = format_tool_call_start(
+            "PowerShell",
+            r#"{"command":"Get-ChildItem src"}"#,
+        );
+        assert!(powershell_start.contains("PowerShell"));
+        assert!(powershell_start.contains("PS> Get-ChildItem src"));
+
+        let bash_tool_start = format_tool_call_start(
+            "BashTool",
+            r#"{"command":"ls src"}"#,
+        );
+        assert!(bash_tool_start.contains("BashTool"));
+        assert!(bash_tool_start.contains("$ ls src"));
+
+        let web_fetch_start = format_tool_call_start(
+            "WebFetch",
+            r#"{"url":"https://example.com","prompt":"Summarize"}"#,
+        );
+        assert!(web_fetch_start.contains("WebFetch"));
+        assert!(web_fetch_start.contains("example.com"));
+
+        let structured_start = format_tool_call_start(
+            "StructuredOutput",
+            r#"{"plan":"ok","count":2}"#,
+        );
+        assert!(structured_start.contains("StructuredOutput"));
+
+        let repl_start = format_tool_call_start(
+            "REPL",
+            r#"{"language":"python","code":"print(1)"}"#,
+        );
+        assert!(repl_start.contains("REPL python"));
+
+        let synthetic_start = format_tool_call_start(
+            "SyntheticOutputTool",
+            r##"{"content":"preview","outputType":"markdown"}"##,
+        );
+        assert!(synthetic_start.contains("SyntheticOutputTool"));
+        assert!(synthetic_start.contains("markdown"));
+
+        let sleep_start = format_tool_call_start(
+            "Sleep",
+            r#"{"duration_ms":250}"#,
+        );
+        assert!(sleep_start.contains("Sleep 250ms"));
+
+        let todo_start = format_tool_call_start(
+            "TodoWrite",
+            r#"{"todos":[{"content":"Add tool","activeForm":"Adding tool","status":"in_progress"}]}"#,
+        );
+        assert!(todo_start.contains("TodoWrite"));
+        assert!(todo_start.contains("1 items"));
+
+        let skill_start = format_tool_call_start(
+            "Skill",
+            r#"{"skill":"help","args":"overview"}"#,
+        );
+        assert!(skill_start.contains("Skill help"));
+
+        let session_export_start = format_tool_call_start(
+            "SessionExportTool",
+            r#"{"path":"session-notes"}"#,
+        );
+        assert!(session_export_start.contains("SessionExportTool"));
+        assert!(session_export_start.contains("session-notes"));
+
+        let notebook_start = format_tool_call_start(
+            "NotebookEdit",
+            r#"{"notebook_path":"demo.ipynb","edit_mode":"replace"}"#,
+        );
+        assert!(notebook_start.contains("NotebookEdit"));
+        assert!(notebook_start.contains("demo.ipynb"));
+        assert!(notebook_start.contains("replace"));
+
+        let config_start = format_tool_call_start(
+            "Config",
+            r#"{"setting":"verbose","value":true}"#,
+        );
+        assert!(config_start.contains("Config"));
+        assert!(config_start.contains("verbose"));
+
+        let agent_start = format_tool_call_start(
+            "Agent",
+            r#"{"description":"Inspect repo layout","prompt":"Summarize modules"}"#,
+        );
+        assert!(agent_start.contains("Launching agent"));
+        assert!(agent_start.contains("Inspect repo layout"));
+
+        let brief_start = format_tool_call_start(
+            "BriefTool",
+            r#"{"message":"share this summary","status":"normal"}"#,
+        );
+        assert!(brief_start.contains("BriefTool"));
+        assert!(brief_start.contains("share this summary"));
+
         let done = format_tool_result(
             "read_file",
             r#"{"file":{"filePath":"src/main.rs","content":"hello","numLines":1,"startLine":1,"totalLines":1}}"#,
@@ -11242,15 +11919,179 @@ mod tests {
         assert!(done.contains("📄 Read src/main.rs"));
         assert!(done.contains("hello"));
 
+        let powershell_result = format_tool_result(
+            "PowerShell",
+            r#"{"stdout":"item\n","stderr":"","rawOutputPath":null,"interrupted":false,"isImage":null,"backgroundTaskId":null,"backgroundedByUser":null,"assistantAutoBackgrounded":null,"dangerouslyDisableSandbox":null,"returnCodeInterpretation":"completed successfully","noOutputExpected":null,"structuredContent":null,"persistedOutputPath":null,"persistedOutputSize":null,"sandboxStatus":null}"#,
+            false,
+        );
+        assert!(powershell_result.contains("PowerShell"));
+        assert!(powershell_result.contains("completed successfully"));
+        assert!(powershell_result.contains("item"));
+
+        let web_fetch_result = format_tool_result(
+            "WebFetch",
+            r#"{"bytes":128,"code":200,"codeText":"OK","result":"Fetched https://example.com\nSummary line","durationMs":42,"url":"https://example.com"}"#,
+            false,
+        );
+        assert!(web_fetch_result.contains("WebFetch"));
+        assert!(web_fetch_result.contains("200 OK"));
+        assert!(web_fetch_result.contains("example.com"));
+        assert!(web_fetch_result.contains("bytes:"));
+        assert!(web_fetch_result.contains("duration:"));
+        assert!(web_fetch_result.contains("Summary line"));
+
+        let web_search_result = format_tool_result(
+            "WebSearch",
+            r#"{"query":"rust web search","results":["Search results for \"rust web search\".",{"tool_use_id":"web_search_1","content":[{"title":"Reqwest docs","url":"https://docs.rs/reqwest"},{"title":"Tokio docs","url":"https://docs.rs/tokio"}]}],"durationSeconds":0.42}"#,
+            false,
+        );
+        assert!(web_search_result.contains("WebSearch"));
+        assert!(web_search_result.contains("rust web search"));
+        assert!(web_search_result.contains("2 hits"));
+        assert!(web_search_result.contains("Reqwest docs"));
+        assert!(web_search_result.contains("docs.rs/reqwest"));
+
+        let structured_result = format_tool_result(
+            "StructuredOutput",
+            r#"{"data":"Structured output provided successfully","structured_output":{"ok":true,"items":[1,2,3]}}"#,
+            false,
+        );
+        assert!(structured_result.contains("StructuredOutput"));
+        assert!(structured_result.contains("Structured output provided successfully"));
+        assert!(structured_result.contains("items"));
+
+        let repl_result = format_tool_result(
+            "REPL",
+            r#"{"language":"python","stdout":"hello\n","stderr":"","exitCode":0,"durationMs":12}"#,
+            false,
+        );
+        assert!(repl_result.contains("REPL"));
+        assert!(repl_result.contains("python"));
+        assert!(repl_result.contains("exit 0"));
+        assert!(repl_result.contains("duration:"));
+        assert!(repl_result.contains("hello"));
+
+        let synthetic_result = format_tool_result(
+            "SyntheticOutputTool",
+            r##"{"content":"# heading","outputType":"markdown","synthetic":true}"##,
+            false,
+        );
+        assert!(synthetic_result.contains("SyntheticOutputTool"));
+        assert!(synthetic_result.contains("markdown"));
+        assert!(synthetic_result.contains("heading"));
+
+        let sleep_result = format_tool_result(
+            "Sleep",
+            r#"{"duration_ms":250,"message":"Slept for 250ms"}"#,
+            false,
+        );
+        assert!(sleep_result.contains("Sleep"));
+        assert!(sleep_result.contains("250ms"));
+        assert!(sleep_result.contains("Slept for 250ms"));
+
+        let todo_result = format_tool_result(
+            "TodoWrite",
+            r#"{"oldTodos":[{"content":"Add tool","activeForm":"Adding tool","status":"in_progress"}],"newTodos":[{"content":"Add tool","activeForm":"Adding tool","status":"completed"},{"content":"Run tests","activeForm":"Running tests","status":"pending"}],"verificationNudgeNeeded":true}"#,
+            false,
+        );
+        assert!(todo_result.contains("TodoWrite"));
+        assert!(todo_result.contains("1 -> 2 items"));
+        assert!(todo_result.contains("[completed]"));
+        assert!(todo_result.contains("Run tests"));
+        assert!(todo_result.contains("verification nudge suggested"));
+
+        let skill_result = format_tool_result(
+            "Skill",
+            r##"{"skill":"help","path":"/tmp/help/SKILL.md","args":"overview","description":"Guide on using the help skill","prompt":"# Help\n\nGuide on using the help skill"}"##,
+            false,
+        );
+        assert!(skill_result.contains("Skill"));
+        assert!(skill_result.contains("help"));
+        assert!(skill_result.contains("/tmp/help/SKILL.md"));
+        assert!(skill_result.contains("overview"));
+        assert!(skill_result.contains("Guide on using the help skill"));
+
+        let session_export_result = format_tool_result(
+            "SessionExportTool",
+            r#"{"sessionId":"session-123","sessionPath":"/tmp/session-123.json","exportPath":"/tmp/session-notes.txt","messageCount":4}"#,
+            false,
+        );
+        assert!(session_export_result.contains("SessionExportTool"));
+        assert!(session_export_result.contains("session-123"));
+        assert!(session_export_result.contains("4 messages"));
+        assert!(session_export_result.contains("session-notes.txt"));
+
+        let notebook_result = format_tool_result(
+            "NotebookEdit",
+            r#"{"new_source":"print(2)\n","cell_id":"cell-a","cell_type":"code","language":"python","edit_mode":"replace","error":null,"notebook_path":"demo.ipynb","original_file":"{}","updated_file":"{}"}"#,
+            false,
+        );
+        assert!(notebook_result.contains("NotebookEdit"));
+        assert!(notebook_result.contains("demo.ipynb"));
+        assert!(notebook_result.contains("cell-a"));
+        assert!(notebook_result.contains("code / python"));
+        assert!(notebook_result.contains("print(2)"));
+
+        let config_result = format_tool_result(
+            "Config",
+            r#"{"success":true,"operation":"set","setting":"permissions.defaultMode","value":"plan","previousValue":null,"newValue":"plan","error":null}"#,
+            false,
+        );
+        assert!(config_result.contains("Config"));
+        assert!(config_result.contains("permissions.defaultMode"));
+        assert!(config_result.contains("set"));
+        assert!(config_result.contains("value:"));
+        assert!(config_result.contains("new:"));
+        assert!(config_result.contains("plan"));
+
+        let agent_result = format_tool_result(
+            "Agent",
+            r#"{"agentId":"agent-123","name":"inspect-repo-layout","description":"Inspect repo layout","subagentType":"Explore","model":"simcoe-opus-4-6","status":"running","outputFile":"/tmp/agent-123.md","manifestFile":"/tmp/agent-123.json","createdAt":"1775962415","startedAt":"1775962415"}"#,
+            false,
+        );
+        assert!(agent_result.contains("Agent"));
+        assert!(agent_result.contains("inspect-repo-layout"));
+        assert!(agent_result.contains("agent-123"));
+        assert!(agent_result.contains("Inspect repo layout"));
+        assert!(agent_result.contains("running"));
+
+        let brief_result = format_tool_result(
+            "BriefTool",
+            r#"{"message":"hello user","attachments":[{"path":"/tmp/demo.png","size":8,"isImage":true}],"sentAt":"2026-04-12T10:00:00Z"}"#,
+            false,
+        );
+        assert!(brief_result.contains("BriefTool"));
+        assert!(brief_result.contains("hello user"));
+        assert!(brief_result.contains("sent:"));
+        assert!(brief_result.contains("attachments:"));
+        assert!(brief_result.contains("demo.png"));
+
+        let file_read_tool_result = format_tool_result(
+            "FileReadTool",
+            r#"{"file":{"filePath":"demo.txt","content":"hello","numLines":1,"startLine":1,"totalLines":1}}"#,
+            false,
+        );
+        assert!(file_read_tool_result.contains("📄 Read demo.txt"));
+        assert!(file_read_tool_result.contains("hello"));
+
+        let send_message_tool_result = format_tool_result(
+            "SendMessageTool",
+            r#"{"message":"hello alias","attachments":null,"sentAt":"2026-04-12T10:00:00Z"}"#,
+            false,
+        );
+        assert!(send_message_tool_result.contains("SendMessageTool"));
+        assert!(send_message_tool_result.contains("hello alias"));
+        assert!(send_message_tool_result.contains("sent:"));
+
         let tool_search = format_tool_result(
             "ToolSearch",
-            r#"{"query":"vendor echo","matches":["mcp__vendor__echo","read_file"],"match_details":[{"name":"mcp__vendor__echo","description":"Invoke MCP tool echo on configured vendor server.","source":"dynamic-mcp","required_permission":"danger-full-access","mcp_server":"vendor","mcp_tool":"echo"},{"name":"read_file","description":"Read a file from disk.","source":"registry","required_permission":"read-only"}],"pending_mcp_server_details":[{"server":"remote","reason_kind":"unsupported-runtime","detail":"http transport with headersHelper is not executed by the Rust MCP runtime yet"}]}"#,
+            r#"{"query":"vendor echo","matches":["mcp__vendor__echo","read_file"],"match_details":[{"name":"mcp__vendor__echo","aliases":[],"description":"Invoke MCP tool echo on configured vendor server.","source":"dynamic-mcp","required_permission":"danger-full-access","mcp_server":"vendor","mcp_tool":"echo"},{"name":"read_file","aliases":["FileReadTool"],"description":"Read a file from disk.","source":"registry","required_permission":"read-only"}],"pending_mcp_server_details":[{"server":"remote","reason_kind":"unsupported-runtime","detail":"http transport with headersHelper is not executed by the Rust MCP runtime yet"}]}"#,
             false,
         );
         assert!(tool_search.contains("ToolSearch"));
         assert!(tool_search.contains("2 matches for vendor echo"));
         assert!(tool_search.contains("mcp__vendor__echo [dynamic-mcp:vendor, danger-full-access]"));
-        assert!(tool_search.contains("read_file [registry, read-only]"));
+        assert!(tool_search.contains("read_file (FileReadTool) [registry, read-only]"));
         assert!(tool_search.contains("Pending MCP discovery"));
         assert!(tool_search.contains("remote [unsupported-runtime]"));
 

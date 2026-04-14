@@ -6,6 +6,7 @@ mod conversation;
 mod file_ops;
 mod hooks;
 mod json;
+mod managed_sessions;
 mod mcp;
 mod mcp_client;
 mod mcp_stdio;
@@ -40,6 +41,13 @@ pub use file_ops::{
     edit_file, glob_search, grep_search, read_file, write_file, EditFileOutput, GlobSearchOutput,
     GrepSearchInput, GrepSearchOutput, ReadFileOutput, StructuredPatchHunk, TextFilePayload,
     WriteFileOutput,
+};
+pub use managed_sessions::{
+    create_managed_session_handle, export_active_session, list_managed_sessions,
+    load_active_managed_session, load_active_session_handle, render_export_text,
+    resolve_export_path, resolve_session_reference, session_handle_from_path,
+    sessions_dir, set_active_session_handle, switch_managed_session, ManagedSessionSummary,
+    SessionHandle,
 };
 pub use hooks::{HookEvent, HookRunResult, HookRunner};
 pub use mcp::{

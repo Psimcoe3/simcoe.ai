@@ -24,8 +24,9 @@ use runtime::{
 };
 use tools::{
     inspectable_tool_catalog, list_agent_profiles, list_agent_tasks, list_skills,
-    load_agent_profile, load_agent_task, load_skill, AgentTaskSummary, InspectableTool,
-    InspectableToolSource, LoadedAgentProfile, LoadedAgentTask, LoadedSkill,
+    load_agent_profile, load_agent_task, load_skill, matches_tool_request,
+    AgentTaskSummary, InspectableTool, InspectableToolSource, LoadedAgentProfile,
+    LoadedAgentTask, LoadedSkill,
     PendingMcpServerDiscovery, SkillSummary,
 };
 
@@ -2148,12 +2149,18 @@ fn render_tool_detail(spec: &InspectableTool) -> Result<String, Box<dyn std::err
     let output_section = output_schema.map_or(String::new(), |schema| {
         format!("\n\nOutput schema\n{schema}")
     });
+    let aliases = if spec.aliases.is_empty() {
+        String::new()
+    } else {
+        format!("\n  Aliases          {}", spec.aliases.join(", "))
+    };
 
     Ok(format!(
-        "Tool\n  Name             {name}\n  Source           {source}\n  Required mode    {required_mode}\n  Description      {description}\n\nInput schema\n{input_schema}{output_section}",
+        "Tool\n  Name             {name}\n  Source           {source}\n  Required mode    {required_mode}{aliases}\n  Description      {description}\n\nInput schema\n{input_schema}{output_section}",
         name = spec.name,
         source = spec.source.display_name(),
         required_mode = spec.required_permission.as_str(),
+        aliases = aliases,
         description = spec.description,
         input_schema = input_schema,
         output_section = output_section,
@@ -2164,13 +2171,24 @@ fn render_tool_listing(specs: &[&InspectableTool]) -> String {
     if specs.is_empty() {
         return String::from("  <none>");
     }
-    let width = specs.iter().map(|spec| spec.name.len()).max().unwrap_or(4) + 2;
-    specs
+    let display_names = specs
         .iter()
         .map(|spec| {
+            if spec.aliases.is_empty() {
+                spec.name.clone()
+            } else {
+                format!("{} ({})", spec.name, spec.aliases.join(", "))
+            }
+        })
+        .collect::<Vec<_>>();
+    let width = display_names.iter().map(String::len).max().unwrap_or(4) + 2;
+    specs
+        .iter()
+        .zip(display_names.iter())
+        .map(|(spec, display_name)| {
             format!(
                 "  {name:<width$}{mode:<20}{description}",
-                name = spec.name,
+                name = display_name,
                 mode = spec.required_permission.as_str(),
                 description = spec.description,
                 width = width,
@@ -2222,27 +2240,6 @@ fn remote_setup_gaps(bootstrap: &UpstreamProxyBootstrap) -> String {
     } else {
         missing.join(", ")
     }
-}
-
-fn matches_tool_request(name: &str, requested: &str) -> bool {
-    canonical_tool_query(name) == canonical_tool_query(requested)
-        || canonical_token(name) == canonical_token(requested)
-}
-
-fn canonical_tool_query(value: &str) -> String {
-    let canonical = canonical_token(value);
-    canonical
-        .strip_suffix("tool")
-        .unwrap_or(canonical.as_str())
-        .to_string()
-}
-
-fn canonical_token(value: &str) -> String {
-    value
-        .chars()
-        .filter(char::is_ascii_alphanumeric)
-        .flat_map(char::to_lowercase)
-        .collect()
 }
 
 pub(crate) fn skills_report_snapshot(

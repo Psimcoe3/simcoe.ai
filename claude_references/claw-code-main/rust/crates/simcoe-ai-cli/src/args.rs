@@ -3,7 +3,7 @@ use std::env;
 use std::path::PathBuf;
 
 use runtime::PermissionMode;
-use tools::mvp_tool_specs;
+use tools::{matches_tool_request, mvp_tool_specs};
 
 pub(crate) type AllowedToolSet = BTreeSet<String>;
 
@@ -382,24 +382,21 @@ fn normalize_allowed_tools(values: &[String]) -> Result<Option<AllowedToolSet>, 
         return Ok(None);
     }
 
-    let canonical_names = mvp_tool_specs()
-        .into_iter()
+    let specs = mvp_tool_specs();
+    let canonical_names = specs
+        .iter()
         .map(|spec| spec.name.to_string())
         .collect::<Vec<_>>();
-    let mut name_map = canonical_names
-        .iter()
-        .map(|name| (normalize_tool_name(name), name.clone()))
-        .collect::<BTreeMap<_, _>>();
-
-    for (alias, canonical) in [
+    let short_aliases = [
         ("read", "read_file"),
         ("write", "write_file"),
         ("edit", "edit_file"),
         ("glob", "glob_search"),
         ("grep", "grep_search"),
-    ] {
-        name_map.insert(alias.to_string(), canonical.to_string());
-    }
+    ]
+    .into_iter()
+    .map(|(alias, canonical)| (alias.to_string(), canonical.to_string()))
+    .collect::<BTreeMap<_, _>>();
 
     let mut allowed = AllowedToolSet::new();
     for value in values {
@@ -408,13 +405,21 @@ fn normalize_allowed_tools(values: &[String]) -> Result<Option<AllowedToolSet>, 
             .filter(|token| !token.is_empty())
         {
             let normalized = normalize_tool_name(token);
-            let canonical = name_map.get(&normalized).ok_or_else(|| {
-                format!(
-                    "unsupported tool in --allowedTools: {token} (expected one of: {})",
-                    canonical_names.join(", ")
-                )
-            })?;
-            allowed.insert(canonical.clone());
+            let canonical = short_aliases
+                .get(&normalized)
+                .cloned()
+                .or_else(|| {
+                    specs.iter()
+                        .find(|spec| matches_tool_request(spec.name, token))
+                        .map(|spec| spec.name.to_string())
+                })
+                .ok_or_else(|| {
+                    format!(
+                        "unsupported tool in --allowedTools: {token} (expected one of: {})",
+                        canonical_names.join(", ")
+                    )
+                })?;
+            allowed.insert(canonical);
         }
     }
 

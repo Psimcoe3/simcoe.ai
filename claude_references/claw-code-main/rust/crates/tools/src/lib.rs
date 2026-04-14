@@ -94,6 +94,7 @@ impl InspectableToolSource {
 pub struct InspectableTool {
     pub name: String,
     pub description: String,
+    pub aliases: Vec<String>,
     pub input_schema: Value,
     pub output_schema: Option<Value>,
     pub required_permission: PermissionMode,
@@ -117,13 +118,34 @@ pub struct InspectableToolCatalog {
 
 #[must_use]
 pub fn tool_output_schema(tool_name: &str) -> Option<Value> {
+    let tool_name = resolve_tool_name_alias(tool_name).unwrap_or(tool_name);
     match tool_name {
+        "bash" => Some(bash_command_output_schema()),
+        "read_file" => Some(read_file_output_schema()),
+        "write_file" => Some(write_file_output_schema()),
+        "edit_file" => Some(edit_file_output_schema()),
+        "glob_search" => Some(glob_search_output_schema()),
+        "grep_search" => Some(grep_search_output_schema()),
         "ListMcpResourcesTool" => Some(list_mcp_resources_output_schema()),
         "ReadMcpResourceTool" => Some(read_mcp_resource_output_schema()),
         "MCPTool" => Some(mcp_tool_output_schema()),
         "McpAuthTool" => Some(mcp_auth_output_schema()),
+        "WebFetch" => Some(web_fetch_output_schema()),
+        "WebSearch" => Some(web_search_output_schema()),
+        "TodoWrite" => Some(todo_write_output_schema()),
+        "Skill" => Some(skill_output_schema()),
         "ToolSearch" => Some(tool_search_output_schema()),
+        "NotebookEdit" => Some(notebook_edit_output_schema()),
+        "Agent" => Some(agent_task_manifest_output_schema()),
+        "Config" => Some(config_output_schema()),
+        "StructuredOutput" => Some(structured_output_result_schema()),
+        "REPL" => Some(repl_output_schema()),
+        "Sleep" => Some(sleep_output_schema()),
+        "PowerShell" => Some(bash_command_output_schema()),
+        "SyntheticOutputTool" => Some(synthetic_output_schema()),
+        "SessionExportTool" => Some(session_export_output_schema()),
         "AskUserQuestionTool" => Some(ask_user_question_output_schema()),
+        "SendUserMessage" | "Brief" | "BriefTool" => Some(brief_output_schema()),
         "TaskCreateTool" | "TaskGetTool" | "TaskStopTool" | "TaskUpdateTool" => {
             Some(agent_task_manifest_output_schema())
         }
@@ -140,6 +162,55 @@ pub fn tool_output_schema(tool_name: &str) -> Option<Value> {
         _ if is_dynamic_mcp_tool_name(tool_name) => Some(mcp_tool_call_output_schema()),
         _ => None,
     }
+}
+
+fn tool_name_aliases(name: &str) -> &'static [&'static str] {
+    match name {
+        "Agent" => &["AgentTool"],
+        "bash" => &["BashTool"],
+        "Config" => &["ConfigTool"],
+        "edit_file" => &["FileEditTool"],
+        "read_file" => &["FileReadTool"],
+        "write_file" => &["FileWriteTool"],
+        "glob_search" => &["GlobTool"],
+        "grep_search" => &["GrepTool"],
+        "NotebookEdit" => &["NotebookEditTool"],
+        "PowerShell" => &["PowerShellTool"],
+        "REPL" => &["REPLTool"],
+        "SendUserMessage" => &["SendMessageTool"],
+        "Skill" => &["SkillTool"],
+        "Sleep" => &["SleepTool"],
+        "TodoWrite" => &["TodoWriteTool"],
+        "ToolSearch" => &["ToolSearchTool"],
+        "WebFetch" => &["WebFetchTool"],
+        "WebSearch" => &["WebSearchTool"],
+        "ExitPlanModeV2Tool" => &["ExitPlanModeTool"],
+        _ => &[],
+    }
+}
+
+fn resolve_tool_name_alias(requested: &str) -> Option<&'static str> {
+    let canonical = canonical_tool_token(requested);
+    mvp_tool_specs()
+        .into_iter()
+        .find_map(|spec| {
+            (canonical_tool_token(spec.name) == canonical
+                || tool_name_aliases(spec.name)
+                    .iter()
+                    .any(|alias| canonical_tool_token(alias) == canonical))
+            .then_some(spec.name)
+        })
+}
+
+#[must_use]
+pub fn matches_tool_request(name: &str, requested: &str) -> bool {
+    let requested = requested.trim();
+    if requested.is_empty() {
+        return false;
+    }
+
+    resolve_tool_name_alias(requested).is_some_and(|resolved| resolved == name)
+        || canonical_tool_token(name) == canonical_tool_token(requested)
 }
 
 fn tool_search_output_schema() -> Value {
@@ -182,13 +253,17 @@ fn tool_search_match_detail_output_schema() -> Value {
         "type": "object",
         "properties": {
             "name": { "type": "string" },
+            "aliases": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
             "description": { "type": "string" },
             "source": { "type": "string", "enum": ["registry", "dynamic-mcp"] },
             "required_permission": { "type": "string" },
             "mcp_server": { "type": "string" },
             "mcp_tool": { "type": "string" }
         },
-        "required": ["name", "description", "source", "required_permission"],
+        "required": ["name", "aliases", "description", "source", "required_permission"],
         "additionalProperties": false
     })
 }
@@ -201,6 +276,422 @@ fn ask_user_question_output_schema() -> Value {
             "answer": { "type": "string" }
         },
         "required": ["question", "answer"],
+        "additionalProperties": false
+    })
+}
+
+fn brief_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "message": { "type": "string" },
+            "attachments": {
+                "type": ["array", "null"],
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string" },
+                        "size": { "type": "integer", "minimum": 0 },
+                        "isImage": { "type": "boolean" }
+                    },
+                    "required": ["path", "size", "isImage"],
+                    "additionalProperties": false
+                }
+            },
+            "sentAt": { "type": "string" }
+        },
+        "required": ["message", "sentAt"],
+        "additionalProperties": false
+    })
+}
+
+fn notebook_edit_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "new_source": { "type": "string" },
+            "cell_id": { "type": ["string", "null"] },
+            "cell_type": {
+                "type": ["string", "null"],
+                "enum": ["code", "markdown", null]
+            },
+            "language": { "type": "string" },
+            "edit_mode": { "type": "string", "enum": ["replace", "insert", "delete"] },
+            "error": { "type": ["string", "null"] },
+            "notebook_path": { "type": "string" },
+            "original_file": { "type": "string" },
+            "updated_file": { "type": "string" }
+        },
+        "required": [
+            "new_source",
+            "cell_id",
+            "cell_type",
+            "language",
+            "edit_mode",
+            "error",
+            "notebook_path",
+            "original_file",
+            "updated_file"
+        ],
+        "additionalProperties": false
+    })
+}
+
+fn config_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "success": { "type": "boolean" },
+            "operation": { "type": ["string", "null"], "enum": ["get", "set", null] },
+            "setting": { "type": ["string", "null"] },
+            "value": {},
+            "previousValue": {},
+            "newValue": {},
+            "error": { "type": ["string", "null"] }
+        },
+        "required": [
+            "success",
+            "operation",
+            "setting",
+            "value",
+            "previousValue",
+            "newValue",
+            "error"
+        ],
+        "additionalProperties": false
+    })
+}
+
+fn todo_item_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "content": { "type": "string" },
+            "activeForm": { "type": "string" },
+            "status": {
+                "type": "string",
+                "enum": ["pending", "in_progress", "completed"]
+            }
+        },
+        "required": ["content", "activeForm", "status"],
+        "additionalProperties": false
+    })
+}
+
+fn todo_write_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "oldTodos": {
+                "type": "array",
+                "items": todo_item_output_schema()
+            },
+            "newTodos": {
+                "type": "array",
+                "items": todo_item_output_schema()
+            },
+            "verificationNudgeNeeded": { "type": ["boolean", "null"] }
+        },
+        "required": ["oldTodos", "newTodos", "verificationNudgeNeeded"],
+        "additionalProperties": false
+    })
+}
+
+fn skill_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "skill": { "type": "string" },
+            "path": { "type": "string" },
+            "args": { "type": ["string", "null"] },
+            "description": { "type": ["string", "null"] },
+            "prompt": { "type": "string" }
+        },
+        "required": ["skill", "path", "args", "description", "prompt"],
+        "additionalProperties": false
+    })
+}
+
+fn web_fetch_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "bytes": { "type": "integer", "minimum": 0 },
+            "code": { "type": "integer", "minimum": 100, "maximum": 599 },
+            "codeText": { "type": "string" },
+            "result": { "type": "string" },
+            "durationMs": { "type": "integer", "minimum": 0 },
+            "url": { "type": "string" }
+        },
+        "required": ["bytes", "code", "codeText", "result", "durationMs", "url"],
+        "additionalProperties": false
+    })
+}
+
+fn structured_output_result_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "data": { "type": "string" },
+            "structured_output": {
+                "type": "object",
+                "additionalProperties": true
+            }
+        },
+        "required": ["data", "structured_output"],
+        "additionalProperties": false
+    })
+}
+
+fn repl_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "language": { "type": "string" },
+            "stdout": { "type": "string" },
+            "stderr": { "type": "string" },
+            "exitCode": { "type": "integer" },
+            "durationMs": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["language", "stdout", "stderr", "exitCode", "durationMs"],
+        "additionalProperties": false
+    })
+}
+
+fn web_search_hit_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "title": { "type": "string" },
+            "url": { "type": "string" }
+        },
+        "required": ["title", "url"],
+        "additionalProperties": false
+    })
+}
+
+fn web_search_result_item_output_schema() -> Value {
+    json!({
+        "oneOf": [
+            { "type": "string" },
+            {
+                "type": "object",
+                "properties": {
+                    "tool_use_id": { "type": "string" },
+                    "content": {
+                        "type": "array",
+                        "items": web_search_hit_output_schema()
+                    }
+                },
+                "required": ["tool_use_id", "content"],
+                "additionalProperties": false
+            }
+        ]
+    })
+}
+
+fn web_search_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "query": { "type": "string" },
+            "results": {
+                "type": "array",
+                "items": web_search_result_item_output_schema()
+            },
+            "durationSeconds": { "type": "number", "minimum": 0.0 }
+        },
+        "required": ["query", "results", "durationSeconds"],
+        "additionalProperties": false
+    })
+}
+
+fn text_file_payload_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "filePath": { "type": "string" },
+            "content": { "type": "string" },
+            "numLines": { "type": "integer", "minimum": 0 },
+            "startLine": { "type": "integer", "minimum": 1 },
+            "totalLines": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["filePath", "content", "numLines", "startLine", "totalLines"],
+        "additionalProperties": false
+    })
+}
+
+fn structured_patch_hunk_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "oldStart": { "type": "integer", "minimum": 0 },
+            "oldLines": { "type": "integer", "minimum": 0 },
+            "newStart": { "type": "integer", "minimum": 0 },
+            "newLines": { "type": "integer", "minimum": 0 },
+            "lines": {
+                "type": "array",
+                "items": { "type": "string" }
+            }
+        },
+        "required": ["oldStart", "oldLines", "newStart", "newLines", "lines"],
+        "additionalProperties": false
+    })
+}
+
+fn bash_command_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "stdout": { "type": "string" },
+            "stderr": { "type": "string" },
+            "rawOutputPath": { "type": ["string", "null"] },
+            "interrupted": { "type": "boolean" },
+            "isImage": { "type": ["boolean", "null"] },
+            "backgroundTaskId": { "type": ["string", "null"] },
+            "backgroundedByUser": { "type": ["boolean", "null"] },
+            "assistantAutoBackgrounded": { "type": ["boolean", "null"] },
+            "dangerouslyDisableSandbox": { "type": ["boolean", "null"] },
+            "returnCodeInterpretation": { "type": ["string", "null"] },
+            "noOutputExpected": { "type": ["boolean", "null"] },
+            "structuredContent": {
+                "type": ["array", "null"],
+                "items": {}
+            },
+            "persistedOutputPath": { "type": ["string", "null"] },
+            "persistedOutputSize": { "type": ["integer", "null"], "minimum": 0 },
+            "sandboxStatus": {}
+        },
+        "required": ["stdout", "stderr", "rawOutputPath", "interrupted", "isImage", "backgroundTaskId", "backgroundedByUser", "assistantAutoBackgrounded", "dangerouslyDisableSandbox", "returnCodeInterpretation", "noOutputExpected", "structuredContent", "persistedOutputPath", "persistedOutputSize", "sandboxStatus"],
+        "additionalProperties": false
+    })
+}
+
+fn read_file_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "type": { "type": "string" },
+            "file": text_file_payload_output_schema()
+        },
+        "required": ["type", "file"],
+        "additionalProperties": false
+    })
+}
+
+fn write_file_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "type": { "type": "string", "enum": ["create", "update"] },
+            "filePath": { "type": "string" },
+            "content": { "type": "string" },
+            "structuredPatch": {
+                "type": "array",
+                "items": structured_patch_hunk_output_schema()
+            },
+            "originalFile": { "type": ["string", "null"] },
+            "gitDiff": {}
+        },
+        "required": ["type", "filePath", "content", "structuredPatch", "originalFile", "gitDiff"],
+        "additionalProperties": false
+    })
+}
+
+fn edit_file_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "filePath": { "type": "string" },
+            "oldString": { "type": "string" },
+            "newString": { "type": "string" },
+            "originalFile": { "type": "string" },
+            "structuredPatch": {
+                "type": "array",
+                "items": structured_patch_hunk_output_schema()
+            },
+            "userModified": { "type": "boolean" },
+            "replaceAll": { "type": "boolean" },
+            "gitDiff": {}
+        },
+        "required": ["filePath", "oldString", "newString", "originalFile", "structuredPatch", "userModified", "replaceAll", "gitDiff"],
+        "additionalProperties": false
+    })
+}
+
+fn glob_search_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "durationMs": { "type": "integer", "minimum": 0 },
+            "numFiles": { "type": "integer", "minimum": 0 },
+            "filenames": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "truncated": { "type": "boolean" }
+        },
+        "required": ["durationMs", "numFiles", "filenames", "truncated"],
+        "additionalProperties": false
+    })
+}
+
+fn grep_search_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "mode": { "type": ["string", "null"] },
+            "numFiles": { "type": "integer", "minimum": 0 },
+            "filenames": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "content": { "type": ["string", "null"] },
+            "numLines": { "type": ["integer", "null"], "minimum": 0 },
+            "numMatches": { "type": ["integer", "null"], "minimum": 0 },
+            "appliedLimit": { "type": ["integer", "null"], "minimum": 0 },
+            "appliedOffset": { "type": ["integer", "null"], "minimum": 0 }
+        },
+        "required": ["mode", "numFiles", "filenames", "content", "numLines", "numMatches", "appliedLimit", "appliedOffset"],
+        "additionalProperties": false
+    })
+}
+
+fn sleep_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "duration_ms": { "type": "integer", "minimum": 0 },
+            "message": { "type": "string" }
+        },
+        "required": ["duration_ms", "message"],
+        "additionalProperties": false
+    })
+}
+
+fn synthetic_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "content": { "type": "string" },
+            "outputType": { "type": "string" },
+            "synthetic": { "type": "boolean" }
+        },
+        "required": ["content", "outputType", "synthetic"],
+        "additionalProperties": false
+    })
+}
+
+fn session_export_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "sessionId": { "type": "string" },
+            "sessionPath": { "type": "string" },
+            "exportPath": { "type": "string" },
+            "messageCount": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["sessionId", "sessionPath", "exportPath", "messageCount"],
         "additionalProperties": false
     })
 }
@@ -424,6 +915,10 @@ pub fn inspectable_tool_catalog(
         .map(|spec| InspectableTool {
             name: spec.name.to_string(),
             description: spec.description.to_string(),
+            aliases: tool_name_aliases(spec.name)
+                .iter()
+                .map(|alias| (*alias).to_string())
+                .collect(),
             input_schema: spec.input_schema,
             output_schema: tool_output_schema(spec.name),
             required_permission: spec.required_permission,
@@ -444,6 +939,7 @@ pub fn inspectable_tool_catalog(
                         tool.raw_name, tool.server_name
                     )
                 }),
+                aliases: Vec::new(),
                 input_schema: tool
                     .tool
                     .input_schema
@@ -771,6 +1267,18 @@ pub struct LoadedSkill {
     pub args: Option<String>,
     pub description: Option<String>,
     pub prompt: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionExportResult {
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    #[serde(rename = "sessionPath")]
+    pub session_path: String,
+    #[serde(rename = "exportPath")]
+    pub export_path: String,
+    #[serde(rename = "messageCount")]
+    pub message_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1129,6 +1637,18 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
             required_permission: PermissionMode::ReadOnly,
         },
         ToolSpec {
+            name: "SessionExportTool",
+            description: "Export the active managed session transcript to a text file in the current workspace.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" }
+                },
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
             name: "Agent",
             description: "Launch a specialized agent task and persist its handoff metadata.",
             input_schema: json!({
@@ -1474,6 +1994,27 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
             required_permission: PermissionMode::ReadOnly,
         },
         ToolSpec {
+            name: "BriefTool",
+            description: "Send a message to the user with optional attachments. Compatibility alias for SendUserMessage.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "message": { "type": "string" },
+                    "attachments": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["normal", "proactive"]
+                    }
+                },
+                "required": ["message", "status"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
             name: "Config",
             description: "Get or set Claw Code settings.",
             input_schema: json!({
@@ -1533,11 +2074,13 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
 }
 
 pub fn execute_tool(name: &str, input: &Value) -> Result<String, String> {
-    if let Some(error) = plan_mode_blocking_error(name) {
+    let resolved_name = resolve_tool_name_alias(name).unwrap_or(name);
+
+    if let Some(error) = plan_mode_blocking_error(resolved_name) {
         return Err(error);
     }
 
-    match name {
+    match resolved_name {
         "bash" => from_value::<BashCommandInput>(input).and_then(run_bash),
         "read_file" => from_value::<ReadFileInput>(input).and_then(run_read_file),
         "write_file" => from_value::<WriteFileInput>(input).and_then(run_write_file),
@@ -1556,6 +2099,9 @@ pub fn execute_tool(name: &str, input: &Value) -> Result<String, String> {
         "WebSearch" => from_value::<WebSearchInput>(input).and_then(run_web_search),
         "TodoWrite" => from_value::<TodoWriteInput>(input).and_then(run_todo_write),
         "Skill" => from_value::<SkillInput>(input).and_then(run_skill),
+        "SessionExportTool" => {
+            from_value::<SessionExportInput>(input).and_then(run_session_export)
+        }
         "Agent" => from_value::<AgentInput>(input).and_then(run_agent),
         "ToolSearch" => from_value::<ToolSearchInput>(input).and_then(run_tool_search),
         "NotebookEdit" => from_value::<NotebookEditInput>(input).and_then(run_notebook_edit),
@@ -1563,7 +2109,9 @@ pub fn execute_tool(name: &str, input: &Value) -> Result<String, String> {
         "AskUserQuestionTool" => {
             from_value::<AskUserQuestionInput>(input).and_then(run_ask_user_question)
         }
-        "SendUserMessage" | "Brief" => from_value::<BriefInput>(input).and_then(run_brief),
+        "SendUserMessage" | "Brief" | "BriefTool" => {
+            from_value::<BriefInput>(input).and_then(run_brief)
+        }
         "Config" => from_value::<ConfigInput>(input).and_then(run_config),
         "StructuredOutput" => {
             from_value::<StructuredOutputInput>(input).and_then(run_structured_output)
@@ -1595,7 +2143,7 @@ pub fn execute_tool(name: &str, input: &Value) -> Result<String, String> {
         "TestingPermissionTool" => {
             from_value::<TestingPermissionInput>(input).and_then(run_testing_permission)
         }
-        _ if is_dynamic_mcp_tool_name(name) => execute_dynamic_mcp_tool(name, input),
+        _ if is_dynamic_mcp_tool_name(resolved_name) => execute_dynamic_mcp_tool(resolved_name, input),
         _ => Err(format!("unsupported tool: {name}")),
     }
 }
@@ -1927,6 +2475,11 @@ struct SkillInput {
 }
 
 #[derive(Debug, Deserialize)]
+struct SessionExportInput {
+    path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct AgentInput {
     description: String,
     prompt: String,
@@ -2218,6 +2771,7 @@ struct ToolSearchOutput {
 #[derive(Debug, Serialize)]
 struct ToolSearchMatchDetail {
     name: String,
+    aliases: Vec<String>,
     description: String,
     source: String,
     required_permission: String,
@@ -4778,6 +5332,22 @@ fn execute_skill(input: SkillInput) -> Result<SkillOutput, String> {
     })
 }
 
+fn execute_session_export(input: SessionExportInput) -> Result<SessionExportResult, String> {
+    let (handle, export_path, message_count) = runtime::export_active_session(input.path.as_deref())
+        .map_err(|error| error.to_string())?;
+
+    Ok(SessionExportResult {
+        session_id: handle.id,
+        session_path: handle.path.display().to_string(),
+        export_path: export_path.display().to_string(),
+        message_count,
+    })
+}
+
+fn run_session_export(input: SessionExportInput) -> Result<String, String> {
+    to_pretty_json(execute_session_export(input)?)
+}
+
 fn validate_todos(todos: &[TodoItem]) -> Result<(), String> {
     if todos.is_empty() {
         return Err(String::from("todos must not be empty"));
@@ -5500,14 +6070,22 @@ fn is_dynamic_mcp_tool_name(name: &str) -> bool {
 }
 
 pub fn tool_name_is_allowed(allowed_tools: &BTreeSet<String>, tool_name: &str) -> bool {
-    allowed_tools.contains(tool_name)
-        || (is_dynamic_mcp_tool_name(tool_name) && allowed_tools.contains("MCPTool"))
+    if is_dynamic_mcp_tool_name(tool_name) {
+        return allowed_tools
+            .iter()
+            .any(|allowed| resolve_tool_name_alias(allowed).unwrap_or(allowed) == "MCPTool");
+    }
+
+    let requested = resolve_tool_name_alias(tool_name).unwrap_or(tool_name);
+    allowed_tools
+        .iter()
+        .any(|allowed| resolve_tool_name_alias(allowed).unwrap_or(allowed) == requested)
 }
 
 fn tool_specs_for_allowed_tools(allowed_tools: Option<&BTreeSet<String>>) -> Vec<ToolSpec> {
     mvp_tool_specs()
         .into_iter()
-        .filter(|spec| allowed_tools.is_none_or(|allowed| allowed.contains(spec.name)))
+        .filter(|spec| allowed_tools.is_none_or(|allowed| tool_name_is_allowed(allowed, spec.name)))
         .collect()
 }
 
@@ -5676,6 +6254,10 @@ fn tool_search_match_details(
             if let Some(spec) = specs.iter().find(|spec| spec.name == name) {
                 return Some(ToolSearchMatchDetail {
                     name: spec.name.to_string(),
+                    aliases: tool_name_aliases(spec.name)
+                        .iter()
+                        .map(|alias| (*alias).to_string())
+                        .collect(),
                     description: spec.description.to_string(),
                     source: String::from("registry"),
                     required_permission: spec.required_permission.as_str().to_string(),
@@ -5690,6 +6272,7 @@ fn tool_search_match_details(
                 .find(|tool| tool.qualified_name == *name)
                 .map(|tool| ToolSearchMatchDetail {
                     name: tool.qualified_name.clone(),
+                    aliases: Vec::new(),
                     description: tool.tool.description.clone().unwrap_or_else(|| {
                         format!(
                             "Invoke MCP tool `{}` on configured server `{}`.",
@@ -5725,10 +6308,9 @@ fn search_tool_specs(query: &str, max_results: usize, specs: &[ToolSpec]) -> Vec
             .map(str::trim)
             .filter(|part| !part.is_empty())
             .filter_map(|wanted| {
-                let wanted = canonical_tool_token(wanted);
                 specs
                     .iter()
-                    .find(|spec| canonical_tool_token(spec.name) == wanted)
+                    .find(|spec| matches_tool_request(spec.name, wanted))
                     .map(|spec| spec.name.to_string())
             })
             .take(max_results)
@@ -5757,12 +6339,25 @@ fn search_tool_specs(query: &str, max_results: usize, specs: &[ToolSpec]) -> Vec
         .filter_map(|spec| {
             let name = spec.name.to_lowercase();
             let canonical_name = canonical_tool_token(spec.name);
+            let aliases = tool_name_aliases(spec.name);
+            let alias_names = aliases
+                .iter()
+                .map(|alias| alias.to_lowercase())
+                .collect::<Vec<_>>();
+            let canonical_aliases = aliases
+                .iter()
+                .map(|alias| canonical_tool_token(alias))
+                .collect::<Vec<_>>();
             let normalized_description = normalize_tool_search_query(spec.description);
             let haystack = format!(
-                "{name} {} {canonical_name}",
-                spec.description.to_lowercase()
+                "{name} {} {canonical_name} {}",
+                spec.description.to_lowercase(),
+                alias_names.join(" ")
             );
-            let normalized_haystack = format!("{canonical_name} {normalized_description}");
+            let normalized_haystack = format!(
+                "{canonical_name} {normalized_description} {}",
+                canonical_aliases.join(" ")
+            );
             if required.iter().any(|term| !haystack.contains(term)) {
                 return None;
             }
@@ -5779,7 +6374,13 @@ fn search_tool_specs(query: &str, max_results: usize, specs: &[ToolSpec]) -> Vec
                 if name.contains(term) {
                     score += 4;
                 }
-                if canonical_name == canonical_term {
+                if alias_names.iter().any(|alias| alias == term) {
+                    score += 8;
+                }
+                if alias_names.iter().any(|alias| alias.contains(term)) {
+                    score += 4;
+                }
+                if matches_tool_request(spec.name, term) || canonical_name == canonical_term {
                     score += 12;
                 }
                 if normalized_haystack.contains(&canonical_term) {
@@ -6870,6 +7471,11 @@ fn resolve_testing_permission_tool_name(action: &str) -> Option<&'static str> {
         return alias;
     }
 
+    let resolved = resolve_tool_name_alias(action);
+    if resolved.is_some() {
+        return resolved;
+    }
+
     mvp_tool_specs().into_iter().find_map(|spec| {
         (normalize_testing_permission_token(spec.name) == token).then_some(spec.name)
     })
@@ -7529,11 +8135,11 @@ mod tests {
         execute_tool, final_assistant_text, list_agent_profiles, list_agent_tasks, list_skills,
         load_agent_profile, load_agent_task, load_skill, mvp_tool_specs,
         persist_agent_terminal_state, runtime_tool_definitions, AgentInput, AgentJob,
-        SubagentToolExecutor,
+        SessionExportResult, SubagentToolExecutor,
     };
     use runtime::{
         clear_active_worktree_root, set_plan_mode_active, ApiRequest, AssistantEvent,
-        ConversationRuntime, RuntimeError, Session,
+        ContentBlock, ConversationMessage, ConversationRuntime, RuntimeError, Session,
     };
     use serde_json::json;
     use tungstenite::{accept_hdr, Message as WebSocketMessage};
@@ -7565,12 +8171,22 @@ mod tests {
         }
     }
 
+    fn accept_remote_probe_request(
+        _request: &tungstenite::handshake::server::Request,
+        response: tungstenite::handshake::server::Response,
+    ) -> Result<
+        tungstenite::handshake::server::Response,
+        tungstenite::handshake::server::ErrorResponse,
+    > {
+        Ok(response)
+    }
+
     fn spawn_remote_probe_server() -> (String, thread::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind websocket server");
         let address = listener.local_addr().expect("local addr");
         let handle = thread::spawn(move || {
             let (stream, _) = listener.accept().expect("accept websocket client");
-            let mut websocket = accept_hdr(stream, |_request, response| Ok(response))
+            let mut websocket = accept_hdr(stream, accept_remote_probe_request)
                 .expect("accept websocket");
             let _ = websocket.close(None);
         });
@@ -7714,6 +8330,7 @@ mod tests {
         assert!(names.contains(&"Sleep"));
         assert!(names.contains(&"AskUserQuestionTool"));
         assert!(names.contains(&"SendUserMessage"));
+        assert!(names.contains(&"BriefTool"));
         assert!(names.contains(&"Config"));
         assert!(names.contains(&"StructuredOutput"));
         assert!(names.contains(&"REPL"));
@@ -7939,6 +8556,269 @@ mod tests {
     }
 
     #[test]
+    fn brief_output_schema_is_advertised_for_send_and_alias_names() {
+        use crate::tool_output_schema;
+
+        let send_schema = tool_output_schema("SendUserMessage")
+            .expect("SendUserMessage should have an output schema");
+        assert_eq!(send_schema["properties"]["message"]["type"], json!("string"));
+        assert_eq!(send_schema["properties"]["sentAt"]["type"], json!("string"));
+        assert_eq!(
+            send_schema["properties"]["attachments"]["items"]["required"],
+            json!(["path", "size", "isImage"])
+        );
+
+        let alias_schema =
+            tool_output_schema("BriefTool").expect("BriefTool should share the same schema");
+        assert_eq!(alias_schema, send_schema);
+    }
+
+    #[test]
+    fn archived_tool_aliases_share_native_output_schemas() {
+        use crate::tool_output_schema;
+
+        let bash_schema = tool_output_schema("bash").expect("bash should have an output schema");
+        assert_eq!(tool_output_schema("BashTool"), Some(bash_schema));
+
+        let read_schema =
+            tool_output_schema("read_file").expect("read_file should have an output schema");
+        assert_eq!(tool_output_schema("FileReadTool"), Some(read_schema));
+
+        let send_schema = tool_output_schema("SendUserMessage")
+            .expect("SendUserMessage should have an output schema");
+        assert_eq!(tool_output_schema("SendMessageTool"), Some(send_schema));
+    }
+
+    #[test]
+    fn notebook_edit_output_schema_is_advertised() {
+        use crate::tool_output_schema;
+
+        let schema = tool_output_schema("NotebookEdit")
+            .expect("NotebookEdit should have an output schema");
+        assert_eq!(schema["properties"]["new_source"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["language"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["edit_mode"]["enum"], json!(["replace", "insert", "delete"]));
+    }
+
+    #[test]
+    fn config_output_schema_is_advertised() {
+        use crate::tool_output_schema;
+
+        let schema =
+            tool_output_schema("Config").expect("Config should have an output schema");
+        assert_eq!(schema["properties"]["success"]["type"], json!("boolean"));
+        assert_eq!(schema["properties"]["operation"]["enum"], json!(["get", "set", null]));
+        assert_eq!(schema["properties"]["error"]["type"], json!(["string", "null"]));
+    }
+
+    #[test]
+    fn agent_output_schema_matches_task_manifest_schema() {
+        use crate::tool_output_schema;
+
+        let agent_schema =
+            tool_output_schema("Agent").expect("Agent should have an output schema");
+        let task_schema = tool_output_schema("TaskCreateTool")
+            .expect("TaskCreateTool should have an output schema");
+        assert_eq!(agent_schema, task_schema);
+    }
+
+    #[test]
+    fn todo_write_output_schema_is_advertised() {
+        use crate::tool_output_schema;
+
+        let schema =
+            tool_output_schema("TodoWrite").expect("TodoWrite should have an output schema");
+        assert_eq!(schema["properties"]["oldTodos"]["type"], json!("array"));
+        assert_eq!(
+            schema["properties"]["newTodos"]["items"]["properties"]["status"]["enum"],
+            json!(["pending", "in_progress", "completed"])
+        );
+        assert_eq!(
+            schema["properties"]["verificationNudgeNeeded"]["type"],
+            json!(["boolean", "null"])
+        );
+    }
+
+    #[test]
+    fn skill_output_schema_is_advertised() {
+        use crate::tool_output_schema;
+
+        let schema = tool_output_schema("Skill").expect("Skill should have an output schema");
+        assert_eq!(schema["properties"]["skill"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["path"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["args"]["type"], json!(["string", "null"]));
+        assert_eq!(schema["properties"]["prompt"]["type"], json!("string"));
+    }
+
+    #[test]
+    fn web_fetch_output_schema_is_advertised() {
+        use crate::tool_output_schema;
+
+        let schema =
+            tool_output_schema("WebFetch").expect("WebFetch should have an output schema");
+        assert_eq!(schema["properties"]["bytes"]["type"], json!("integer"));
+        assert_eq!(schema["properties"]["code"]["type"], json!("integer"));
+        assert_eq!(schema["properties"]["codeText"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["result"]["type"], json!("string"));
+    }
+
+    #[test]
+    fn structured_output_schema_is_advertised() {
+        use crate::tool_output_schema;
+
+        let schema = tool_output_schema("StructuredOutput")
+            .expect("StructuredOutput should have an output schema");
+        assert_eq!(schema["properties"]["data"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["structured_output"]["type"], json!("object"));
+    }
+
+    #[test]
+    fn repl_output_schema_is_advertised() {
+        use crate::tool_output_schema;
+
+        let schema = tool_output_schema("REPL").expect("REPL should have an output schema");
+        assert_eq!(schema["properties"]["language"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["stdout"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["exitCode"]["type"], json!("integer"));
+    }
+
+    #[test]
+    fn web_search_output_schema_is_advertised() {
+        use crate::tool_output_schema;
+
+        let schema =
+            tool_output_schema("WebSearch").expect("WebSearch should have an output schema");
+        assert_eq!(schema["properties"]["query"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["results"]["type"], json!("array"));
+        assert_eq!(schema["properties"]["durationSeconds"]["type"], json!("number"));
+    }
+
+    #[test]
+    fn sleep_output_schema_is_advertised() {
+        use crate::tool_output_schema;
+
+        let schema = tool_output_schema("Sleep").expect("Sleep should have an output schema");
+        assert_eq!(schema["properties"]["duration_ms"]["type"], json!("integer"));
+        assert_eq!(schema["properties"]["message"]["type"], json!("string"));
+    }
+
+    #[test]
+    fn synthetic_output_schema_is_advertised() {
+        use crate::tool_output_schema;
+
+        let schema = tool_output_schema("SyntheticOutputTool")
+            .expect("SyntheticOutputTool should have an output schema");
+        assert_eq!(schema["properties"]["content"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["outputType"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["synthetic"]["type"], json!("boolean"));
+    }
+
+    #[test]
+    fn session_export_output_schema_is_advertised() {
+        use crate::tool_output_schema;
+
+        let schema = tool_output_schema("SessionExportTool")
+            .expect("SessionExportTool should have an output schema");
+        assert_eq!(schema["properties"]["sessionId"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["sessionPath"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["exportPath"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["messageCount"]["type"], json!("integer"));
+    }
+
+    #[test]
+    fn shell_and_file_tool_output_schemas_are_advertised() {
+        use crate::tool_output_schema;
+
+        let bash_schema = tool_output_schema("bash").expect("bash should have an output schema");
+        assert_eq!(bash_schema["properties"]["stdout"]["type"], json!("string"));
+        assert_eq!(bash_schema["properties"]["interrupted"]["type"], json!("boolean"));
+
+        let read_schema =
+            tool_output_schema("read_file").expect("read_file should have an output schema");
+        assert_eq!(read_schema["properties"]["file"]["properties"]["filePath"]["type"], json!("string"));
+
+        let write_schema =
+            tool_output_schema("write_file").expect("write_file should have an output schema");
+        assert_eq!(write_schema["properties"]["type"]["enum"], json!(["create", "update"]));
+
+        let edit_schema =
+            tool_output_schema("edit_file").expect("edit_file should have an output schema");
+        assert_eq!(edit_schema["properties"]["replaceAll"]["type"], json!("boolean"));
+
+        let glob_schema = tool_output_schema("glob_search")
+            .expect("glob_search should have an output schema");
+        assert_eq!(glob_schema["properties"]["numFiles"]["type"], json!("integer"));
+
+        let grep_schema = tool_output_schema("grep_search")
+            .expect("grep_search should have an output schema");
+        assert_eq!(grep_schema["properties"]["numMatches"]["type"], json!(["integer", "null"]));
+
+        let powershell_schema = tool_output_schema("PowerShell")
+            .expect("PowerShell should share the bash output schema");
+        assert_eq!(powershell_schema, bash_schema);
+    }
+
+    #[test]
+    fn structured_local_tool_output_schemas_remain_covered() {
+        use crate::tool_output_schema;
+
+        let names = [
+            "bash",
+            "read_file",
+            "write_file",
+            "edit_file",
+            "glob_search",
+            "grep_search",
+            "WebFetch",
+            "WebSearch",
+            "TodoWrite",
+            "Skill",
+            "ToolSearch",
+            "NotebookEdit",
+            "Agent",
+            "Config",
+            "StructuredOutput",
+            "REPL",
+            "Sleep",
+            "PowerShell",
+            "SyntheticOutputTool",
+            "SessionExportTool",
+            "AskUserQuestionTool",
+            "SendUserMessage",
+            "BriefTool",
+            "TaskCreateTool",
+            "TaskGetTool",
+            "TaskListTool",
+            "TaskOutputTool",
+            "TaskStopTool",
+            "TaskUpdateTool",
+            "LSPTool",
+            "RemoteTriggerTool",
+            "TeamCreateTool",
+            "TeamDeleteTool",
+            "CronCreateTool",
+            "CronDeleteTool",
+            "CronListTool",
+            "EnterPlanModeTool",
+            "ExitPlanModeV2Tool",
+            "EnterWorktreeTool",
+            "ExitWorktreeTool",
+            "TestingPermissionTool",
+            "ListMcpResourcesTool",
+            "ReadMcpResourceTool",
+            "MCPTool",
+            "McpAuthTool",
+        ];
+
+        for name in names {
+            assert!(
+                tool_output_schema(name).is_some(),
+                "expected output schema for {name}"
+            );
+        }
+    }
+
+    #[test]
     fn rejects_unknown_tool_names() {
         let error = execute_tool("nope", &json!({})).expect_err("tool should be rejected");
         assert!(error.contains("unsupported tool"));
@@ -8072,6 +8952,55 @@ mod tests {
 
         std::env::remove_var("CLAWD_AGENT_STORE");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn session_export_writes_transcript_for_active_session() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("session-export-tool");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let sessions_root = nested_cwd.join(".simcoe").join("sessions");
+        let session_path = sessions_root.join("session-export-tool.json");
+        fs::create_dir_all(&sessions_root).expect("create sessions root");
+        Session {
+            version: 1,
+            messages: vec![
+                ConversationMessage::user_text("hello from tool export"),
+                ConversationMessage::assistant(vec![ContentBlock::Text {
+                    text: String::from("tool export response"),
+                }]),
+            ],
+        }
+        .save_to_path(&session_path)
+        .expect("write session");
+
+        let original_cwd = set_test_cwd(&nested_cwd);
+        let handle = runtime::session_handle_from_path(&session_path);
+        runtime::set_active_session_handle(&handle).expect("set active session");
+
+        let output: SessionExportResult = serde_json::from_str(
+            &execute_tool("SessionExportTool", &json!({ "path": "tool-session-export" }))
+                .expect("session export should succeed"),
+        )
+        .expect("parse session export output");
+
+        assert_eq!(output.session_id, "session-export-tool");
+        assert_eq!(output.message_count, 2);
+        assert!(output.export_path.ends_with("tool-session-export.txt"));
+
+        let exported = fs::read_to_string(&output.export_path).expect("read exported transcript");
+        assert!(exported.contains("# Conversation Export"));
+        assert!(exported.contains("## 1. user"));
+        assert!(exported.contains("hello from tool export"));
+        assert!(exported.contains("tool export response"));
+
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = fs::remove_dir_all(repo_root);
     }
 
     #[test]
@@ -9800,6 +10729,7 @@ mod tests {
         let aliased_output: serde_json::Value = serde_json::from_str(&aliased).expect("valid json");
         assert_eq!(aliased_output["matches"][0], "Agent");
         assert_eq!(aliased_output["normalized_query"], "agent");
+        assert_eq!(aliased_output["match_details"][0]["aliases"], json!(["AgentTool"]));
 
         let selected_with_alias =
             execute_tool("ToolSearch", &json!({"query": "select:AgentTool,Skill"}))
@@ -9808,6 +10738,27 @@ mod tests {
             serde_json::from_str(&selected_with_alias).expect("valid json");
         assert_eq!(selected_with_alias_output["matches"][0], "Agent");
         assert_eq!(selected_with_alias_output["matches"][1], "Skill");
+
+        let send_message_alias = execute_tool("ToolSearch", &json!({"query": "SendMessageTool"}))
+            .expect("ToolSearch should support archived send-message aliases");
+        let send_message_alias_output: serde_json::Value =
+            serde_json::from_str(&send_message_alias).expect("valid json");
+        assert_eq!(send_message_alias_output["matches"][0], "SendUserMessage");
+        assert_eq!(send_message_alias_output["normalized_query"], "sendmessage");
+        assert_eq!(
+            send_message_alias_output["match_details"][0]["aliases"],
+            json!(["SendMessageTool"])
+        );
+
+        let selected_archived_aliases = execute_tool(
+            "ToolSearch",
+            &json!({"query": "select:ExitPlanModeTool,SendMessageTool"}),
+        )
+        .expect("ToolSearch archived alias select should succeed");
+        let selected_archived_aliases_output: serde_json::Value =
+            serde_json::from_str(&selected_archived_aliases).expect("valid json");
+        assert_eq!(selected_archived_aliases_output["matches"][0], "ExitPlanModeV2Tool");
+        assert_eq!(selected_archived_aliases_output["matches"][1], "SendUserMessage");
     }
 
     #[test]
@@ -10166,6 +11117,7 @@ mod tests {
     struct MockSubagentApiClient {
         calls: usize,
         input_path: String,
+        tool_name: String,
     }
 
     impl runtime::ApiClient for MockSubagentApiClient {
@@ -10177,7 +11129,7 @@ mod tests {
                     Ok(vec![
                         AssistantEvent::ToolUse {
                             id: "tool-1".to_string(),
-                            name: "read_file".to_string(),
+                            name: self.tool_name.clone(),
                             input: json!({ "path": self.input_path }).to_string(),
                         },
                         AssistantEvent::MessageStop,
@@ -10208,6 +11160,7 @@ mod tests {
             MockSubagentApiClient {
                 calls: 0,
                 input_path: path.display().to_string(),
+                tool_name: "read_file".to_string(),
             },
             SubagentToolExecutor::new(BTreeSet::from([String::from("read_file")])),
             agent_permission_policy(),
@@ -10231,6 +11184,48 @@ mod tests {
                 block,
                 runtime::ContentBlock::ToolResult { output, .. }
                     if output.contains("hello from child")
+            )));
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn subagent_runtime_allows_archived_alias_when_canonical_tool_is_allowed() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let path = temp_path("subagent-input-alias.txt");
+        std::fs::write(&path, "hello from archived alias").expect("write input file");
+
+        let mut runtime = ConversationRuntime::new(
+            Session::new(),
+            MockSubagentApiClient {
+                calls: 0,
+                input_path: path.display().to_string(),
+                tool_name: "FileReadTool".to_string(),
+            },
+            SubagentToolExecutor::new(BTreeSet::from([String::from("read_file")])),
+            agent_permission_policy(),
+            vec![String::from("system prompt")],
+        );
+
+        let summary = runtime
+            .run_turn("Inspect the delegated file", None)
+            .expect("subagent loop should allow archived alias");
+
+        assert_eq!(
+            final_assistant_text(&summary),
+            "Scope: completed mock review"
+        );
+        assert!(runtime
+            .session()
+            .messages
+            .iter()
+            .flat_map(|message| message.blocks.iter())
+            .any(|block| matches!(
+                block,
+                runtime::ContentBlock::ToolResult { output, .. }
+                    if output.contains("hello from archived alias")
             )));
 
         let _ = std::fs::remove_file(path);
@@ -10647,6 +11642,62 @@ mod tests {
         assert!(output["sentAt"].as_str().is_some());
         assert_eq!(output["attachments"][0]["isImage"], true);
         let _ = std::fs::remove_file(attachment);
+    }
+
+    #[test]
+    fn brief_tool_alias_uses_brief_execution() {
+        let result = execute_tool(
+            "BriefTool",
+            &json!({
+                "message": "hello from alias",
+                "status": "proactive"
+            }),
+        )
+        .expect("BriefTool should succeed");
+
+        let output: serde_json::Value = serde_json::from_str(&result).expect("json");
+        assert_eq!(output["message"], "hello from alias");
+        assert!(output["sentAt"].as_str().is_some());
+        assert!(output.get("attachments").is_none() || output["attachments"].is_null());
+    }
+
+    #[test]
+    fn archived_tool_aliases_execute_native_implementations() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "clawd-tool-alias-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+
+        let file_path = temp_dir.join("note.txt");
+        std::fs::write(&file_path, "hello from file alias\n").expect("write temp file");
+
+        let read_result = execute_tool(
+            "FileReadTool",
+            &json!({ "path": file_path.display().to_string() }),
+        )
+        .expect("FileReadTool alias should succeed");
+        let read_output: serde_json::Value = serde_json::from_str(&read_result).expect("json");
+        assert_eq!(read_output["file"]["content"], "hello from file alias");
+
+        let message_result = execute_tool(
+            "SendMessageTool",
+            &json!({
+                "message": "hello from archived alias",
+                "status": "normal"
+            }),
+        )
+        .expect("SendMessageTool alias should succeed");
+        let message_output: serde_json::Value =
+            serde_json::from_str(&message_result).expect("json");
+        assert_eq!(message_output["message"], "hello from archived alias");
+        assert!(message_output["sentAt"].as_str().is_some());
+
+        let _ = std::fs::remove_file(file_path);
+        let _ = std::fs::remove_dir(temp_dir);
     }
 
     #[test]
