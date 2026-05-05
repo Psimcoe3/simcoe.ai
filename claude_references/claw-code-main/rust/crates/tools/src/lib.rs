@@ -14,14 +14,13 @@ use runtime::{
     active_worktree_root, clear_active_worktree_root, clear_mcp_oauth_credentials, edit_file,
     effective_current_dir, execute_bash, glob_search, grep_search, load_mcp_oauth_credentials,
     load_system_prompt, mcp_reason_remediation_hint, plan_mode_active, read_file,
-    save_mcp_oauth_credentials, set_active_worktree_root, set_plan_mode_active, write_file,
-    ApiClient, ApiRequest, AssistantEvent, BashCommandInput, ConfigLoader, ContentBlock,
-    ConversationMessage, ConversationRuntime, GrepSearchInput, McpClientTransport,
-    McpRemoteServerConfig, McpServerConfig, McpServerManager, McpWebSocketServerConfig,
-    MessageRole, OAuthRefreshRequest, OAuthTokenSet, PermissionMode, PermissionOutcome,
-    PermissionPolicy, RuntimeConfig, RuntimeError, Session, TokenUsage, ToolError,
-    ToolExecutor, UpstreamProxyBootstrap, upstream_proxy_live_transport_status,
-    upstream_proxy_websocket_probe,
+    save_mcp_oauth_credentials, set_active_worktree_root, set_plan_mode_active,
+    upstream_proxy_live_transport_status, upstream_proxy_websocket_probe, write_file, ApiClient,
+    ApiRequest, AssistantEvent, BashCommandInput, ConfigLoader, ContentBlock, ConversationMessage,
+    ConversationRuntime, GrepSearchInput, McpClientTransport, McpRemoteServerConfig,
+    McpServerConfig, McpServerManager, McpWebSocketServerConfig, MessageRole, OAuthRefreshRequest,
+    OAuthTokenSet, PermissionMode, PermissionOutcome, PermissionPolicy, RuntimeConfig,
+    RuntimeError, Session, TokenUsage, ToolError, ToolExecutor, UpstreamProxyBootstrap,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -152,6 +151,7 @@ pub fn tool_output_schema(tool_name: &str) -> Option<Value> {
         "LSPTool" => Some(lsp_tool_output_schema()),
         "RemoteTriggerTool" => Some(remote_trigger_output_schema()),
         "TeamCreateTool" | "TeamDeleteTool" => Some(team_output_schema()),
+        "TeamListTool" => Some(team_list_output_schema()),
         "CronCreateTool" | "CronDeleteTool" => Some(cron_job_output_schema()),
         "EnterPlanModeTool" | "ExitPlanModeV2Tool" => Some(plan_mode_output_schema()),
         "EnterWorktreeTool" | "ExitWorktreeTool" => Some(worktree_context_output_schema()),
@@ -191,15 +191,13 @@ fn tool_name_aliases(name: &str) -> &'static [&'static str] {
 
 fn resolve_tool_name_alias(requested: &str) -> Option<&'static str> {
     let canonical = canonical_tool_token(requested);
-    mvp_tool_specs()
-        .into_iter()
-        .find_map(|spec| {
-            (canonical_tool_token(spec.name) == canonical
-                || tool_name_aliases(spec.name)
-                    .iter()
-                    .any(|alias| canonical_tool_token(alias) == canonical))
-            .then_some(spec.name)
-        })
+    mvp_tool_specs().into_iter().find_map(|spec| {
+        (canonical_tool_token(spec.name) == canonical
+            || tool_name_aliases(spec.name)
+                .iter()
+                .any(|alias| canonical_tool_token(alias) == canonical))
+        .then_some(spec.name)
+    })
 }
 
 #[must_use]
@@ -862,6 +860,19 @@ fn remote_trigger_output_schema() -> Value {
             "blockerKind",
             "message"
         ],
+        "additionalProperties": false
+    })
+}
+
+fn team_list_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "teams": { "type": "array", "items": team_output_schema() },
+            "total": { "type": "integer", "minimum": 0 },
+            "message": { "type": "string" }
+        },
+        "required": ["teams", "total"],
         "additionalProperties": false
     })
 }
@@ -1867,6 +1878,16 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
             required_permission: PermissionMode::WorkspaceWrite,
         },
         ToolSpec {
+            name: "TeamListTool",
+            description: "List all teams in the local team registry for this workspace.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
             name: "CronCreateTool",
             description: "Register a local cron schedule manifest for later inspection. This does not execute jobs by itself.",
             input_schema: json!({
@@ -2101,9 +2122,7 @@ pub fn execute_tool(name: &str, input: &Value) -> Result<String, String> {
         "WebSearch" => from_value::<WebSearchInput>(input).and_then(run_web_search),
         "TodoWrite" => from_value::<TodoWriteInput>(input).and_then(run_todo_write),
         "Skill" => from_value::<SkillInput>(input).and_then(run_skill),
-        "SessionExportTool" => {
-            from_value::<SessionExportInput>(input).and_then(run_session_export)
-        }
+        "SessionExportTool" => from_value::<SessionExportInput>(input).and_then(run_session_export),
         "Agent" => from_value::<AgentInput>(input).and_then(run_agent),
         "ToolSearch" => from_value::<ToolSearchInput>(input).and_then(run_tool_search),
         "NotebookEdit" => from_value::<NotebookEditInput>(input).and_then(run_notebook_edit),
@@ -2130,6 +2149,7 @@ pub fn execute_tool(name: &str, input: &Value) -> Result<String, String> {
         "RemoteTriggerTool" => from_value::<RemoteTriggerInput>(input).and_then(run_remote_trigger),
         "TeamCreateTool" => from_value::<TeamCreateInput>(input).and_then(run_team_create),
         "TeamDeleteTool" => from_value::<TeamDeleteInput>(input).and_then(run_team_delete),
+        "TeamListTool" => from_value::<TeamListInput>(input).and_then(run_team_list),
         "CronCreateTool" => from_value::<CronCreateInput>(input).and_then(run_cron_create),
         "CronDeleteTool" => from_value::<CronDeleteInput>(input).and_then(run_cron_delete),
         "CronListTool" => from_value::<CronListInput>(input).and_then(run_cron_list),
@@ -2145,7 +2165,9 @@ pub fn execute_tool(name: &str, input: &Value) -> Result<String, String> {
         "TestingPermissionTool" => {
             from_value::<TestingPermissionInput>(input).and_then(run_testing_permission)
         }
-        _ if is_dynamic_mcp_tool_name(resolved_name) => execute_dynamic_mcp_tool(resolved_name, input),
+        _ if is_dynamic_mcp_tool_name(resolved_name) => {
+            execute_dynamic_mcp_tool(resolved_name, input)
+        }
         _ => Err(format!("unsupported tool: {name}")),
     }
 }
@@ -2331,6 +2353,10 @@ fn run_team_create(input: TeamCreateInput) -> Result<String, String> {
 
 fn run_team_delete(input: TeamDeleteInput) -> Result<String, String> {
     execute_team_delete(input)
+}
+
+fn run_team_list(input: TeamListInput) -> Result<String, String> {
+    execute_team_list(input)
 }
 
 fn run_cron_create(input: CronCreateInput) -> Result<String, String> {
@@ -2589,6 +2615,9 @@ struct TeamDeleteInput {
 }
 
 #[derive(Debug, Deserialize)]
+struct TeamListInput {}
+
+#[derive(Debug, Deserialize)]
 struct CronCreateInput {
     schedule: String,
     command: String,
@@ -2813,32 +2842,40 @@ struct TaskOutputOutput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct TeamOutput {
+pub struct TeamOutput {
     #[serde(rename = "teamId")]
-    team_id: String,
-    name: String,
+    pub team_id: String,
+    pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
+    pub description: Option<String>,
     #[serde(rename = "createdAt")]
-    created_at: String,
+    pub created_at: String,
     #[serde(rename = "deletedAt", skip_serializing_if = "Option::is_none")]
-    deleted_at: Option<String>,
+    pub deleted_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    message: Option<String>,
+    pub message: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct CronJobOutput {
+pub struct CronJobOutput {
     #[serde(rename = "cronId")]
-    cron_id: String,
-    schedule: String,
-    command: String,
+    pub cron_id: String,
+    pub schedule: String,
+    pub command: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
+    pub description: Option<String>,
     #[serde(rename = "createdAt")]
-    created_at: String,
+    pub created_at: String,
     #[serde(rename = "deletedAt", skip_serializing_if = "Option::is_none")]
-    deleted_at: Option<String>,
+    pub deleted_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct TeamListOutput {
+    teams: Vec<TeamOutput>,
+    total: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<String>,
 }
@@ -4365,9 +4402,27 @@ fn discover_mcp_tools_for_server(
 }
 
 fn dynamic_mcp_catalog(allowed_tools: Option<&BTreeSet<String>>) -> DynamicMcpCatalog {
-    if allowed_tools.is_some_and(|allowed| !allowed.contains("MCPTool")) {
+    // When an allowlist is present, skip the full MCP catalog unless MCPTool (the family gate)
+    // is allowed or at least one explicit `mcp__server__tool` name is listed.
+    let family_open = allowed_tools.is_none_or(|allowed| {
+        allowed
+            .iter()
+            .any(|entry| resolve_tool_name_alias(entry).unwrap_or(entry) == "MCPTool")
+    });
+    let explicit_names: Vec<&str> = allowed_tools
+        .map(|allowed| {
+            allowed
+                .iter()
+                .filter(|entry| is_dynamic_mcp_tool_name(entry.as_str()))
+                .map(String::as_str)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if !family_open && explicit_names.is_empty() {
         return DynamicMcpCatalog::default();
     }
+
     let Ok(config) = load_runtime_config_for_tools() else {
         return DynamicMcpCatalog::default();
     };
@@ -4388,6 +4443,15 @@ fn dynamic_mcp_catalog(allowed_tools: Option<&BTreeSet<String>>) -> DynamicMcpCa
     catalog
         .pending_servers
         .dedup_by(|left, right| left.server == right.server);
+
+    // When only explicit dynamic names were provided (not the full family gate), filter the
+    // discovered tools to those exact qualified names.
+    if !family_open && !explicit_names.is_empty() {
+        catalog
+            .tools
+            .retain(|tool| explicit_names.contains(&tool.qualified_name.as_str()));
+    }
+
     catalog
 }
 
@@ -5339,8 +5403,8 @@ fn execute_skill(input: SkillInput) -> Result<SkillOutput, String> {
 }
 
 fn execute_session_export(input: SessionExportInput) -> Result<SessionExportResult, String> {
-    let (handle, export_path, message_count) = runtime::export_active_session(input.path.as_deref())
-        .map_err(|error| error.to_string())?;
+    let (handle, export_path, message_count) =
+        runtime::export_active_session(input.path.as_deref()).map_err(|error| error.to_string())?;
 
     Ok(SessionExportResult {
         session_id: handle.id,
@@ -6071,12 +6135,16 @@ impl ToolExecutor for SubagentToolExecutor {
     }
 }
 
-fn is_dynamic_mcp_tool_name(name: &str) -> bool {
+pub fn is_dynamic_mcp_tool_name(name: &str) -> bool {
     name.starts_with("mcp__")
 }
 
 pub fn tool_name_is_allowed(allowed_tools: &BTreeSet<String>, tool_name: &str) -> bool {
     if is_dynamic_mcp_tool_name(tool_name) {
+        // An exact match for the qualified name takes priority over the family-level MCPTool gate.
+        if allowed_tools.contains(tool_name) {
+            return true;
+        }
         return allowed_tools
             .iter()
             .any(|allowed| resolve_tool_name_alias(allowed).unwrap_or(allowed) == "MCPTool");
@@ -6620,7 +6688,7 @@ fn write_team_manifest(manifest: &TeamOutput) -> Result<(), String> {
     .map_err(|error| error.to_string())
 }
 
-fn list_cron_manifests() -> Result<Vec<CronJobOutput>, String> {
+pub fn list_cron_manifests() -> Result<Vec<CronJobOutput>, String> {
     let store_dir = cron_store_dir()?;
     if !store_dir.exists() {
         return Ok(Vec::new());
@@ -6650,7 +6718,7 @@ fn list_cron_manifests() -> Result<Vec<CronJobOutput>, String> {
     Ok(crons)
 }
 
-fn list_team_manifests() -> Result<Vec<TeamOutput>, String> {
+pub fn list_team_manifests() -> Result<Vec<TeamOutput>, String> {
     let store_dir = team_store_dir()?;
     if !store_dir.exists() {
         return Ok(Vec::new());
@@ -6680,7 +6748,7 @@ fn list_team_manifests() -> Result<Vec<TeamOutput>, String> {
     Ok(teams)
 }
 
-fn load_cron_manifest(requested: &str) -> Result<CronJobOutput, String> {
+pub fn load_cron_manifest(requested: &str) -> Result<CronJobOutput, String> {
     let requested = requested.trim();
     if requested.is_empty() {
         return Err(String::from("cron id must not be empty"));
@@ -6715,7 +6783,7 @@ fn load_cron_manifest(requested: &str) -> Result<CronJobOutput, String> {
     }
 }
 
-fn load_team_manifest(requested: &str) -> Result<TeamOutput, String> {
+pub fn load_team_manifest(requested: &str) -> Result<TeamOutput, String> {
     let requested = requested.trim();
     if requested.is_empty() {
         return Err(String::from("team id must not be empty"));
@@ -7213,7 +7281,8 @@ fn execute_remote_trigger(input: RemoteTriggerInput) -> Result<String, String> {
         triggered: false,
         remote_enabled: bootstrap.remote.enabled,
         session_id: bootstrap.remote.session_id.clone(),
-        base_url: (!bootstrap.remote.base_url.is_empty()).then(|| bootstrap.remote.base_url.clone()),
+        base_url: (!bootstrap.remote.base_url.is_empty())
+            .then(|| bootstrap.remote.base_url.clone()),
         path_ready: live_status.path_ready,
         blocker_kind,
         blocker_detail,
@@ -7254,6 +7323,25 @@ fn execute_team_delete(input: TeamDeleteInput) -> Result<String, String> {
         "removed from the local team registry; no backend collaboration service was managing this team",
     ));
     to_pretty_json(manifest)
+}
+
+fn execute_team_list(_input: TeamListInput) -> Result<String, String> {
+    let teams = list_team_manifests()?;
+    let total = teams.len();
+    let message = if total == 0 {
+        Some(String::from(
+            "local team registry is empty; no backend collaboration service is active",
+        ))
+    } else {
+        Some(String::from(
+            "local team registry only; no backend collaboration service or multi-user sync is active",
+        ))
+    };
+    to_pretty_json(TeamListOutput {
+        teams,
+        total,
+        message,
+    })
 }
 
 fn execute_cron_create(input: CronCreateInput) -> Result<String, String> {
@@ -7409,14 +7497,14 @@ fn execute_testing_permission(input: TestingPermissionInput) -> Result<String, S
         .fold(PermissionPolicy::new(current_mode), |policy, spec| {
             policy.with_tool_requirement(spec.name, spec.required_permission)
         });
-    let required_mode = policy.required_mode_for(resolved_tool);
+    let required_mode = policy.required_mode_for(&resolved_tool);
     let request_input = serde_json::to_string(&json!({
         "action": input.action,
         "path": input.path,
         "toolName": resolved_tool,
     }))
     .map_err(|error| error.to_string())?;
-    let authorization = policy.authorize(resolved_tool, &request_input, None);
+    let authorization = policy.authorize(&resolved_tool, &request_input, None);
     let (outcome, reason) =
         classify_testing_permission_outcome(current_mode, required_mode, authorization);
 
@@ -7459,7 +7547,7 @@ fn default_testing_permission_mode() -> PermissionMode {
         .unwrap_or(PermissionMode::DangerFullAccess)
 }
 
-fn resolve_testing_permission_tool_name(action: &str) -> Option<&'static str> {
+fn resolve_testing_permission_tool_name(action: &str) -> Option<String> {
     let token = normalize_testing_permission_token(action);
     let alias = match token.as_str() {
         "read" | "open" | "cat" => Some("read_file"),
@@ -7474,16 +7562,20 @@ fn resolve_testing_permission_tool_name(action: &str) -> Option<&'static str> {
         _ => None,
     };
     if alias.is_some() {
-        return alias;
+        return alias.map(str::to_string);
+    }
+
+    if is_dynamic_mcp_tool_name(action.trim()) {
+        return Some(action.trim().to_string());
     }
 
     let resolved = resolve_tool_name_alias(action);
     if resolved.is_some() {
-        return resolved;
+        return resolved.map(str::to_string);
     }
 
     mvp_tool_specs().into_iter().find_map(|spec| {
-        (normalize_testing_permission_token(spec.name) == token).then_some(spec.name)
+        (normalize_testing_permission_token(spec.name) == token).then_some(spec.name.to_string())
     })
 }
 
@@ -8140,12 +8232,12 @@ mod tests {
         agent_permission_policy, allowed_tools_for_subagent, execute_agent_with_spawn,
         execute_tool, final_assistant_text, list_agent_profiles, list_agent_tasks, list_skills,
         load_agent_profile, load_agent_task, load_skill, mvp_tool_specs,
-        persist_agent_terminal_state, runtime_tool_definitions, AgentInput, AgentJob,
-        SessionExportResult, SubagentToolExecutor,
+        persist_agent_terminal_state, runtime_tool_definitions, tool_name_is_allowed, AgentInput,
+        AgentJob, SessionExportResult, SubagentToolExecutor,
     };
     use runtime::{
-        clear_active_worktree_root, set_plan_mode_active, ApiRequest, AssistantEvent,
-        ContentBlock, ConversationMessage, ConversationRuntime, RuntimeError, Session,
+        clear_active_worktree_root, set_plan_mode_active, ApiRequest, AssistantEvent, ContentBlock,
+        ConversationMessage, ConversationRuntime, RuntimeError, Session,
     };
     use serde_json::json;
     use tungstenite::{accept_hdr, Message as WebSocketMessage};
@@ -8192,8 +8284,8 @@ mod tests {
         let address = listener.local_addr().expect("local addr");
         let handle = thread::spawn(move || {
             let (stream, _) = listener.accept().expect("accept websocket client");
-            let mut websocket = accept_hdr(stream, accept_remote_probe_request)
-                .expect("accept websocket");
+            let mut websocket =
+                accept_hdr(stream, accept_remote_probe_request).expect("accept websocket");
             let _ = websocket.close(None);
         });
         (format!("http://{address}"), handle)
@@ -8351,6 +8443,7 @@ mod tests {
         assert!(names.contains(&"RemoteTriggerTool"));
         assert!(names.contains(&"TeamCreateTool"));
         assert!(names.contains(&"TeamDeleteTool"));
+        assert!(names.contains(&"TeamListTool"));
         assert!(names.contains(&"CronCreateTool"));
         assert!(names.contains(&"CronDeleteTool"));
         assert!(names.contains(&"CronListTool"));
@@ -8567,7 +8660,10 @@ mod tests {
 
         let send_schema = tool_output_schema("SendUserMessage")
             .expect("SendUserMessage should have an output schema");
-        assert_eq!(send_schema["properties"]["message"]["type"], json!("string"));
+        assert_eq!(
+            send_schema["properties"]["message"]["type"],
+            json!("string")
+        );
         assert_eq!(send_schema["properties"]["sentAt"]["type"], json!("string"));
         assert_eq!(
             send_schema["properties"]["attachments"]["items"]["required"],
@@ -8599,30 +8695,37 @@ mod tests {
     fn notebook_edit_output_schema_is_advertised() {
         use crate::tool_output_schema;
 
-        let schema = tool_output_schema("NotebookEdit")
-            .expect("NotebookEdit should have an output schema");
+        let schema =
+            tool_output_schema("NotebookEdit").expect("NotebookEdit should have an output schema");
         assert_eq!(schema["properties"]["new_source"]["type"], json!("string"));
         assert_eq!(schema["properties"]["language"]["type"], json!("string"));
-        assert_eq!(schema["properties"]["edit_mode"]["enum"], json!(["replace", "insert", "delete"]));
+        assert_eq!(
+            schema["properties"]["edit_mode"]["enum"],
+            json!(["replace", "insert", "delete"])
+        );
     }
 
     #[test]
     fn config_output_schema_is_advertised() {
         use crate::tool_output_schema;
 
-        let schema =
-            tool_output_schema("Config").expect("Config should have an output schema");
+        let schema = tool_output_schema("Config").expect("Config should have an output schema");
         assert_eq!(schema["properties"]["success"]["type"], json!("boolean"));
-        assert_eq!(schema["properties"]["operation"]["enum"], json!(["get", "set", null]));
-        assert_eq!(schema["properties"]["error"]["type"], json!(["string", "null"]));
+        assert_eq!(
+            schema["properties"]["operation"]["enum"],
+            json!(["get", "set", null])
+        );
+        assert_eq!(
+            schema["properties"]["error"]["type"],
+            json!(["string", "null"])
+        );
     }
 
     #[test]
     fn agent_output_schema_matches_task_manifest_schema() {
         use crate::tool_output_schema;
 
-        let agent_schema =
-            tool_output_schema("Agent").expect("Agent should have an output schema");
+        let agent_schema = tool_output_schema("Agent").expect("Agent should have an output schema");
         let task_schema = tool_output_schema("TaskCreateTool")
             .expect("TaskCreateTool should have an output schema");
         assert_eq!(agent_schema, task_schema);
@@ -8652,7 +8755,10 @@ mod tests {
         let schema = tool_output_schema("Skill").expect("Skill should have an output schema");
         assert_eq!(schema["properties"]["skill"]["type"], json!("string"));
         assert_eq!(schema["properties"]["path"]["type"], json!("string"));
-        assert_eq!(schema["properties"]["args"]["type"], json!(["string", "null"]));
+        assert_eq!(
+            schema["properties"]["args"]["type"],
+            json!(["string", "null"])
+        );
         assert_eq!(schema["properties"]["prompt"]["type"], json!("string"));
     }
 
@@ -8660,8 +8766,7 @@ mod tests {
     fn web_fetch_output_schema_is_advertised() {
         use crate::tool_output_schema;
 
-        let schema =
-            tool_output_schema("WebFetch").expect("WebFetch should have an output schema");
+        let schema = tool_output_schema("WebFetch").expect("WebFetch should have an output schema");
         assert_eq!(schema["properties"]["bytes"]["type"], json!("integer"));
         assert_eq!(schema["properties"]["code"]["type"], json!("integer"));
         assert_eq!(schema["properties"]["codeText"]["type"], json!("string"));
@@ -8675,7 +8780,10 @@ mod tests {
         let schema = tool_output_schema("StructuredOutput")
             .expect("StructuredOutput should have an output schema");
         assert_eq!(schema["properties"]["data"]["type"], json!("string"));
-        assert_eq!(schema["properties"]["structured_output"]["type"], json!("object"));
+        assert_eq!(
+            schema["properties"]["structured_output"]["type"],
+            json!("object")
+        );
     }
 
     #[test]
@@ -8696,7 +8804,10 @@ mod tests {
             tool_output_schema("WebSearch").expect("WebSearch should have an output schema");
         assert_eq!(schema["properties"]["query"]["type"], json!("string"));
         assert_eq!(schema["properties"]["results"]["type"], json!("array"));
-        assert_eq!(schema["properties"]["durationSeconds"]["type"], json!("number"));
+        assert_eq!(
+            schema["properties"]["durationSeconds"]["type"],
+            json!("number")
+        );
     }
 
     #[test]
@@ -8704,7 +8815,10 @@ mod tests {
         use crate::tool_output_schema;
 
         let schema = tool_output_schema("Sleep").expect("Sleep should have an output schema");
-        assert_eq!(schema["properties"]["duration_ms"]["type"], json!("integer"));
+        assert_eq!(
+            schema["properties"]["duration_ms"]["type"],
+            json!("integer")
+        );
         assert_eq!(schema["properties"]["message"]["type"], json!("string"));
     }
 
@@ -8728,7 +8842,10 @@ mod tests {
         assert_eq!(schema["properties"]["sessionId"]["type"], json!("string"));
         assert_eq!(schema["properties"]["sessionPath"]["type"], json!("string"));
         assert_eq!(schema["properties"]["exportPath"]["type"], json!("string"));
-        assert_eq!(schema["properties"]["messageCount"]["type"], json!("integer"));
+        assert_eq!(
+            schema["properties"]["messageCount"]["type"],
+            json!("integer")
+        );
     }
 
     #[test]
@@ -8737,27 +8854,45 @@ mod tests {
 
         let bash_schema = tool_output_schema("bash").expect("bash should have an output schema");
         assert_eq!(bash_schema["properties"]["stdout"]["type"], json!("string"));
-        assert_eq!(bash_schema["properties"]["interrupted"]["type"], json!("boolean"));
+        assert_eq!(
+            bash_schema["properties"]["interrupted"]["type"],
+            json!("boolean")
+        );
 
         let read_schema =
             tool_output_schema("read_file").expect("read_file should have an output schema");
-        assert_eq!(read_schema["properties"]["file"]["properties"]["filePath"]["type"], json!("string"));
+        assert_eq!(
+            read_schema["properties"]["file"]["properties"]["filePath"]["type"],
+            json!("string")
+        );
 
         let write_schema =
             tool_output_schema("write_file").expect("write_file should have an output schema");
-        assert_eq!(write_schema["properties"]["type"]["enum"], json!(["create", "update"]));
+        assert_eq!(
+            write_schema["properties"]["type"]["enum"],
+            json!(["create", "update"])
+        );
 
         let edit_schema =
             tool_output_schema("edit_file").expect("edit_file should have an output schema");
-        assert_eq!(edit_schema["properties"]["replaceAll"]["type"], json!("boolean"));
+        assert_eq!(
+            edit_schema["properties"]["replaceAll"]["type"],
+            json!("boolean")
+        );
 
-        let glob_schema = tool_output_schema("glob_search")
-            .expect("glob_search should have an output schema");
-        assert_eq!(glob_schema["properties"]["numFiles"]["type"], json!("integer"));
+        let glob_schema =
+            tool_output_schema("glob_search").expect("glob_search should have an output schema");
+        assert_eq!(
+            glob_schema["properties"]["numFiles"]["type"],
+            json!("integer")
+        );
 
-        let grep_schema = tool_output_schema("grep_search")
-            .expect("grep_search should have an output schema");
-        assert_eq!(grep_schema["properties"]["numMatches"]["type"], json!(["integer", "null"]));
+        let grep_schema =
+            tool_output_schema("grep_search").expect("grep_search should have an output schema");
+        assert_eq!(
+            grep_schema["properties"]["numMatches"]["type"],
+            json!(["integer", "null"])
+        );
 
         let powershell_schema = tool_output_schema("PowerShell")
             .expect("PowerShell should share the bash output schema");
@@ -8802,6 +8937,7 @@ mod tests {
             "RemoteTriggerTool",
             "TeamCreateTool",
             "TeamDeleteTool",
+            "TeamListTool",
             "CronCreateTool",
             "CronDeleteTool",
             "CronListTool",
@@ -8990,8 +9126,11 @@ mod tests {
         runtime::set_active_session_handle(&handle).expect("set active session");
 
         let output: SessionExportResult = serde_json::from_str(
-            &execute_tool("SessionExportTool", &json!({ "path": "tool-session-export" }))
-                .expect("session export should succeed"),
+            &execute_tool(
+                "SessionExportTool",
+                &json!({ "path": "tool-session-export" }),
+            )
+            .expect("session export should succeed"),
         )
         .expect("parse session export output");
 
@@ -9188,6 +9327,17 @@ mod tests {
         }));
         assert!(dir.join(format!("{team_id}.json")).exists());
 
+        // list after create should include the team
+        let listed: serde_json::Value =
+            serde_json::from_str(&execute_tool("TeamListTool", &json!({})).unwrap()).unwrap();
+        assert_eq!(listed["total"], json!(1));
+        let listed_teams = listed["teams"].as_array().unwrap();
+        assert_eq!(listed_teams.len(), 1);
+        assert_eq!(listed_teams[0]["teamId"].as_str(), Some(team_id));
+        assert!(listed["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("local team registry")));
+
         let deleted: serde_json::Value = serde_json::from_str(
             &execute_tool("TeamDeleteTool", &json!({ "team_id": team_id })).unwrap(),
         )
@@ -9199,6 +9349,15 @@ mod tests {
             .as_str()
             .is_some_and(|message| message.contains("removed from the local team registry")));
         assert!(!dir.join(format!("{team_id}.json")).exists());
+
+        // list after delete should be empty
+        let listed_after: serde_json::Value =
+            serde_json::from_str(&execute_tool("TeamListTool", &json!({})).unwrap()).unwrap();
+        assert_eq!(listed_after["total"], json!(0));
+        assert_eq!(listed_after["teams"].as_array().unwrap().len(), 0);
+        assert!(listed_after["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("empty")));
 
         std::env::remove_var("CLAWD_TEAM_STORE");
         let _ = std::fs::remove_dir_all(&dir);
@@ -9304,14 +9463,20 @@ mod tests {
 
         let lsp_schema = tool_output_schema("LSPTool").unwrap();
         assert_eq!(lsp_schema["properties"]["command"]["type"], json!("string"));
-        assert_eq!(lsp_schema["properties"]["connected"]["type"], json!("boolean"));
+        assert_eq!(
+            lsp_schema["properties"]["connected"]["type"],
+            json!("boolean")
+        );
         assert_eq!(
             lsp_schema["properties"]["reasonKind"]["type"],
             json!("string")
         );
 
         let remote_schema = tool_output_schema("RemoteTriggerTool").unwrap();
-        assert_eq!(remote_schema["properties"]["event"]["type"], json!("string"));
+        assert_eq!(
+            remote_schema["properties"]["event"]["type"],
+            json!("string")
+        );
         assert_eq!(
             remote_schema["properties"]["blockerKind"]["type"],
             json!("string")
@@ -9328,6 +9493,16 @@ mod tests {
         );
         assert_eq!(
             cron_list_schema["properties"]["total"]["type"],
+            json!("integer")
+        );
+
+        let team_list_schema = tool_output_schema("TeamListTool").unwrap();
+        assert_eq!(
+            team_list_schema["properties"]["teams"]["type"],
+            json!("array")
+        );
+        assert_eq!(
+            team_list_schema["properties"]["total"]["type"],
             json!("integer")
         );
 
@@ -9880,6 +10055,26 @@ mod tests {
         assert!(definitions
             .iter()
             .any(|tool| tool.name == "mcp__vendor__echo"));
+
+        let lowered_allowed = BTreeSet::from([String::from("mcptool")]);
+        let filtered_definitions = runtime_tool_definitions(Some(&lowered_allowed));
+        assert!(filtered_definitions
+            .iter()
+            .any(|tool| tool.name == "MCPTool"));
+        assert!(filtered_definitions
+            .iter()
+            .any(|tool| tool.name == "mcp__vendor__echo"));
+
+        let permission = execute_tool(
+            "TestingPermissionTool",
+            &json!({ "action": "mcp__vendor__echo" }),
+        )
+        .expect("dynamic MCP canonical names should resolve in TestingPermissionTool");
+        let permission: serde_json::Value =
+            serde_json::from_str(&permission).expect("valid permission json");
+        assert_eq!(permission["toolName"], json!("mcp__vendor__echo"));
+        assert_eq!(permission["requiredMode"], json!("danger-full-access"));
+        assert_eq!(permission["outcome"], json!("allow"));
 
         let search = execute_tool("ToolSearch", &json!({ "query": "vendor echo" }))
             .expect("search dynamic MCP tools");
@@ -10735,7 +10930,10 @@ mod tests {
         let aliased_output: serde_json::Value = serde_json::from_str(&aliased).expect("valid json");
         assert_eq!(aliased_output["matches"][0], "Agent");
         assert_eq!(aliased_output["normalized_query"], "agent");
-        assert_eq!(aliased_output["match_details"][0]["aliases"], json!(["AgentTool"]));
+        assert_eq!(
+            aliased_output["match_details"][0]["aliases"],
+            json!(["AgentTool"])
+        );
 
         let selected_with_alias =
             execute_tool("ToolSearch", &json!({"query": "select:AgentTool,Skill"}))
@@ -10763,8 +10961,14 @@ mod tests {
         .expect("ToolSearch archived alias select should succeed");
         let selected_archived_aliases_output: serde_json::Value =
             serde_json::from_str(&selected_archived_aliases).expect("valid json");
-        assert_eq!(selected_archived_aliases_output["matches"][0], "ExitPlanModeV2Tool");
-        assert_eq!(selected_archived_aliases_output["matches"][1], "SendUserMessage");
+        assert_eq!(
+            selected_archived_aliases_output["matches"][0],
+            "ExitPlanModeV2Tool"
+        );
+        assert_eq!(
+            selected_archived_aliases_output["matches"][1],
+            "SendUserMessage"
+        );
     }
 
     #[test]
@@ -11874,6 +12078,45 @@ printf 'pwsh:%s' "$1"
         let _ = std::fs::remove_dir_all(empty_dir);
 
         assert!(err.contains("PowerShell executable not found"));
+    }
+
+    #[test]
+    fn tool_name_is_allowed_accepts_exact_dynamic_mcp_name() {
+        // An exact qualified mcp__server__tool name in the allowlist should pass through
+        // even when the MCPTool family gate is absent.
+        let allowed_exact: BTreeSet<String> = ["mcp__vendor__echo"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        // The exact match should be allowed.
+        assert!(
+            tool_name_is_allowed(&allowed_exact, "mcp__vendor__echo"),
+            "exact dynamic MCP name should be allowed when present in allowlist"
+        );
+
+        // A different dynamic tool on a different server should NOT be allowed.
+        assert!(
+            !tool_name_is_allowed(&allowed_exact, "mcp__other__tool"),
+            "unlisted dynamic MCP tool should not be allowed when allowlist only has mcp__vendor__echo"
+        );
+
+        // MCPTool static spec should also NOT be allowed by this allowlist.
+        assert!(
+            !tool_name_is_allowed(&allowed_exact, "MCPTool"),
+            "MCPTool family gate should not be allowed by an exact dynamic-name allowlist"
+        );
+
+        // An allowlist containing the family gate should allow any dynamic tool.
+        let allowed_family: BTreeSet<String> = ["MCPTool"].iter().map(|s| s.to_string()).collect();
+        assert!(
+            tool_name_is_allowed(&allowed_family, "mcp__vendor__echo"),
+            "MCPTool family gate should allow any dynamic MCP tool"
+        );
+        assert!(
+            tool_name_is_allowed(&allowed_family, "mcp__other__tool"),
+            "MCPTool family gate should allow all dynamic MCP tools"
+        );
     }
 
     struct TestServer {

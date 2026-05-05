@@ -15,19 +15,19 @@ use compat_harness::{
     RemoteCatalog, RemoteCommandSummary, SkillCatalog, ToolCatalog,
 };
 use runtime::{
-    credentials_path, inherited_upstream_proxy_env, load_oauth_credentials,
-    mcp_client_transport_display_name, mcp_reason_remediation_hint, mcp_server_auth_status,
-    mcp_transport_display_name, ConfigSource, ContentBlock, McpClientAuth, McpClientBootstrap,
-    McpClientTransport, McpServerAuthStatusSnapshot, ProjectContext, RemoteSessionContext,
-    ResolvedPermissionMode, Session, TokenUsage, UpstreamProxyBootstrap,
+    auto_compaction_threshold_from_env, credentials_path, inherited_upstream_proxy_env,
+    load_oauth_credentials, mcp_client_transport_display_name, mcp_reason_remediation_hint,
+    mcp_server_auth_status, mcp_transport_display_name, ConfigSource, ContentBlock, McpClientAuth,
+    McpClientBootstrap, McpClientTransport, McpServerAuthStatusSnapshot, ProjectContext,
+    RemoteSessionContext, ResolvedPermissionMode, Session, TokenUsage, UpstreamProxyBootstrap,
     UpstreamProxyWebSocketProbe,
 };
 use tools::{
-    inspectable_tool_catalog, list_agent_profiles, list_agent_tasks, list_skills,
-    load_agent_profile, load_agent_task, load_skill, matches_tool_request,
-    AgentTaskSummary, InspectableTool, InspectableToolSource, LoadedAgentProfile,
-    LoadedAgentTask, LoadedSkill,
-    PendingMcpServerDiscovery, SkillSummary,
+    inspectable_tool_catalog, list_agent_profiles, list_agent_tasks, list_cron_manifests,
+    list_skills, list_team_manifests, load_agent_profile, load_agent_task, load_cron_manifest,
+    load_skill, load_team_manifest, matches_tool_request, AgentTaskSummary, CronJobOutput,
+    InspectableTool, InspectableToolSource, LoadedAgentProfile, LoadedAgentTask, LoadedSkill,
+    PendingMcpServerDiscovery, SkillSummary, TeamOutput,
 };
 
 #[derive(Debug, Clone)]
@@ -271,6 +271,18 @@ pub(crate) struct TasksReportSnapshot {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct TeamsReportSnapshot {
+    pub(crate) selected_team: Option<TeamOutput>,
+    pub(crate) teams: Vec<TeamOutput>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CronsReportSnapshot {
+    pub(crate) selected_cron: Option<CronJobOutput>,
+    pub(crate) crons: Vec<CronJobOutput>,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct ToolsReportSnapshot {
     pub(crate) requested_tool: Option<String>,
     pub(crate) selected_rust_tool: Option<InspectableTool>,
@@ -410,6 +422,66 @@ pub(crate) fn format_cost_report(usage: TokenUsage) -> String {
         usage.cache_creation_input_tokens,
         usage.cache_read_input_tokens,
         usage.total_tokens(),
+    )
+}
+
+pub(crate) fn format_usage_report(usage: StatusUsage) -> String {
+    format!(
+        "Usage
+  Messages         {}
+  Turns            {}
+  Latest input     {}
+  Latest output    {}
+  Latest total     {}
+
+Cumulative
+  Input tokens     {}
+  Output tokens    {}
+  Cache create     {}
+  Cache read       {}
+  Total tokens     {}",
+        usage.message_count,
+        usage.turns,
+        usage.latest.input_tokens,
+        usage.latest.output_tokens,
+        usage.latest.total_tokens(),
+        usage.cumulative.input_tokens,
+        usage.cumulative.output_tokens,
+        usage.cumulative.cache_creation_input_tokens,
+        usage.cumulative.cache_read_input_tokens,
+        usage.cumulative.total_tokens(),
+    )
+}
+
+fn context_window_for_model(model: &str) -> u32 {
+    let normalized = model.to_ascii_lowercase();
+    if normalized.contains("qwen3") || normalized.contains("qwen-3") {
+        return 128_000;
+    }
+    200_000
+}
+
+pub(crate) fn format_context_report(usage: TokenUsage, model: &str) -> String {
+    let window = context_window_for_model(model);
+    let threshold = auto_compaction_threshold_from_env();
+    let used = usage.input_tokens;
+    let remaining = window.saturating_sub(used);
+    let utilization = if window > 0 {
+        f64::from(used) / f64::from(window) * 100.0
+    } else {
+        0.0
+    };
+    format!(
+        "Context
+  Model            {model}
+  Context window   {window:>7} tokens
+  Auto-compact at  {threshold:>7} tokens
+
+Usage
+  Input tokens     {used:>7}
+  Remaining        {remaining:>7}
+  Utilization      {utilization:.1}%",
+        model = brand_model_name(model),
     )
 }
 
@@ -1091,20 +1163,26 @@ pub(crate) fn render_agents_report_from_snapshot(snapshot: &AgentsReportSnapshot
     }
 
     let profile_count = snapshot.profiles.len();
-    let name_width = snapshot
-        .profiles
-        .iter()
-        .map(|profile| profile.name.len())
-        .max()
-        .unwrap_or(6)
-        + 2;
-    let entries = snapshot
+    let display_names = snapshot
         .profiles
         .iter()
         .map(|profile| {
+            if profile.aliases.is_empty() {
+                profile.name.clone()
+            } else {
+                format!("{} ({})", profile.name, profile.aliases.join(", "))
+            }
+        })
+        .collect::<Vec<_>>();
+    let name_width = display_names.iter().map(String::len).max().unwrap_or(6) + 2;
+    let entries = snapshot
+        .profiles
+        .iter()
+        .zip(display_names.iter())
+        .map(|(profile, display_name)| {
             format!(
                 "  {name:<name_width$}{tool_count:>2} tools  {recent:>2} recent  {description}",
-                name = profile.name,
+                name = display_name,
                 tool_count = profile.tool_count,
                 recent = profile.recent_task_count,
                 description = profile.description,
@@ -2955,5 +3033,162 @@ pub(crate) fn render_version_report() -> String {
         "Claw Code\n  Version          {}\n  Git SHA          {git_sha}\n  Target           {target}\n  Build date       {}",
         crate::VERSION,
         crate::DEFAULT_DATE,
+    )
+}
+
+pub(crate) fn teams_report_snapshot(
+    team: Option<&str>,
+) -> Result<TeamsReportSnapshot, Box<dyn std::error::Error>> {
+    let requested = trimmed_non_empty(team);
+    if let Some(requested) = requested {
+        let loaded = load_team_manifest(requested).map_err(not_found_io_error)?;
+        return Ok(TeamsReportSnapshot {
+            selected_team: Some(loaded),
+            teams: Vec::new(),
+        });
+    }
+    let teams = list_team_manifests().map_err(io::Error::other)?;
+    Ok(TeamsReportSnapshot {
+        selected_team: None,
+        teams,
+    })
+}
+
+pub(crate) fn render_teams_report_from_snapshot(snapshot: &TeamsReportSnapshot) -> String {
+    if let Some(team) = snapshot.selected_team.as_ref() {
+        let description = team.description.as_deref().unwrap_or("<none>");
+        let deleted = team.deleted_at.as_deref().unwrap_or("<active>");
+        return format!(
+            "Team\n  Id               {id}\n  Name             {name}\n  Description      {description}\n  Created          {created}\n  Deleted          {deleted}",
+            id = team.team_id,
+            name = team.name,
+            description = description,
+            created = team.created_at,
+            deleted = deleted,
+        );
+    }
+
+    if snapshot.teams.is_empty() {
+        return String::from(
+            "Teams\n  Registered teams  0\n  Usage            /teams <id>\n  Detail           no registered teams found",
+        );
+    }
+
+    let team_count = snapshot.teams.len();
+    let name_width = snapshot
+        .teams
+        .iter()
+        .map(|team| team.name.len())
+        .max()
+        .unwrap_or(4)
+        + 2;
+    let entries = snapshot
+        .teams
+        .iter()
+        .map(|team| {
+            let description = team.description.as_deref().unwrap_or("");
+            format!(
+                "  {id:<24}{name:<name_width$}{description}",
+                id = team.team_id,
+                name = team.name,
+                name_width = name_width,
+                description = description,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        "Teams\n  Registered teams  {team_count}\n  Usage            /teams <id>\n\nEntries\n{entries}",
+        team_count = team_count,
+        entries = entries,
+    )
+}
+
+pub(crate) fn render_teams_report(
+    team: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    render_snapshot_report(
+        || teams_report_snapshot(team),
+        render_teams_report_from_snapshot,
+    )
+}
+
+pub(crate) fn crons_report_snapshot(
+    cron: Option<&str>,
+) -> Result<CronsReportSnapshot, Box<dyn std::error::Error>> {
+    let requested = trimmed_non_empty(cron);
+    if let Some(requested) = requested {
+        let loaded = load_cron_manifest(requested).map_err(not_found_io_error)?;
+        return Ok(CronsReportSnapshot {
+            selected_cron: Some(loaded),
+            crons: Vec::new(),
+        });
+    }
+    let crons = list_cron_manifests().map_err(io::Error::other)?;
+    Ok(CronsReportSnapshot {
+        selected_cron: None,
+        crons,
+    })
+}
+
+pub(crate) fn render_crons_report_from_snapshot(snapshot: &CronsReportSnapshot) -> String {
+    if let Some(cron) = snapshot.selected_cron.as_ref() {
+        let description = cron.description.as_deref().unwrap_or("<none>");
+        let deleted = cron.deleted_at.as_deref().unwrap_or("<active>");
+        return format!(
+            "Cron\n  Id               {id}\n  Schedule         {schedule}\n  Command          {command}\n  Description      {description}\n  Created          {created}\n  Deleted          {deleted}",
+            id = cron.cron_id,
+            schedule = cron.schedule,
+            command = cron.command,
+            description = description,
+            created = cron.created_at,
+            deleted = deleted,
+        );
+    }
+
+    if snapshot.crons.is_empty() {
+        return String::from(
+            "Crons\n  Registered crons  0\n  Usage            /crons <id>\n  Detail           no registered cron jobs found",
+        );
+    }
+
+    let cron_count = snapshot.crons.len();
+    let schedule_width = snapshot
+        .crons
+        .iter()
+        .map(|cron| cron.schedule.len())
+        .max()
+        .unwrap_or(8)
+        + 2;
+    let entries = snapshot
+        .crons
+        .iter()
+        .map(|cron| {
+            let description = cron.description.as_deref().unwrap_or(&cron.command);
+            format!(
+                "  {id:<24}{schedule:<schedule_width$}{description}",
+                id = cron.cron_id,
+                schedule = cron.schedule,
+                schedule_width = schedule_width,
+                description = description,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        "Crons\n  Registered crons  {cron_count}\n  Usage            /crons <id>\n\nEntries\n{entries}",
+        cron_count = cron_count,
+        entries = entries,
+    )
+}
+
+pub(crate) fn render_crons_report(
+    cron: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    render_snapshot_report(
+        || crons_report_snapshot(cron),
+        render_crons_report_from_snapshot,
     )
 }

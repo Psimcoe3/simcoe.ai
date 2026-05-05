@@ -28,23 +28,28 @@ use commands::{
     render_resume_command_help, render_slash_command_help, resume_supported_slash_commands,
     slash_command_specs, SlashCommand,
 };
-use compat_harness::{extract_manifest, PluginSurfaceKind, UpstreamPaths};
+use compat_harness::{
+    extract_manifest, load_parity_manifest, load_transition_scorecard, ParityManifest,
+    ParityStatus, PluginSurfaceKind, TransitionScorecard, UpstreamPaths,
+};
 use format::{
-    agents_report_snapshot, config_report_snapshot, doctor_snapshot, format_compact_report,
-    format_cost_report, format_status_report, hooks_report_snapshot, mcp_report_snapshot,
-    memory_report_snapshot, plugin_report_snapshot, reload_plugins_report_snapshot,
-    remote_env_report_snapshot, remote_setup_report_snapshot, render_agents_report,
-    render_agents_report_from_snapshot, render_config_report, render_config_report_from_snapshot,
-    render_diff_report, render_doctor_report, render_doctor_report_from_snapshot,
-    render_hooks_report, render_hooks_report_from_snapshot, render_mcp_report,
-    render_mcp_report_from_snapshot, render_memory_report, render_memory_report_from_snapshot,
-    render_plugin_report, render_plugin_report_from_snapshot, render_reload_plugins_report,
-    render_reload_plugins_report_from_snapshot, render_remote_env_report,
-    render_remote_env_report_from_snapshot, render_remote_setup_report,
+    agents_report_snapshot, config_report_snapshot, crons_report_snapshot, doctor_snapshot,
+    format_compact_report, format_context_report, format_cost_report, format_status_report,
+    format_usage_report, hooks_report_snapshot, mcp_report_snapshot, memory_report_snapshot,
+    plugin_report_snapshot, reload_plugins_report_snapshot, remote_env_report_snapshot,
+    remote_setup_report_snapshot, render_agents_report, render_agents_report_from_snapshot,
+    render_config_report, render_config_report_from_snapshot, render_crons_report,
+    render_crons_report_from_snapshot, render_diff_report, render_doctor_report,
+    render_doctor_report_from_snapshot, render_hooks_report, render_hooks_report_from_snapshot,
+    render_mcp_report, render_mcp_report_from_snapshot, render_memory_report,
+    render_memory_report_from_snapshot, render_plugin_report, render_plugin_report_from_snapshot,
+    render_reload_plugins_report, render_reload_plugins_report_from_snapshot,
+    render_remote_env_report, render_remote_env_report_from_snapshot, render_remote_setup_report,
     render_remote_setup_report_from_snapshot, render_repl_help, render_skills_report,
     render_skills_report_from_snapshot, render_tasks_report, render_tasks_report_from_snapshot,
-    render_tools_report, render_tools_report_from_snapshot, render_version_report,
-    skills_report_snapshot, status_context, tasks_report_snapshot, tools_report_snapshot,
+    render_teams_report, render_teams_report_from_snapshot, render_tools_report,
+    render_tools_report_from_snapshot, render_version_report, skills_report_snapshot,
+    status_context, tasks_report_snapshot, teams_report_snapshot, tools_report_snapshot,
     McpAttentionSnapshot, McpBlockedServerSnapshot, McpCollectionSnapshot, McpServerDetailSnapshot,
     McpServerSnapshot, RemoteEnvReportSnapshot, StatusUsage,
 };
@@ -139,6 +144,8 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             .map_err(|error| with_cli_error_context(error, 1, Some("dump-manifests"), None))?,
         CliAction::BootstrapPlan { output_format } => run_bootstrap_plan(output_format)
             .map_err(|error| with_cli_error_context(error, 1, Some("bootstrap-plan"), None))?,
+        CliAction::Parity { output_format } => run_parity(output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("parity"), None))?,
         CliAction::PrintSystemPrompt {
             cwd,
             date,
@@ -195,6 +202,16 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             output_format,
         } => run_tasks(task, output_format)
             .map_err(|error| with_cli_error_context(error, 1, Some("tasks"), None))?,
+        CliAction::Teams {
+            team,
+            output_format,
+        } => run_teams(team, output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("teams"), None))?,
+        CliAction::Crons {
+            cron,
+            output_format,
+        } => run_crons(cron, output_format)
+            .map_err(|error| with_cli_error_context(error, 1, Some("crons"), None))?,
         CliAction::Export {
             path,
             output_format,
@@ -298,10 +315,10 @@ fn inferred_error_metadata(args: &[String]) -> (Option<String>, Option<String>) 
             arg if arg.starts_with("--") => {
                 index += 1;
             }
-            "dump-manifests" | "bootstrap-plan" | "system-prompt" | "config" | "hooks" | "mcp"
-            | "memory" | "agents" | "plugin" | "reload-plugins" | "remote-env" | "remote-setup"
-            | "tools" | "doctor" | "skills" | "tasks" | "export" | "session" | "login"
-            | "logout" | "init" | "prompt" => {
+            "dump-manifests" | "bootstrap-plan" | "parity" | "system-prompt" | "config"
+            | "hooks" | "mcp" | "memory" | "agents" | "plugin" | "reload-plugins"
+            | "remote-env" | "remote-setup" | "tools" | "doctor" | "skills" | "tasks"
+            | "export" | "session" | "login" | "logout" | "init" | "prompt" => {
                 return (Some(args[index].clone()), None);
             }
             arg if !arg.starts_with('/') => return (Some("prompt".to_string()), None),
@@ -364,6 +381,10 @@ fn structured_error_context_from_action(action: CliAction) -> StructuredCliError
             operation: Some("bootstrap-plan".to_string()),
             ..StructuredCliErrorContext::default()
         },
+        CliAction::Parity { .. } => StructuredCliErrorContext {
+            operation: Some("parity".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
         CliAction::PrintSystemPrompt { .. } => StructuredCliErrorContext {
             operation: Some("system-prompt".to_string()),
             ..StructuredCliErrorContext::default()
@@ -418,6 +439,14 @@ fn structured_error_context_from_action(action: CliAction) -> StructuredCliError
         },
         CliAction::Tasks { .. } => StructuredCliErrorContext {
             operation: Some("tasks".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Teams { .. } => StructuredCliErrorContext {
+            operation: Some("teams".to_string()),
+            ..StructuredCliErrorContext::default()
+        },
+        CliAction::Crons { .. } => StructuredCliErrorContext {
+            operation: Some("crons".to_string()),
             ..StructuredCliErrorContext::default()
         },
         CliAction::Export { .. } => StructuredCliErrorContext {
@@ -535,10 +564,10 @@ fn inferred_error_context_from_raw_args(args: &[String]) -> StructuredCliErrorCo
             arg if arg.starts_with("--") => {
                 index += 1;
             }
-            "dump-manifests" | "bootstrap-plan" | "system-prompt" | "config" | "hooks" | "mcp"
-            | "memory" | "agents" | "plugin" | "reload-plugins" | "remote-env" | "remote-setup"
-            | "tools" | "doctor" | "skills" | "tasks" | "export" | "session" | "login"
-            | "logout" | "init" => {
+            "dump-manifests" | "bootstrap-plan" | "parity" | "system-prompt" | "config"
+            | "hooks" | "mcp" | "memory" | "agents" | "plugin" | "reload-plugins"
+            | "remote-env" | "remote-setup" | "tools" | "doctor" | "skills" | "tasks"
+            | "export" | "session" | "login" | "logout" | "init" => {
                 return StructuredCliErrorContext {
                     operation: Some(args[index].clone()),
                     ..StructuredCliErrorContext::default()
@@ -656,8 +685,13 @@ fn render_cli_error(args: &[String], error: &(dyn std::error::Error + 'static)) 
 fn filter_tool_specs(allowed_tools: Option<&AllowedToolSet>) -> Vec<tools::ToolSpec> {
     mvp_tool_specs()
         .into_iter()
-    .filter(|spec| allowed_tools.is_none_or(|allowed| tool_name_is_allowed(allowed, spec.name)))
+        .filter(|spec| allowed_tools.is_none_or(|allowed| tool_name_is_allowed(allowed, spec.name)))
         .collect()
+}
+
+fn reference_paths() -> UpstreamPaths {
+    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    UpstreamPaths::from_workspace_dir(&workspace_dir)
 }
 
 fn dump_manifests_report() -> Result<String, Box<dyn std::error::Error>> {
@@ -668,8 +702,7 @@ fn dump_manifests_report() -> Result<String, Box<dyn std::error::Error>> {
 }
 
 fn manifest_counts() -> Result<(usize, usize, usize), Box<dyn std::error::Error>> {
-    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let paths = UpstreamPaths::from_workspace_dir(&workspace_dir);
+    let paths = reference_paths();
     let manifest = extract_manifest(&paths)?;
     Ok((
         manifest.commands.entries().len(),
@@ -685,6 +718,152 @@ fn dump_manifests_payload() -> Result<serde_json::Value, Box<dyn std::error::Err
         "command_count": command_count,
         "tool_count": tool_count,
         "bootstrap_phase_count": bootstrap_phase_count,
+    }))
+}
+
+fn parity_baseline() -> Result<(ParityManifest, TransitionScorecard), Box<dyn std::error::Error>> {
+    let paths = reference_paths();
+    Ok((
+        load_parity_manifest(&paths)?,
+        load_transition_scorecard(&paths)?,
+    ))
+}
+
+fn parity_status_label(status: ParityStatus) -> &'static str {
+    match status {
+        ParityStatus::Implemented => "implemented",
+        ParityStatus::Partial => "partial",
+        ParityStatus::InspectionOnly => "inspection-only",
+        ParityStatus::DiagnosticOnly => "diagnostic-only",
+        ParityStatus::Missing => "missing",
+    }
+}
+
+fn subsystem_status_counts(manifest: &ParityManifest) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for subsystem in &manifest.subsystems {
+        *counts
+            .entry(parity_status_label(subsystem.status).to_string())
+            .or_insert(0) += 1;
+    }
+    counts
+}
+
+fn transition_item_status_counts(scorecard: &TransitionScorecard) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for item in &scorecard.parity_items {
+        *counts.entry(item.status.clone()).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn parity_report() -> Result<String, Box<dyn std::error::Error>> {
+    let (manifest, scorecard) = parity_baseline()?;
+    let resume_supported = manifest
+        .slash_commands
+        .iter()
+        .filter(|command| command.resume_supported)
+        .count();
+    let mut lines = vec![
+        "Transition parity and industry scorecard".to_string(),
+        format!("  Generated        {}", scorecard.generated_date),
+        format!("  Status           {}", scorecard.summary.status_label),
+        format!("  Goal             {}", scorecard.transition_goal),
+        format!(
+            "  Slash commands   {} ({resume_supported} resume-safe)",
+            manifest.slash_commands.len()
+        ),
+        format!(
+            "  CLI commands     {}",
+            manifest.named_cli_subcommands.len()
+        ),
+        format!("  Native tools     {}", manifest.native_tools.len()),
+        String::new(),
+        "Subsystem parity".to_string(),
+    ];
+
+    for subsystem in &manifest.subsystems {
+        lines.push(format!(
+            "  {:<18} {}",
+            subsystem.name,
+            parity_status_label(subsystem.status)
+        ));
+    }
+
+    lines.extend([String::new(), "Top transition work".to_string()]);
+    for item in scorecard
+        .parity_items
+        .iter()
+        .filter(|item| item.priority == "p0")
+    {
+        let first_needed = item
+            .needed
+            .first()
+            .map_or_else(|| item.current.as_str(), String::as_str);
+        lines.push(format!(
+            "  {} [{}, {}] {}",
+            item.name, item.status, item.priority, first_needed
+        ));
+    }
+
+    lines.extend([String::new(), "Industry benchmark gaps".to_string()]);
+    for item in scorecard
+        .industry_benchmarks
+        .iter()
+        .filter(|item| item.priority == "p0")
+    {
+        lines.push(format!(
+            "  {} vs {} [{}] {}",
+            item.category, item.benchmark, item.current_status, item.gap
+        ));
+    }
+
+    lines.extend([String::new(), "Blocked contracts".to_string()]);
+    for blocker in &scorecard.blocked_contracts {
+        lines.push(format!(
+            "  {} [{}] {}",
+            blocker.name, blocker.status, blocker.needed_contract
+        ));
+    }
+
+    lines.extend([String::new(), "Recommended first slice".to_string()]);
+    for step in &scorecard.summary.recommended_first_slice {
+        lines.push(format!("  - {step}"));
+    }
+
+    Ok(lines.join("\n"))
+}
+
+fn parity_payload() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let (manifest, scorecard) = parity_baseline()?;
+    let resume_supported = manifest
+        .slash_commands
+        .iter()
+        .filter(|command| command.resume_supported)
+        .count();
+    let content = parity_report()?;
+
+    Ok(json!({
+        "type": "parity",
+        "content": content,
+        "generated_date": scorecard.generated_date,
+        "transition_goal": scorecard.transition_goal,
+        "summary": scorecard.summary,
+        "manifest": {
+            "slash_command_count": manifest.slash_commands.len(),
+            "resume_supported_slash_command_count": resume_supported,
+            "named_cli_subcommand_count": manifest.named_cli_subcommands.len(),
+            "native_tool_count": manifest.native_tools.len(),
+            "subsystem_status_counts": subsystem_status_counts(&manifest),
+            "subsystems": manifest.subsystems.iter().map(|subsystem| json!({
+                "name": subsystem.name.as_str(),
+                "status": parity_status_label(subsystem.status),
+            })).collect::<Vec<_>>(),
+        },
+        "transition_status_counts": transition_item_status_counts(&scorecard),
+        "parity_items": scorecard.parity_items,
+        "industry_benchmarks": scorecard.industry_benchmarks,
+        "blocked_contracts": scorecard.blocked_contracts,
     }))
 }
 
@@ -740,6 +919,30 @@ fn session_switch_report(handle: &SessionHandle, message_count: usize) -> String
         handle.path.display(),
         message_count,
     )
+}
+
+fn session_rename_report(
+    previous_id: &str,
+    handle: &SessionHandle,
+    message_count: usize,
+    renamed: bool,
+) -> String {
+    if renamed {
+        format!(
+            "Session renamed\n  Previous session {}\n  Active session   {}\n  File             {}\n  Messages         {}",
+            previous_id,
+            handle.id,
+            handle.path.display(),
+            message_count,
+        )
+    } else {
+        format!(
+            "Session rename skipped\n  Active session   {}\n  Reason           already named\n  File             {}\n  Messages         {}",
+            handle.id,
+            handle.path.display(),
+            message_count,
+        )
+    }
 }
 
 fn session_list_report() -> Result<String, Box<dyn std::error::Error>> {
@@ -1240,6 +1443,36 @@ fn tasks_payload(task: Option<String>) -> Result<serde_json::Value, Box<dyn std:
         }),
     );
     payload.insert("tasks".to_string(), json!(snapshot.tasks));
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn teams_payload(team: Option<String>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = teams_report_snapshot(team.as_deref())?;
+    let content = render_teams_report_from_snapshot(&snapshot);
+    let mut payload = content_payload_map("teams", content);
+
+    if let Some(selected) = snapshot.selected_team.as_ref() {
+        payload.insert("team".to_string(), json!(selected));
+        return Ok(serde_json::Value::Object(payload));
+    }
+
+    payload.insert("team_count".to_string(), json!(snapshot.teams.len()));
+    payload.insert("teams".to_string(), json!(snapshot.teams));
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn crons_payload(cron: Option<String>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let snapshot = crons_report_snapshot(cron.as_deref())?;
+    let content = render_crons_report_from_snapshot(&snapshot);
+    let mut payload = content_payload_map("crons", content);
+
+    if let Some(selected) = snapshot.selected_cron.as_ref() {
+        payload.insert("cron".to_string(), json!(selected));
+        return Ok(serde_json::Value::Object(payload));
+    }
+
+    payload.insert("cron_count".to_string(), json!(snapshot.crons.len()));
+    payload.insert("crons".to_string(), json!(snapshot.crons));
     Ok(serde_json::Value::Object(payload))
 }
 
@@ -1795,6 +2028,10 @@ fn run_bootstrap_plan(output_format: CliOutputFormat) -> Result<(), Box<dyn std:
     )
 }
 
+fn run_parity(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+    run_text_or_structured_command(output_format, parity_report, parity_payload)
+}
+
 fn run_config(
     section: Option<String>,
     output_format: CliOutputFormat,
@@ -1902,6 +2139,20 @@ fn run_tasks(
     output_format: CliOutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     run_selector_text_or_structured_command(task, output_format, render_tasks_report, tasks_payload)
+}
+
+fn run_teams(
+    team: Option<String>,
+    output_format: CliOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_selector_text_or_structured_command(team, output_format, render_teams_report, teams_payload)
+}
+
+fn run_crons(
+    cron: Option<String>,
+    output_format: CliOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_selector_text_or_structured_command(cron, output_format, render_crons_report, crons_payload)
 }
 
 fn export_report(export_path: &Path, message_count: usize) -> String {
@@ -2491,12 +2742,14 @@ fn resume_command_outcome(
 }
 
 fn render_resume_read_only_message(
+    session: &Session,
     command: &SlashCommand,
 ) -> Result<Option<String>, Box<dyn std::error::Error>> {
     match command {
         SlashCommand::Help => Ok(Some(render_repl_help())),
         SlashCommand::DumpManifests => Ok(Some(dump_manifests_report()?)),
         SlashCommand::BootstrapPlan => Ok(Some(bootstrap_plan_report())),
+        SlashCommand::Parity => Ok(Some(parity_report()?)),
         SlashCommand::Config { section } => Ok(Some(render_config_report(section.as_deref())?)),
         SlashCommand::SystemPrompt { args } => {
             let (cwd, date) = parse_system_prompt_command_args(args.as_deref())?;
@@ -2512,8 +2765,20 @@ fn render_resume_read_only_message(
         SlashCommand::RemoteSetup => Ok(Some(render_remote_setup_report()?)),
         SlashCommand::Tools { tool } => Ok(Some(render_tools_report(tool.as_deref())?)),
         SlashCommand::Doctor => Ok(Some(render_doctor_report()?)),
+        SlashCommand::Usage => {
+            let tracker = UsageTracker::from_session(session);
+            Ok(Some(format_usage_report(StatusUsage {
+                message_count: session.messages.len(),
+                turns: tracker.turns(),
+                latest: tracker.current_turn_usage(),
+                cumulative: tracker.cumulative_usage(),
+                estimated_tokens: 0,
+            })))
+        }
         SlashCommand::Skills { skill } => Ok(Some(render_skills_report(skill.as_deref())?)),
         SlashCommand::Tasks { task } => Ok(Some(render_tasks_report(task.as_deref())?)),
+        SlashCommand::Teams { team } => Ok(Some(render_teams_report(team.as_deref())?)),
+        SlashCommand::Crons { cron } => Ok(Some(render_crons_report(cron.as_deref())?)),
         SlashCommand::Init => Ok(Some(init_simcoe_md()?)),
         SlashCommand::Diff => Ok(Some(render_diff_report()?)),
         SlashCommand::Version => Ok(Some(render_version_report())),
@@ -2692,6 +2957,28 @@ fn run_resume_command(
                 Some(format_cost_report(usage)),
             ))
         }
+        SlashCommand::Usage => {
+            let tracker = UsageTracker::from_session(session);
+            Ok(resume_command_outcome(
+                session_path,
+                session.clone(),
+                Some(format_usage_report(StatusUsage {
+                    message_count: session.messages.len(),
+                    turns: tracker.turns(),
+                    latest: tracker.current_turn_usage(),
+                    cumulative: tracker.cumulative_usage(),
+                    estimated_tokens: 0,
+                })),
+            ))
+        }
+        SlashCommand::Context => {
+            let usage = UsageTracker::from_session(session).cumulative_usage();
+            Ok(resume_command_outcome(
+                session_path,
+                session.clone(),
+                Some(format_context_report(usage, "restored-session")),
+            ))
+        }
         SlashCommand::Export { path } => {
             let export_path = resolve_export_path(path.as_deref(), session)?;
             fs::write(&export_path, render_export_text(session))?;
@@ -2738,8 +3025,27 @@ fn run_resume_command(
             )
             .into()),
         }
+        SlashCommand::Rename { name } => {
+            let previous_handle = session_handle_from_path(session_path);
+            let message_count = session.messages.len();
+            let (next_handle, renamed) = runtime::rename_managed_session(
+                &previous_handle,
+                name.as_deref(),
+                session,
+            )?;
+            Ok(ResumeCommandOutcome {
+                session: session.clone(),
+                session_path: next_handle.path.clone(),
+                message: Some(session_rename_report(
+                    &previous_handle.id,
+                    &next_handle,
+                    message_count,
+                    renamed,
+                )),
+            })
+        }
         command => {
-            if let Some(message) = render_resume_read_only_message(command)? {
+            if let Some(message) = render_resume_read_only_message(session, command)? {
                 Ok(resume_command_outcome(
                     session_path,
                     session.clone(),
@@ -4212,10 +4518,7 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
         "grep_search" | "Grep" => format_search_start("🔎 Grep", &parsed),
         "WebFetch" => {
             let url = parsed.get("url").and_then(|v| v.as_str()).unwrap_or("?");
-            format!(
-                "\x1b[2m↯ WebFetch {}\x1b[0m",
-                truncate_for_summary(url, 80)
-            )
+            format!("\x1b[2m↯ WebFetch {}\x1b[0m", truncate_for_summary(url, 80))
         }
         "StructuredOutput" => {
             let fields = parsed.as_object().map(|items| items.len()).unwrap_or(0);
@@ -4255,7 +4558,10 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
             format!("\x1b[2m✦ Skill {skill}\x1b[0m")
         }
         "SessionExportTool" => {
-            let path = parsed.get("path").and_then(|v| v.as_str()).unwrap_or("(auto)");
+            let path = parsed
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("(auto)");
             format!(
                 "\x1b[2m⇪ SessionExportTool {}\x1b[0m",
                 truncate_for_summary(path, 80)
@@ -4394,6 +4700,7 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
                 truncate_for_summary(team_id, 40)
             )
         }
+        "TeamListTool" => format!("\x1b[2m↩ TeamListTool\x1b[0m"),
         "CronCreateTool" => {
             let schedule = parsed
                 .get("schedule")
@@ -4433,6 +4740,64 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
             .and_then(|value| value.as_str())
             .unwrap_or("?")
             .to_string(),
+        "ToolSearch" => {
+            let query = parsed.get("query").and_then(|v| v.as_str()).unwrap_or("?");
+            let max = parsed
+                .get("max_results")
+                .and_then(|v| v.as_u64())
+                .map(|n| format!(" (max {n})"))
+                .unwrap_or_default();
+            format!(
+                "\x1b[2m🔎 ToolSearch {}{max}\x1b[0m",
+                truncate_for_summary(query, 80)
+            )
+        }
+        "ListMcpResourcesTool" => {
+            let server = parsed.get("server").and_then(|v| v.as_str()).unwrap_or("?");
+            format!("\x1b[2m↯ ListMcpResources {server}\x1b[0m")
+        }
+        "ReadMcpResourceTool" => {
+            let server = parsed.get("server").and_then(|v| v.as_str()).unwrap_or("?");
+            let uri = parsed.get("uri").and_then(|v| v.as_str()).unwrap_or("?");
+            format!(
+                "\x1b[2m↯ ReadMcpResource {server} {}\x1b[0m",
+                truncate_for_summary(uri, 60)
+            )
+        }
+        "MCPTool" => {
+            let server = parsed.get("server").and_then(|v| v.as_str()).unwrap_or("?");
+            match parsed.get("tool").and_then(|v| v.as_str()) {
+                Some(tool) => format!("\x1b[2m↯ MCPTool {server}::{tool}\x1b[0m"),
+                None => format!("\x1b[2m↯ MCPTool list {server}\x1b[0m"),
+            }
+        }
+        "McpAuthTool" => {
+            let action = parsed
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("status");
+            let server_hint = parsed
+                .get("server")
+                .and_then(|v| v.as_str())
+                .map(|s| format!(" ({s})"))
+                .unwrap_or_default();
+            format!("\x1b[2m⚷ McpAuth {action}{server_hint}\x1b[0m")
+        }
+        _ if name.starts_with("mcp__") => {
+            // mcp__<server>__<tool> — extract server and tool from the name
+            let parts: Vec<&str> = name.splitn(3, "__").collect();
+            let (server, tool) = match parts.as_slice() {
+                [_, s, t] => (*s, *t),
+                _ => ("?", name),
+            };
+            let arg_count = parsed.as_object().map(|m| m.len()).unwrap_or(0);
+            let arg_hint = if arg_count > 0 {
+                format!(" ({arg_count} args)")
+            } else {
+                String::new()
+            };
+            format!("\x1b[2m↯ {server}::{tool}{arg_hint}\x1b[0m")
+        }
         _ => summarize_tool_payload(input),
     };
 
@@ -4500,6 +4865,7 @@ fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
         "SendUserMessage" | "Brief" | "BriefTool" => format_brief_result(icon, name, &parsed),
         "TestingPermissionTool" => format_testing_permission_result(icon, &parsed),
         "TeamCreateTool" | "TeamDeleteTool" => format_team_result(icon, name, &parsed),
+        "TeamListTool" => format_team_list_result(icon, &parsed),
         "CronCreateTool" | "CronDeleteTool" => format_cron_result(icon, name, &parsed),
         "CronListTool" => format_cron_list_result(icon, &parsed),
         "EnterPlanModeTool" | "ExitPlanModeV2Tool" => format_plan_mode_result(icon, name, &parsed),
@@ -5023,6 +5389,35 @@ fn format_team_result(icon: &str, label: &str, parsed: &serde_json::Value) -> St
     lines.join("\n")
 }
 
+fn format_team_list_result(icon: &str, parsed: &serde_json::Value) -> String {
+    let total = parsed.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
+    let teams = parsed
+        .get("teams")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.as_slice())
+        .unwrap_or(&[]);
+    let message = parsed.get("message").and_then(|v| v.as_str()).unwrap_or("");
+    let mut lines = vec![format!(
+        "{icon} \x1b[38;5;245mTeamListTool\x1b[0m \x1b[2m({total} teams)\x1b[0m"
+    )];
+    for team in teams.iter().take(5) {
+        let team_id = team.get("teamId").and_then(|v| v.as_str()).unwrap_or("?");
+        let name = team.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+        lines.push(format!(
+            "  \x1b[2m{}\x1b[0m {}",
+            truncate_for_summary(team_id, 20),
+            truncate_for_summary(name, 40)
+        ));
+    }
+    if total > 5 {
+        lines.push(format!("  \x1b[2m+{} more\x1b[0m", total - 5));
+    }
+    if !message.is_empty() {
+        lines.push(format!("  \x1b[2m{message}\x1b[0m"));
+    }
+    lines.join("\n")
+}
+
 fn format_cron_result(icon: &str, label: &str, parsed: &serde_json::Value) -> String {
     let cron_id = parsed.get("cronId").and_then(|v| v.as_str()).unwrap_or("?");
     let schedule = parsed
@@ -5158,7 +5553,11 @@ fn format_plan_mode_result(icon: &str, label: &str, parsed: &serde_json::Value) 
     )];
     lines.push(format!(
         "  \x1b[2mprevious:\x1b[0m {}",
-        if previous_active { "active" } else { "inactive" }
+        if previous_active {
+            "active"
+        } else {
+            "inactive"
+        }
     ));
     if !message.is_empty() {
         lines.push(format!("  \x1b[2mnote:\x1b[0m {message}"));
@@ -5221,7 +5620,10 @@ fn format_notebook_edit_result(icon: &str, parsed: &serde_json::Value) -> String
         .get("edit_mode")
         .and_then(|v| v.as_str())
         .unwrap_or("?");
-    let cell_id = parsed.get("cell_id").and_then(|v| v.as_str()).unwrap_or("(new cell)");
+    let cell_id = parsed
+        .get("cell_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("(new cell)");
     let cell_type = parsed
         .get("cell_type")
         .and_then(|v| v.as_str())
@@ -5275,7 +5677,10 @@ fn format_config_result(icon: &str, parsed: &serde_json::Value) -> String {
         .and_then(|v| v.as_str())
         .unwrap_or("?");
     let error = parsed.get("error").and_then(|v| v.as_str()).unwrap_or("");
-    let value = parsed.get("value").map(summarize_json_value).unwrap_or_default();
+    let value = parsed
+        .get("value")
+        .map(summarize_json_value)
+        .unwrap_or_default();
     let previous_value = parsed
         .get("previousValue")
         .map(summarize_json_value)
@@ -5368,9 +5773,7 @@ fn format_skill_result(icon: &str, parsed: &serde_json::Value) -> String {
         .unwrap_or("");
     let prompt = parsed.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
 
-    let mut lines = vec![format!(
-        "{icon} \x1b[38;5;245mSkill\x1b[0m {skill}"
-    )];
+    let mut lines = vec![format!("{icon} \x1b[38;5;245mSkill\x1b[0m {skill}")];
     lines.push(format!(
         "  \x1b[2mpath:\x1b[0m {}",
         truncate_for_summary(path, 80)
@@ -5398,7 +5801,10 @@ fn format_skill_result(icon: &str, parsed: &serde_json::Value) -> String {
 }
 
 fn format_session_export_result(icon: &str, parsed: &serde_json::Value) -> String {
-    let session_id = parsed.get("sessionId").and_then(|v| v.as_str()).unwrap_or("?");
+    let session_id = parsed
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
     let session_path = parsed
         .get("sessionPath")
         .and_then(|v| v.as_str())
@@ -5538,10 +5944,7 @@ fn format_repl_result(icon: &str, parsed: &serde_json::Value) -> String {
         .get("language")
         .and_then(|v| v.as_str())
         .unwrap_or("?");
-    let exit_code = parsed
-        .get("exitCode")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(1);
+    let exit_code = parsed.get("exitCode").and_then(|v| v.as_i64()).unwrap_or(1);
     let duration_ms = parsed
         .get("durationMs")
         .and_then(|v| v.as_u64())
@@ -5594,7 +5997,10 @@ fn format_synthetic_output_result(icon: &str, parsed: &serde_json::Value) -> Str
 }
 
 fn format_lsp_result(icon: &str, parsed: &serde_json::Value) -> String {
-    let command = parsed.get("command").and_then(|v| v.as_str()).unwrap_or("?");
+    let command = parsed
+        .get("command")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
     let connected = parsed
         .get("connected")
         .and_then(|v| v.as_bool())
@@ -5649,7 +6055,10 @@ fn format_remote_trigger_result(icon: &str, parsed: &serde_json::Value) -> Strin
         .get("pathReady")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    let session_id = parsed.get("sessionId").and_then(|v| v.as_str()).unwrap_or("");
+    let session_id = parsed
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let base_url = parsed.get("baseUrl").and_then(|v| v.as_str()).unwrap_or("");
     let blocker_kind = parsed
         .get("blockerKind")
@@ -5668,7 +6077,11 @@ fn format_remote_trigger_result(icon: &str, parsed: &serde_json::Value) -> Strin
     )];
     lines.push(format!(
         "  \x1b[2mremote:\x1b[0m {} | \x1b[2mpath:\x1b[0m {}",
-        if remote_enabled { "enabled" } else { "disabled" },
+        if remote_enabled {
+            "enabled"
+        } else {
+            "disabled"
+        },
         if path_ready { "ready" } else { "blocked" }
     ));
     if !session_id.is_empty() {
@@ -6528,6 +6941,7 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     )?;
     writeln!(out, "  claw dump-manifests")?;
     writeln!(out, "  claw bootstrap-plan")?;
+    writeln!(out, "  claw parity")?;
     writeln!(out, "  claw system-prompt [--cwd PATH] [--date YYYY-MM-DD]")?;
     writeln!(out, "  claw config [env|hooks|model|provider]")?;
     writeln!(out, "  claw hooks [pre|post]")?;
@@ -6615,6 +7029,7 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
         "  claw --output-format json --resume session.json /status /cost"
     )?;
     writeln!(out, "  claw --output-format json dump-manifests")?;
+    writeln!(out, "  claw --output-format json parity")?;
     writeln!(out, "  claw --output-format json config hooks")?;
     writeln!(out, "  claw --output-format ndjson mcp repo-server")?;
     writeln!(out, "  claw --output-format json agents reviewer")?;
@@ -6638,13 +7053,14 @@ mod tests {
     use crate::VERSION;
 
     use super::format::{
-        format_compact_report, format_cost_report, format_model_report, format_model_switch_report,
-        format_permissions_report, format_permissions_switch_report, format_resume_report,
-        format_status_report, render_agents_report, render_config_report, render_doctor_report,
-        render_hooks_report, render_mcp_report, render_memory_report, render_plugin_report,
+        format_compact_report, format_context_report, format_cost_report, format_model_report,
+        format_model_switch_report, format_permissions_report, format_permissions_switch_report,
+        format_resume_report, format_status_report, format_usage_report, render_agents_report,
+        render_config_report, render_crons_report, render_doctor_report, render_hooks_report,
+        render_mcp_report, render_memory_report, render_plugin_report,
         render_reload_plugins_report, render_remote_env_report, render_remote_setup_report,
-        render_repl_help, render_skills_report, render_tasks_report, render_tools_report,
-        render_version_report, status_context, StatusContext, StatusUsage,
+        render_repl_help, render_skills_report, render_tasks_report, render_teams_report,
+        render_tools_report, render_version_report, status_context, StatusContext, StatusUsage,
     };
     use super::{
         active_runtime_provider_label, apply_openai_stream_chunk, bootstrap_plan_payload,
@@ -6667,7 +7083,9 @@ mod tests {
     };
     use crate::render::{MarkdownStreamState, TerminalRenderer};
     use api::{MessageResponse, OutputContentBlock, Usage};
-    use compat_harness::{load_parity_manifest, ParityStatus, UpstreamPaths};
+    use compat_harness::{
+        load_parity_manifest, load_transition_scorecard, ParityStatus, UpstreamPaths,
+    };
     use runtime::{
         mcp_credentials_key, ApiRequest, AssistantEvent, ConfigSource, ContentBlock,
         ConversationMessage, McpOAuthConfig, McpRemoteServerConfig, McpServerConfig, MessageRole,
@@ -6709,10 +7127,16 @@ mod tests {
             .expect("load parity manifest")
     }
 
+    fn current_transition_scorecard() -> compat_harness::TransitionScorecard {
+        load_transition_scorecard(&UpstreamPaths::from_repo_root(current_repo_root()))
+            .expect("load transition scorecard")
+    }
+
     fn cli_action_name(action: &CliAction) -> &'static str {
         match action {
             CliAction::DumpManifests { .. } => "dump-manifests",
             CliAction::BootstrapPlan { .. } => "bootstrap-plan",
+            CliAction::Parity { .. } => "parity",
             CliAction::PrintSystemPrompt { .. } => "system-prompt",
             CliAction::Config { .. } => "config",
             CliAction::Hooks { .. } => "hooks",
@@ -6727,6 +7151,8 @@ mod tests {
             CliAction::Doctor { .. } => "doctor",
             CliAction::Skills { .. } => "skills",
             CliAction::Tasks { .. } => "tasks",
+            CliAction::Teams { .. } => "teams",
+            CliAction::Crons { .. } => "crons",
             CliAction::Export { .. } => "export",
             CliAction::Session { .. } => "session",
             CliAction::Version { .. } => "version",
@@ -7217,6 +7643,29 @@ mod tests {
     }
 
     #[test]
+    fn transition_scorecard_tracks_blockers_and_benchmarks() {
+        let scorecard = current_transition_scorecard();
+
+        assert_eq!(scorecard.summary.status_label, "strong-local-parity");
+        assert!(scorecard
+            .parity_items
+            .iter()
+            .any(|item| item.name == "plugins" && item.status == "inspection-only"));
+        assert!(scorecard
+            .parity_items
+            .iter()
+            .any(|item| item.name == "mcp-transports" && item.status == "blocked-by-contract"));
+        assert!(scorecard
+            .industry_benchmarks
+            .iter()
+            .any(|item| item.category == "ide-integration" && item.priority == "p0"));
+        assert!(scorecard
+            .blocked_contracts
+            .iter()
+            .any(|item| item.name == "simcoe-ai-proxy-transport"));
+    }
+
+    #[test]
     fn resumed_help_uses_resume_filtered_help() {
         let session = runtime::Session::new();
         let session_path = PathBuf::from("session.json");
@@ -7422,9 +7871,9 @@ mod tests {
                         "read_file",
                         "write_file",
                     ]
-                        .into_iter()
-                        .map(str::to_string)
-                        .collect()
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect()
                 ),
                 permission_mode: PermissionMode::DangerFullAccess,
             }
@@ -7436,6 +7885,45 @@ mod tests {
         let error = parse_args(&["--allowedTools".to_string(), "teleport".to_string()])
             .expect_err("tool should be rejected");
         assert!(error.contains("unsupported tool in --allowedTools: teleport"));
+    }
+
+    #[test]
+    fn accepts_dynamic_mcp_tool_names_in_allowed_tools() {
+        // Qualified dynamic MCP tool names (mcp__server__tool) should be accepted in
+        // --allowedTools without a matching static spec entry.
+        let args = vec![
+            "--allowedTools".to_string(),
+            "mcp__weather__get_forecast,mcp__vendor__echo".to_string(),
+        ];
+        let action = parse_args(&args).expect("dynamic MCP tool names should be accepted");
+        let CliAction::Repl { allowed_tools, .. } = action else {
+            panic!("expected Repl action");
+        };
+        let allowed = allowed_tools.expect("allowlist should be Some");
+        assert!(
+            allowed.contains("mcp__weather__get_forecast"),
+            "mcp__weather__get_forecast should be in the allowed set"
+        );
+        assert!(
+            allowed.contains("mcp__vendor__echo"),
+            "mcp__vendor__echo should be in the allowed set"
+        );
+        // Static tool names mixed with dynamic names should also work.
+        let mixed_args = vec![
+            "--allowedTools".to_string(),
+            "read_file,mcp__weather__get_forecast".to_string(),
+        ];
+        let mixed = parse_args(&mixed_args).expect("mixed allowlist should parse");
+        let CliAction::Repl {
+            allowed_tools: mixed_allowed,
+            ..
+        } = mixed
+        else {
+            panic!("expected Repl action");
+        };
+        let mixed_set = mixed_allowed.expect("mixed allowlist should be Some");
+        assert!(mixed_set.contains("read_file"));
+        assert!(mixed_set.contains("mcp__weather__get_forecast"));
     }
 
     #[test]
@@ -7601,6 +8089,40 @@ mod tests {
                 output_format: CliOutputFormat::Ndjson,
             }
         );
+        assert_eq!(
+            parse_args(&["teams".to_string()]).expect("teams should parse"),
+            CliAction::Teams {
+                team: None,
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&["teams".to_string(), "team-abc".to_string()])
+                .expect("teams with id should parse"),
+            CliAction::Teams {
+                team: Some("team-abc".to_string()),
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&["crons".to_string()]).expect("crons should parse"),
+            CliAction::Crons {
+                cron: None,
+                output_format: CliOutputFormat::Text,
+            }
+        );
+        assert_eq!(
+            parse_args(&[
+                "--output-format=json".to_string(),
+                "crons".to_string(),
+                "cron-123".to_string()
+            ])
+            .expect("crons with id should parse"),
+            CliAction::Crons {
+                cron: Some("cron-123".to_string()),
+                output_format: CliOutputFormat::Json,
+            }
+        );
     }
 
     #[test]
@@ -7677,6 +8199,13 @@ mod tests {
                 output_format: CliOutputFormat::Ndjson,
             }
         );
+        assert_eq!(
+            parse_args(&["--output-format=json".to_string(), "parity".to_string()])
+                .expect("parity should parse"),
+            CliAction::Parity {
+                output_format: CliOutputFormat::Json,
+            }
+        );
     }
 
     #[test]
@@ -7691,6 +8220,22 @@ mod tests {
         assert!(bootstrap["phases"]
             .as_array()
             .is_some_and(|phases| !phases.is_empty()));
+
+        let parity = super::parity_payload().expect("parity payload should render");
+        assert_eq!(parity["type"], json!("parity"));
+        assert_eq!(
+            parity["summary"]["status_label"],
+            json!("strong-local-parity")
+        );
+        assert!(parity["content"]
+            .as_str()
+            .is_some_and(|content| content.contains("Industry benchmark gaps")));
+        assert!(parity["manifest"]["slash_command_count"]
+            .as_u64()
+            .is_some_and(|count| count >= 47));
+        assert!(parity["blocked_contracts"]
+            .as_array()
+            .is_some_and(|items| !items.is_empty()));
 
         let logout = super::logout_payload();
         assert_eq!(logout["type"], json!("logout"));
@@ -8079,6 +8624,7 @@ mod tests {
         assert!(help.contains("/cost"));
         assert!(help.contains("/dump-manifests"));
         assert!(help.contains("/bootstrap-plan"));
+        assert!(help.contains("/parity"));
         assert!(help.contains("/login"));
         assert!(help.contains("/logout"));
         assert!(help.contains("/resume <session-path>"));
@@ -8100,6 +8646,7 @@ mod tests {
         assert!(help.contains("/plan [task]"));
         assert!(help.contains("/init"));
         assert!(help.contains("/diff"));
+        assert!(help.contains("/rename [name]"));
         assert!(help.contains("/version"));
         assert!(help.contains("/export [file]"));
         assert!(help.contains("/session [list|switch <session-id>]"));
@@ -8120,8 +8667,11 @@ mod tests {
                 "compact",
                 "clear",
                 "cost",
+                "usage",
+                "context",
                 "dump-manifests",
                 "bootstrap-plan",
+                "parity",
                 "system-prompt",
                 "config",
                 "hooks",
@@ -8136,11 +8686,14 @@ mod tests {
                 "doctor",
                 "skills",
                 "tasks",
+                "teams",
+                "crons",
                 "init",
                 "diff",
                 "version",
                 "export",
                 "session",
+                "rename",
             ]
         );
     }
@@ -8346,6 +8899,26 @@ mod tests {
                 .as_deref()
                 .is_some_and(|message| message.contains("Session switched")
                     && message.contains("session-beta")));
+
+            let renamed_path = sessions_root.join("repo-bootstrap.json");
+            let renamed = run_resume_command(
+                session_b_path.as_path(),
+                &session_b,
+                &SlashCommand::Rename {
+                    name: Some("repo bootstrap".to_string()),
+                },
+            )
+            .expect("resume session rename should succeed");
+            assert_eq!(renamed.session_path, renamed_path);
+            assert_eq!(renamed.session.messages.len(), 4);
+            assert!(renamed
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains("Session renamed")
+                    && message.contains("repo-bootstrap")
+                    && message.contains("session-beta")));
+            assert!(renamed_path.exists());
+            assert!(!session_b_path.exists());
         }
 
         let _ = fs::remove_dir_all(repo_root);
@@ -8817,6 +9390,67 @@ mod tests {
     }
 
     #[test]
+    fn usage_report_uses_sectioned_layout() {
+        let report = format_usage_report(StatusUsage {
+            message_count: 14,
+            turns: 6,
+            latest: runtime::TokenUsage {
+                input_tokens: 7,
+                output_tokens: 5,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            },
+            cumulative: runtime::TokenUsage {
+                input_tokens: 20,
+                output_tokens: 8,
+                cache_creation_input_tokens: 3,
+                cache_read_input_tokens: 1,
+            },
+            estimated_tokens: 0,
+        });
+        assert!(report.contains("Usage"));
+        assert!(report.contains("Messages         14"));
+        assert!(report.contains("Turns            6"));
+        assert!(report.contains("Latest total     12"));
+        assert!(report.contains("Cumulative"));
+        assert!(report.contains("Total tokens     32"));
+    }
+
+    #[test]
+    fn context_report_shows_window_utilization() {
+        let report = format_context_report(
+            runtime::TokenUsage {
+                input_tokens: 10_000,
+                output_tokens: 500,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            },
+            "simcoe-opus-4-6",
+        );
+        assert!(report.contains("Context"));
+        assert!(report.contains("Context window"));
+        assert!(report.contains("200000") || report.contains("200,000"));
+        assert!(report.contains("10000") || report.contains("10,000"));
+        assert!(report.contains("Utilization"));
+        assert!(report.contains("5.0%"));
+    }
+
+    #[test]
+    fn context_report_uses_qwen3_window_when_model_matches() {
+        let report = format_context_report(
+            runtime::TokenUsage {
+                input_tokens: 64_000,
+                output_tokens: 500,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            },
+            "unsloth/Qwen3-8B-unsloth-bnb-4bit",
+        );
+        assert!(report.contains("128000") || report.contains("128,000"));
+        assert!(report.contains("50.0%"));
+    }
+
+    #[test]
     fn permissions_report_uses_sectioned_layout() {
         let report = format_permissions_report("workspace-write");
         assert!(report.contains("Permissions"));
@@ -8856,6 +9490,7 @@ mod tests {
         assert!(help.contains("claw remote-setup"));
         assert!(help.contains("claw tools [name]"));
         assert!(help.contains("claw doctor"));
+        assert!(help.contains("claw parity"));
         assert!(help.contains("claw skills [skill]"));
         assert!(help.contains("claw tasks [id]"));
         assert!(help.contains("OAuth login; supports text and ndjson output"));
@@ -8863,6 +9498,7 @@ mod tests {
         assert!(help.contains("claw --output-format ndjson prompt"));
         assert!(help.contains("claw --output-format json --resume session.json /status /cost"));
         assert!(help.contains("claw --output-format json dump-manifests"));
+        assert!(help.contains("claw --output-format json parity"));
         assert!(help.contains("claw --output-format json config hooks"));
         assert!(help.contains("claw --output-format ndjson mcp repo-server"));
         assert!(help.contains("claw --output-format json agents reviewer"));
@@ -8956,8 +9592,8 @@ mod tests {
             let _codex_home_guard = ScopedEnvVar::remove("CODEX_HOME");
             let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
 
-            let report = render_skills_report(Some("map"))
-                .expect("selected skill report should render");
+            let report =
+                render_skills_report(Some("map")).expect("selected skill report should render");
             assert!(report.contains("Skill"));
             assert!(report.contains("Name             context-map"));
             assert!(report.contains("Description      Map relevant files before editing."));
@@ -9172,9 +9808,11 @@ mod tests {
             assert!(report.contains("Agents"));
             assert!(report.contains("Available        6"));
             assert!(report.contains("Persisted tasks  2"));
-            assert!(report.contains("Explore"));
+            assert!(report.contains("Explore (explore, explorer, exploreagent)"));
             assert!(report.contains("Read-heavy repo exploration and research sub-agent."));
-            assert!(report.contains("Verification"));
+            assert!(
+                report.contains("Verification (verification, verificationagent, verify, verifier)")
+            );
             assert!(report.contains("Validation-oriented sub-agent with shell access."));
             assert!(report.contains("1 recent"));
 
@@ -9187,6 +9825,7 @@ mod tests {
                 .as_array()
                 .is_some_and(|profiles| profiles.iter().any(|profile| {
                     profile["name"] == json!("Explore")
+                        && profile["aliases"] == json!(["explore", "explorer", "exploreagent"])
                         && profile["tool_count"] == json!(11)
                         && profile["recent_task_count"] == json!(1)
                 })));
@@ -9753,8 +10392,7 @@ mod tests {
             assert!(payload["rust_registry"]["tools"]
                 .as_array()
                 .is_some_and(|tools| tools.iter().any(|tool| {
-                    tool["name"] == json!("read_file")
-                        && tool["aliases"] == json!(["FileReadTool"])
+                    tool["name"] == json!("read_file") && tool["aliases"] == json!(["FileReadTool"])
                 })));
         }
 
@@ -10643,6 +11281,178 @@ mod tests {
     }
 
     #[test]
+    fn teams_report_lists_registered_teams() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("teams-report");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let team_store = repo_root.join(".clawd-teams");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&team_store).expect("create team store");
+        fs::write(
+            team_store.join("team-abc.json"),
+            r#"{"teamId":"team-abc","name":"core-infra","description":"Core infrastructure team","createdAt":"2026-04-05T00:00:00Z"}"#,
+        ).expect("write team manifest");
+        fs::write(
+            team_store.join("team-def.json"),
+            r#"{"teamId":"team-def","name":"ml-ops","createdAt":"2026-04-05T00:01:00Z"}"#,
+        )
+        .expect("write team manifest 2");
+
+        {
+            let _team_store_guard = ScopedEnvVar::set("CLAWD_TEAM_STORE", &team_store);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report = render_teams_report(None).expect("teams report should render");
+            assert!(report.contains("Teams"));
+            assert!(report.contains("Registered teams  2"));
+            assert!(report.contains("team-abc"));
+            assert!(report.contains("core-infra"));
+            assert!(report.contains("team-def"));
+            assert!(report.contains("ml-ops"));
+
+            let payload = super::teams_payload(None).expect("teams payload should render");
+            assert_eq!(payload["type"], json!("teams"));
+            assert_eq!(payload["team_count"], json!(2));
+            assert_eq!(payload["teams"].as_array().map(Vec::len), Some(2));
+            assert!(payload["teams"]
+                .as_array()
+                .is_some_and(|teams| teams.iter().any(|team| team["teamId"] == json!("team-abc"))));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn teams_report_renders_selected_team() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("teams-selected");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let team_store = repo_root.join(".clawd-teams");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&team_store).expect("create team store");
+        fs::write(
+            team_store.join("team-xyz.json"),
+            r#"{"teamId":"team-xyz","name":"platform","description":"Platform team","createdAt":"2026-04-05T02:00:00Z"}"#,
+        ).expect("write team manifest");
+
+        {
+            let _team_store_guard = ScopedEnvVar::set("CLAWD_TEAM_STORE", &team_store);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report =
+                render_teams_report(Some("team-xyz")).expect("selected team report should render");
+            assert!(report.contains("Team"));
+            assert!(report.contains("Id               team-xyz"));
+            assert!(report.contains("Name             platform"));
+            assert!(report.contains("Description      Platform team"));
+
+            let payload = super::teams_payload(Some("team-xyz".to_string()))
+                .expect("team payload should render");
+            assert_eq!(payload["type"], json!("teams"));
+            assert_eq!(payload["team"]["teamId"], json!("team-xyz"));
+            assert_eq!(payload["team"]["name"], json!("platform"));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn crons_report_lists_registered_crons() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("crons-report");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let cron_store = repo_root.join(".clawd-crons");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&cron_store).expect("create cron store");
+        fs::write(
+            cron_store.join("cron-111.json"),
+            r#"{"cronId":"cron-111","schedule":"0 * * * *","command":"backup","description":"Hourly backup","createdAt":"2026-04-05T00:00:00Z"}"#,
+        ).expect("write cron manifest");
+        fs::write(
+            cron_store.join("cron-222.json"),
+            r#"{"cronId":"cron-222","schedule":"0 0 * * *","command":"cleanup","createdAt":"2026-04-05T00:01:00Z"}"#,
+        ).expect("write cron manifest 2");
+
+        {
+            let _cron_store_guard = ScopedEnvVar::set("CLAWD_CRON_STORE", &cron_store);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report = render_crons_report(None).expect("crons report should render");
+            assert!(report.contains("Crons"));
+            assert!(report.contains("Registered crons  2"));
+            assert!(report.contains("cron-111"));
+            assert!(report.contains("0 * * * *"));
+            assert!(report.contains("cron-222"));
+            assert!(report.contains("0 0 * * *"));
+
+            let payload = super::crons_payload(None).expect("crons payload should render");
+            assert_eq!(payload["type"], json!("crons"));
+            assert_eq!(payload["cron_count"], json!(2));
+            assert_eq!(payload["crons"].as_array().map(Vec::len), Some(2));
+            assert!(payload["crons"]
+                .as_array()
+                .is_some_and(|crons| crons.iter().any(|cron| cron["cronId"] == json!("cron-111"))));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn crons_report_renders_selected_cron() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let repo_root = temp_path("crons-selected");
+        let nested_cwd = repo_root
+            .join("claude_references")
+            .join("claw-code-main")
+            .join("rust");
+        let cron_store = repo_root.join(".clawd-crons");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&cron_store).expect("create cron store");
+        fs::write(
+            cron_store.join("cron-333.json"),
+            r#"{"cronId":"cron-333","schedule":"*/5 * * * *","command":"health-check","description":"Five-minute health check","createdAt":"2026-04-05T03:00:00Z"}"#,
+        ).expect("write cron manifest");
+
+        {
+            let _cron_store_guard = ScopedEnvVar::set("CLAWD_CRON_STORE", &cron_store);
+            let _cwd_guard = ScopedCurrentDir::change_to(&nested_cwd);
+
+            let report =
+                render_crons_report(Some("cron-333")).expect("selected cron report should render");
+            assert!(report.contains("Cron"));
+            assert!(report.contains("Id               cron-333"));
+            assert!(report.contains("Schedule         */5 * * * *"));
+            assert!(report.contains("Command          health-check"));
+            assert!(report.contains("Description      Five-minute health check"));
+
+            let payload = super::crons_payload(Some("cron-333".to_string()))
+                .expect("cron payload should render");
+            assert_eq!(payload["type"], json!("crons"));
+            assert_eq!(payload["cron"]["cronId"], json!("cron-333"));
+            assert_eq!(payload["cron"]["schedule"], json!("*/5 * * * *"));
+        }
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
     fn mcp_report_lists_configured_servers() {
         let _guard = env_lock()
             .lock()
@@ -11419,10 +12229,8 @@ mod tests {
         let path = temp_path("cli-tool-executor-allowed-alias.txt");
         std::fs::write(&path, "alias executor").expect("write input file");
 
-        let mut executor = CliToolExecutor::new(
-            Some(BTreeSet::from([String::from("read_file")])),
-            false,
-        );
+        let mut executor =
+            CliToolExecutor::new(Some(BTreeSet::from([String::from("read_file")])), false);
         let mut out = Vec::new();
         let output = executor
             .execute_with_writer(
@@ -11434,7 +12242,10 @@ mod tests {
 
         assert!(out.is_empty());
         let payload = serde_json::from_str::<serde_json::Value>(&output).expect("valid json");
-        assert_eq!(payload["file"]["filePath"], json!(path.display().to_string()));
+        assert_eq!(
+            payload["file"]["filePath"],
+            json!(path.display().to_string())
+        );
         assert_eq!(payload["file"]["content"], json!("alias executor"));
 
         let _ = std::fs::remove_file(path);
@@ -11684,6 +12495,7 @@ mod tests {
             SlashCommand::parse("/bootstrap-plan"),
             Some(SlashCommand::BootstrapPlan)
         );
+        assert_eq!(SlashCommand::parse("/parity"), Some(SlashCommand::Parity));
         assert_eq!(SlashCommand::parse("/login"), Some(SlashCommand::Login));
         assert_eq!(SlashCommand::parse("/logout"), Some(SlashCommand::Logout));
         assert_eq!(
@@ -11819,17 +12631,12 @@ mod tests {
         assert!(start.contains("read_file"));
         assert!(start.contains("src/main.rs"));
 
-        let powershell_start = format_tool_call_start(
-            "PowerShell",
-            r#"{"command":"Get-ChildItem src"}"#,
-        );
+        let powershell_start =
+            format_tool_call_start("PowerShell", r#"{"command":"Get-ChildItem src"}"#);
         assert!(powershell_start.contains("PowerShell"));
         assert!(powershell_start.contains("PS> Get-ChildItem src"));
 
-        let bash_tool_start = format_tool_call_start(
-            "BashTool",
-            r#"{"command":"ls src"}"#,
-        );
+        let bash_tool_start = format_tool_call_start("BashTool", r#"{"command":"ls src"}"#);
         assert!(bash_tool_start.contains("BashTool"));
         assert!(bash_tool_start.contains("$ ls src"));
 
@@ -11840,16 +12647,12 @@ mod tests {
         assert!(web_fetch_start.contains("WebFetch"));
         assert!(web_fetch_start.contains("example.com"));
 
-        let structured_start = format_tool_call_start(
-            "StructuredOutput",
-            r#"{"plan":"ok","count":2}"#,
-        );
+        let structured_start =
+            format_tool_call_start("StructuredOutput", r#"{"plan":"ok","count":2}"#);
         assert!(structured_start.contains("StructuredOutput"));
 
-        let repl_start = format_tool_call_start(
-            "REPL",
-            r#"{"language":"python","code":"print(1)"}"#,
-        );
+        let repl_start =
+            format_tool_call_start("REPL", r#"{"language":"python","code":"print(1)"}"#);
         assert!(repl_start.contains("REPL python"));
 
         let synthetic_start = format_tool_call_start(
@@ -11859,10 +12662,7 @@ mod tests {
         assert!(synthetic_start.contains("SyntheticOutputTool"));
         assert!(synthetic_start.contains("markdown"));
 
-        let sleep_start = format_tool_call_start(
-            "Sleep",
-            r#"{"duration_ms":250}"#,
-        );
+        let sleep_start = format_tool_call_start("Sleep", r#"{"duration_ms":250}"#);
         assert!(sleep_start.contains("Sleep 250ms"));
 
         let todo_start = format_tool_call_start(
@@ -11872,16 +12672,11 @@ mod tests {
         assert!(todo_start.contains("TodoWrite"));
         assert!(todo_start.contains("1 items"));
 
-        let skill_start = format_tool_call_start(
-            "Skill",
-            r#"{"skill":"help","args":"overview"}"#,
-        );
+        let skill_start = format_tool_call_start("Skill", r#"{"skill":"help","args":"overview"}"#);
         assert!(skill_start.contains("Skill help"));
 
-        let session_export_start = format_tool_call_start(
-            "SessionExportTool",
-            r#"{"path":"session-notes"}"#,
-        );
+        let session_export_start =
+            format_tool_call_start("SessionExportTool", r#"{"path":"session-notes"}"#);
         assert!(session_export_start.contains("SessionExportTool"));
         assert!(session_export_start.contains("session-notes"));
 
@@ -11893,10 +12688,8 @@ mod tests {
         assert!(notebook_start.contains("demo.ipynb"));
         assert!(notebook_start.contains("replace"));
 
-        let config_start = format_tool_call_start(
-            "Config",
-            r#"{"setting":"verbose","value":true}"#,
-        );
+        let config_start =
+            format_tool_call_start("Config", r#"{"setting":"verbose","value":true}"#);
         assert!(config_start.contains("Config"));
         assert!(config_start.contains("verbose"));
 
@@ -12278,6 +13071,25 @@ mod tests {
         assert!(team_deleted.contains("1775962999"));
         assert!(team_deleted.contains("removed from the local team registry"));
 
+        let team_listed = format_tool_result(
+            "TeamListTool",
+            r#"{"teams":[{"teamId":"team-123","name":"alpha","createdAt":"1775962415"}],"total":1,"message":"local team registry only; no backend collaboration service or multi-user sync is active"}"#,
+            false,
+        );
+        assert!(team_listed.contains("TeamListTool"));
+        assert!(team_listed.contains("1 teams"));
+        assert!(team_listed.contains("team-123"));
+        assert!(team_listed.contains("alpha"));
+        assert!(team_listed.contains("local team registry"));
+
+        let team_listed_empty = format_tool_result(
+            "TeamListTool",
+            r#"{"teams":[],"total":0,"message":"local team registry is empty; no backend collaboration service is active"}"#,
+            false,
+        );
+        assert!(team_listed_empty.contains("0 teams"));
+        assert!(team_listed_empty.contains("empty"));
+
         let remote_trigger = format_tool_result(
             "RemoteTriggerTool",
             r#"{"event":"sync","triggered":false,"remoteEnabled":true,"sessionId":"session-123","baseUrl":"http://127.0.0.1:8765","pathReady":true,"blockerKind":"adapter-not-ported","blockerDetail":"upstream proxy websocket/session adapter is not ported in Rust","message":"remote trigger transport path is configured, but the upstream websocket/session adapter is not ported in Rust yet"}"#,
@@ -12488,5 +13300,102 @@ mod tests {
             AssistantEvent::ToolUse { name, input, .. }
                 if name == "read_file" && input == "{\"path\":\"rust/Cargo.toml\"}"
         ));
+    }
+
+    #[test]
+    fn mcp_and_tool_search_start_renderers_are_dedicated() {
+        // ToolSearch shows query
+        let ts = format_tool_call_start("ToolSearch", r#"{"query":"bash tool"}"#);
+        assert!(ts.contains("ToolSearch"), "start should name ToolSearch");
+        assert!(ts.contains("bash tool"), "start should include query text");
+
+        // ListMcpResourcesTool shows server
+        let lmr = format_tool_call_start("ListMcpResourcesTool", r#"{"server":"my-server"}"#);
+        assert!(
+            lmr.contains("ListMcpResources"),
+            "start should name ListMcpResources"
+        );
+        assert!(
+            lmr.contains("my-server"),
+            "start should include server name"
+        );
+
+        // ReadMcpResourceTool shows server and uri
+        let rmr = format_tool_call_start(
+            "ReadMcpResourceTool",
+            r#"{"server":"my-server","uri":"resource://foo/bar"}"#,
+        );
+        assert!(
+            rmr.contains("ReadMcpResource"),
+            "start should name ReadMcpResource"
+        );
+        assert!(
+            rmr.contains("my-server"),
+            "start should include server name"
+        );
+        assert!(
+            rmr.contains("resource://foo/bar"),
+            "start should include uri"
+        );
+
+        // MCPTool call shows server::tool
+        let mcp_call = format_tool_call_start(
+            "MCPTool",
+            r#"{"server":"my-server","tool":"my_fn","arguments":{}}"#,
+        );
+        assert!(mcp_call.contains("MCPTool"), "start should name MCPTool");
+        assert!(
+            mcp_call.contains("my-server"),
+            "start should include server"
+        );
+        assert!(mcp_call.contains("my_fn"), "start should include tool name");
+
+        // MCPTool list (no tool field) shows list intent
+        let mcp_list = format_tool_call_start("MCPTool", r#"{"server":"my-server"}"#);
+        assert!(
+            mcp_list.contains("list"),
+            "start should indicate list intent"
+        );
+        assert!(
+            mcp_list.contains("my-server"),
+            "start should include server"
+        );
+
+        // McpAuthTool shows action and optional server
+        let auth_status = format_tool_call_start("McpAuthTool", r#"{"server":"svc"}"#);
+        assert!(
+            auth_status.contains("status"),
+            "default action should be status"
+        );
+        assert!(
+            auth_status.contains("svc"),
+            "start should include server hint"
+        );
+
+        let auth_save =
+            format_tool_call_start("McpAuthTool", r#"{"action":"save","server":"svc"}"#);
+        assert!(
+            auth_save.contains("save"),
+            "start should reflect save action"
+        );
+
+        // dynamic mcp__server__tool shows server::tool
+        let dyn_mcp = format_tool_call_start("mcp__weather__get_forecast", r#"{"location":"NYC"}"#);
+        assert!(
+            dyn_mcp.contains("weather"),
+            "start should extract server from name"
+        );
+        assert!(
+            dyn_mcp.contains("get_forecast"),
+            "start should extract tool from name"
+        );
+        assert!(dyn_mcp.contains("1 args"), "start should count input args");
+
+        // dynamic mcp__server__tool with no args shows no arg hint
+        let dyn_mcp_noargs = format_tool_call_start("mcp__weather__get_forecast", r#"{}"#);
+        assert!(
+            !dyn_mcp_noargs.contains("args"),
+            "empty input should omit arg count"
+        );
     }
 }

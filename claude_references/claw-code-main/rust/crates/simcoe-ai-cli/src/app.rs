@@ -10,14 +10,15 @@ use crate::args::{
     AllowedToolSet, CliOutputFormat,
 };
 use crate::format::{
-    format_auto_compaction_notice, format_compact_report, format_cost_report, format_model_report,
-    format_model_switch_report, format_permissions_report, format_permissions_switch_report,
-    format_resume_report, format_status_report, render_agents_report, render_config_report,
+    format_auto_compaction_notice, format_compact_report, format_context_report,
+    format_cost_report, format_model_report, format_model_switch_report, format_permissions_report,
+    format_permissions_switch_report, format_resume_report, format_status_report,
+    format_usage_report, render_agents_report, render_config_report, render_crons_report,
     render_diff_report, render_doctor_report, render_hooks_report, render_last_tool_debug_report,
     render_mcp_report, render_memory_report, render_plugin_report, render_reload_plugins_report,
     render_remote_env_report, render_remote_setup_report, render_repl_help, render_skills_report,
-    render_tasks_report, render_teleport_report, render_tools_report, render_version_report,
-    status_context, StatusUsage,
+    render_tasks_report, render_teams_report, render_teleport_report, render_tools_report,
+    render_version_report, status_context, StatusUsage,
 };
 use crate::render::{Spinner, TerminalRenderer};
 use crate::session_manager::{
@@ -361,6 +362,10 @@ impl LiveCli {
                 self.run_commit()?;
                 true
             }
+            commands::SlashCommand::Branch { name } => {
+                self.run_branch(name.as_deref())?;
+                false
+            }
             commands::SlashCommand::Pr { context } => {
                 self.run_pr(context.as_deref())?;
                 false
@@ -392,12 +397,24 @@ impl LiveCli {
                 self.print_cost();
                 false
             }
+            commands::SlashCommand::Usage => {
+                self.print_usage();
+                false
+            }
+            commands::SlashCommand::Context => {
+                self.print_context();
+                false
+            }
             commands::SlashCommand::DumpManifests => {
                 Self::print_dump_manifests()?;
                 false
             }
             commands::SlashCommand::BootstrapPlan => {
                 Self::print_bootstrap_plan();
+                false
+            }
+            commands::SlashCommand::Parity => {
+                Self::print_parity()?;
                 false
             }
             commands::SlashCommand::Login => {
@@ -465,6 +482,14 @@ impl LiveCli {
                 Self::print_tasks(task.as_deref())?;
                 false
             }
+            commands::SlashCommand::Teams { team } => {
+                Self::print_teams(team.as_deref())?;
+                false
+            }
+            commands::SlashCommand::Crons { cron } => {
+                Self::print_crons(cron.as_deref())?;
+                false
+            }
             commands::SlashCommand::Init => {
                 crate::run_init(CliOutputFormat::Text)?;
                 false
@@ -480,6 +505,10 @@ impl LiveCli {
             commands::SlashCommand::Export { path } => {
                 self.export_session(path.as_deref())?;
                 false
+            }
+            commands::SlashCommand::Rename { name } => {
+                self.rename_session(name.as_deref())?;
+                true
             }
             commands::SlashCommand::Session { action, target } => {
                 self.handle_session_command(action.as_deref(), target.as_deref())?
@@ -630,6 +659,24 @@ impl LiveCli {
         println!("{}", format_cost_report(cumulative));
     }
 
+    fn print_usage(&self) {
+        println!(
+            "{}",
+            format_usage_report(StatusUsage {
+                message_count: self.runtime.session().messages.len(),
+                turns: self.runtime.usage().turns(),
+                latest: self.runtime.usage().current_turn_usage(),
+                cumulative: self.runtime.usage().cumulative_usage(),
+                estimated_tokens: 0,
+            })
+        );
+    }
+
+    fn print_context(&self) {
+        let cumulative = self.runtime.usage().cumulative_usage();
+        println!("{}", format_context_report(cumulative, &self.model));
+    }
+
     fn print_report(
         render: impl FnOnce() -> Result<String, Box<dyn std::error::Error>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -747,6 +794,10 @@ impl LiveCli {
         Self::print_infallible_report(crate::bootstrap_plan_report);
     }
 
+    fn print_parity() -> Result<(), Box<dyn std::error::Error>> {
+        Self::print_report(crate::parity_report)
+    }
+
     fn print_system_prompt(args: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
         Self::print_report(|| {
             let (cwd, date) = crate::parse_system_prompt_command_args(args)?;
@@ -794,6 +845,14 @@ impl LiveCli {
         Self::print_selector_report(task, render_tasks_report)
     }
 
+    fn print_teams(team: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        Self::print_selector_report(team, render_teams_report)
+    }
+
+    fn print_crons(cron: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        Self::print_selector_report(cron, render_crons_report)
+    }
+
     fn print_diff() -> Result<(), Box<dyn std::error::Error>> {
         Self::print_report(render_diff_report)
     }
@@ -815,6 +874,19 @@ impl LiveCli {
             "Export\n  Result           wrote transcript\n  File             {}\n  Messages         {}",
             export_path.display(),
             self.runtime.session().messages.len(),
+        );
+        Ok(())
+    }
+
+    fn rename_session(&mut self, name: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        let previous_id = self.session.id.clone();
+        let message_count = self.runtime.session().messages.len();
+        let (next_handle, renamed) =
+            runtime::rename_managed_session(&self.session, name, self.runtime.session())?;
+        self.session = next_handle.clone();
+        println!(
+            "{}",
+            crate::session_rename_report(&previous_id, &next_handle, message_count, renamed)
         );
         Ok(())
     }
@@ -1024,6 +1096,31 @@ impl LiveCli {
             path.display(),
             message.trim(),
         );
+        Ok(())
+    }
+
+    fn run_branch(&mut self, name: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        match name {
+            Some(branch_name) => {
+                let output = crate::command_in_current_dir("git")?
+                    .args(["checkout", "-b", branch_name])
+                    .output()?;
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                    return Err(format!("git checkout -b failed: {stderr}").into());
+                }
+                println!("Branch\n  Result           created\n  Name             {branch_name}");
+            }
+            None => {
+                let current = crate::git_output(&["branch", "--show-current"])?;
+                let current = current.trim();
+                if current.is_empty() {
+                    println!("Branch\n  Result           detached HEAD");
+                } else {
+                    println!("Branch\n  Result           ok\n  Current          {current}");
+                }
+            }
+        }
         Ok(())
     }
 

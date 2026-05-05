@@ -42,14 +42,14 @@ pub use file_ops::{
     GrepSearchInput, GrepSearchOutput, ReadFileOutput, StructuredPatchHunk, TextFilePayload,
     WriteFileOutput,
 };
+pub use hooks::{HookEvent, HookRunResult, HookRunner};
 pub use managed_sessions::{
     create_managed_session_handle, export_active_session, list_managed_sessions,
-    load_active_managed_session, load_active_session_handle, render_export_text,
-    resolve_export_path, resolve_session_reference, session_handle_from_path,
+    load_active_managed_session, load_active_session_handle, rename_managed_session,
+    render_export_text, resolve_export_path, resolve_session_reference, session_handle_from_path,
     sessions_dir, set_active_session_handle, switch_managed_session, ManagedSessionSummary,
     SessionHandle,
 };
-pub use hooks::{HookEvent, HookRunResult, HookRunner};
 pub use mcp::{
     classify_mcp_reason_kind, mcp_client_transport_display_name, mcp_credentials_key,
     mcp_oauth_token_is_expired, mcp_reason_remediation_hint, mcp_server_auth_status,
@@ -98,8 +98,8 @@ pub use usage::{
     format_usd, pricing_for_model, ModelPricing, TokenUsage, UsageCostEstimate, UsageTracker,
 };
 pub use workspace::{
-    active_worktree_root, clear_active_worktree_root, effective_current_dir,
-    plan_mode_active, set_active_worktree_root, set_plan_mode_active,
+    active_worktree_root, clear_active_worktree_root, effective_current_dir, plan_mode_active,
+    set_active_worktree_root, set_plan_mode_active,
 };
 
 #[cfg(test)]

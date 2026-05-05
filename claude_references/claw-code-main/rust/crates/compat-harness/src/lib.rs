@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use commands::{CommandManifestEntry, CommandRegistry, CommandSource};
 use runtime::{BootstrapPhase, BootstrapPlan};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tools::{ToolManifestEntry, ToolRegistry, ToolSource};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,6 +87,12 @@ impl UpstreamPaths {
     pub fn parity_manifest_path(&self) -> PathBuf {
         self.repo_root
             .join("src/reference_data/parity_manifest.json")
+    }
+
+    #[must_use]
+    pub fn transition_scorecard_path(&self) -> PathBuf {
+        self.repo_root
+            .join("src/reference_data/transition_scorecard.json")
     }
 }
 
@@ -223,6 +229,54 @@ pub struct ParityManifest {
     pub subsystems: Vec<ParitySubsystem>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct TransitionScorecardSummary {
+    pub status_label: String,
+    pub current_position: String,
+    pub recommended_first_slice: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct TransitionScorecardItem {
+    pub name: String,
+    pub category: String,
+    pub status: String,
+    pub priority: String,
+    pub current: String,
+    pub needed: Vec<String>,
+    pub anchors: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct IndustryBenchmarkItem {
+    pub category: String,
+    pub benchmark: String,
+    pub current_status: String,
+    pub gap: String,
+    pub priority: String,
+    pub needed: Vec<String>,
+    pub anchors: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct BlockedContractItem {
+    pub name: String,
+    pub status: String,
+    pub needed_contract: String,
+    pub current_behavior: String,
+    pub anchors: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct TransitionScorecard {
+    pub generated_date: String,
+    pub transition_goal: String,
+    pub summary: TransitionScorecardSummary,
+    pub parity_items: Vec<TransitionScorecardItem>,
+    pub industry_benchmarks: Vec<IndustryBenchmarkItem>,
+    pub blocked_contracts: Vec<BlockedContractItem>,
+}
+
 #[derive(Debug, Deserialize)]
 struct SnapshotEntry {
     name: String,
@@ -284,6 +338,10 @@ pub fn extract_manifest(paths: &UpstreamPaths) -> std::io::Result<ExtractedManif
 
 pub fn load_parity_manifest(paths: &UpstreamPaths) -> std::io::Result<ParityManifest> {
     read_json(&paths.parity_manifest_path())
+}
+
+pub fn load_transition_scorecard(paths: &UpstreamPaths) -> std::io::Result<TransitionScorecard> {
+    read_json(&paths.transition_scorecard_path())
 }
 
 pub fn load_plugin_catalog(paths: &UpstreamPaths) -> std::io::Result<PluginCatalog> {

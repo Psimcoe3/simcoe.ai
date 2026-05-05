@@ -73,7 +73,9 @@ system_prompts:
 
 # ── Model ─────────────────────────────────────────────────────────────────
 model:
-  name: "unsloth/Meta-Llama-3.1-8B-bnb-4bit"   # HF hub id or local path
+  name: "unsloth/Qwen3-8B-unsloth-bnb-4bit"   # HF hub id or local path
+                                                 # Qwen3-8B: Apache 2.0, 128K ctx, strong reasoning
+                                                 # Previous: "unsloth/Meta-Llama-3.1-8B-bnb-4bit"
   max_seq_length: 2048                           # token budget per example
   load_in_4bit: true                             # NF4 quantisation
   dtype: null                                    # null → auto-detect (bf16 on Ampere+)

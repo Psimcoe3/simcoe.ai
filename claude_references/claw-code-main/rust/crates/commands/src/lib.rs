@@ -82,6 +82,18 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         resume_supported: true,
     },
     SlashCommandSpec {
+        name: "usage",
+        summary: "Show session message, turn, and token usage details",
+        argument_hint: None,
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "context",
+        summary: "Show context window utilization for the current session",
+        argument_hint: None,
+        resume_supported: true,
+    },
+    SlashCommandSpec {
         name: "dump-manifests",
         summary: "Show archived manifest counts for commands, tools, and bootstrap",
         argument_hint: None,
@@ -90,6 +102,12 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
     SlashCommandSpec {
         name: "bootstrap-plan",
         summary: "Show the default runtime bootstrap phases",
+        argument_hint: None,
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "parity",
+        summary: "Show the claw transition and industry benchmark scorecard",
         argument_hint: None,
         resume_supported: true,
     },
@@ -196,6 +214,18 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         resume_supported: true,
     },
     SlashCommandSpec {
+        name: "teams",
+        summary: "Inspect registered teams or one team",
+        argument_hint: Some("[id]"),
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "crons",
+        summary: "Inspect registered cron jobs or one cron",
+        argument_hint: Some("[id]"),
+        resume_supported: true,
+    },
+    SlashCommandSpec {
         name: "init",
         summary: "Create a starter SIMCOE.md for this repo",
         argument_hint: None,
@@ -235,6 +265,12 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         name: "commit",
         summary: "Generate a commit message and create a git commit",
         argument_hint: None,
+        resume_supported: false,
+    },
+    SlashCommandSpec {
+        name: "branch",
+        summary: "Create a named git branch or show the current branch",
+        argument_hint: Some("[name]"),
         resume_supported: false,
     },
     SlashCommandSpec {
@@ -279,6 +315,12 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         argument_hint: Some("[list|switch <session-id>]"),
         resume_supported: true,
     },
+    SlashCommandSpec {
+        name: "rename",
+        summary: "Rename the current managed session or auto-name it from the conversation",
+        argument_hint: Some("[name]"),
+        resume_supported: true,
+    },
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -296,6 +338,9 @@ pub enum SlashCommand {
         task: Option<String>,
     },
     Commit,
+    Branch {
+        name: Option<String>,
+    },
     Pr {
         context: Option<String>,
     },
@@ -319,8 +364,11 @@ pub enum SlashCommand {
         confirm: bool,
     },
     Cost,
+    Usage,
+    Context,
     DumpManifests,
     BootstrapPlan,
+    Parity,
     Login,
     Logout,
     Resume {
@@ -358,6 +406,12 @@ pub enum SlashCommand {
     Tasks {
         task: Option<String>,
     },
+    Teams {
+        team: Option<String>,
+    },
+    Crons {
+        cron: Option<String>,
+    },
     Init,
     Diff,
     Version,
@@ -367,6 +421,9 @@ pub enum SlashCommand {
     Session {
         action: Option<String>,
         target: Option<String>,
+    },
+    Rename {
+        name: Option<String>,
     },
     Unknown(String),
 }
@@ -395,6 +452,9 @@ impl SlashCommand {
                 task: remainder_after_command(trimmed, command),
             },
             "commit" => Self::Commit,
+            "branch" => Self::Branch {
+                name: remainder_after_command(trimmed, command),
+            },
             "pr" => Self::Pr {
                 context: remainder_after_command(trimmed, command),
             },
@@ -418,8 +478,11 @@ impl SlashCommand {
                 confirm: parts.next() == Some("--confirm"),
             },
             "cost" => Self::Cost,
+            "usage" => Self::Usage,
+            "context" => Self::Context,
             "dump-manifests" => Self::DumpManifests,
             "bootstrap-plan" => Self::BootstrapPlan,
+            "parity" => Self::Parity,
             "login" => Self::Login,
             "logout" => Self::Logout,
             "resume" => Self::Resume {
@@ -457,6 +520,12 @@ impl SlashCommand {
             "tasks" => Self::Tasks {
                 task: remainder_after_command(trimmed, command),
             },
+            "teams" => Self::Teams {
+                team: remainder_after_command(trimmed, command),
+            },
+            "crons" => Self::Crons {
+                cron: remainder_after_command(trimmed, command),
+            },
             "init" => Self::Init,
             "diff" => Self::Diff,
             "version" => Self::Version,
@@ -466,6 +535,9 @@ impl SlashCommand {
             "session" => Self::Session {
                 action: parts.next().map(ToOwned::to_owned),
                 target: parts.next().map(ToOwned::to_owned),
+            },
+            "rename" => Self::Rename {
+                name: remainder_after_command(trimmed, command),
             },
             other => Self::Unknown(other.to_string()),
         })
@@ -568,6 +640,7 @@ pub fn handle_slash_command(
         | SlashCommand::Review { .. }
         | SlashCommand::Plan { .. }
         | SlashCommand::Commit
+        | SlashCommand::Branch { .. }
         | SlashCommand::Pr { .. }
         | SlashCommand::Issue { .. }
         | SlashCommand::Ultraplan { .. }
@@ -577,8 +650,11 @@ pub fn handle_slash_command(
         | SlashCommand::Permissions { .. }
         | SlashCommand::Clear { .. }
         | SlashCommand::Cost
+        | SlashCommand::Usage
+        | SlashCommand::Context
         | SlashCommand::DumpManifests
         | SlashCommand::BootstrapPlan
+        | SlashCommand::Parity
         | SlashCommand::Login
         | SlashCommand::Logout
         | SlashCommand::Resume { .. }
@@ -596,11 +672,14 @@ pub fn handle_slash_command(
         | SlashCommand::Doctor
         | SlashCommand::Skills { .. }
         | SlashCommand::Tasks { .. }
+        | SlashCommand::Teams { .. }
+        | SlashCommand::Crons { .. }
         | SlashCommand::Init
         | SlashCommand::Diff
         | SlashCommand::Version
         | SlashCommand::Export { .. }
         | SlashCommand::Session { .. }
+        | SlashCommand::Rename { .. }
         | SlashCommand::Unknown(_) => None,
     }
 }
@@ -636,6 +715,16 @@ mod tests {
             })
         );
         assert_eq!(SlashCommand::parse("/commit"), Some(SlashCommand::Commit));
+        assert_eq!(
+            SlashCommand::parse("/branch feature-login"),
+            Some(SlashCommand::Branch {
+                name: Some("feature-login".to_string())
+            })
+        );
+        assert_eq!(
+            SlashCommand::parse("/branch"),
+            Some(SlashCommand::Branch { name: None })
+        );
         assert_eq!(
             SlashCommand::parse("/pr ready for review"),
             Some(SlashCommand::Pr {
@@ -689,6 +778,7 @@ mod tests {
             Some(SlashCommand::Clear { confirm: true })
         );
         assert_eq!(SlashCommand::parse("/cost"), Some(SlashCommand::Cost));
+        assert_eq!(SlashCommand::parse("/usage"), Some(SlashCommand::Usage));
         assert_eq!(
             SlashCommand::parse("/dump-manifests"),
             Some(SlashCommand::DumpManifests)
@@ -715,6 +805,7 @@ mod tests {
                 args: Some("--cwd repo --date 2026-04-05".to_string())
             })
         );
+        assert_eq!(SlashCommand::parse("/parity"), Some(SlashCommand::Parity));
         assert_eq!(
             SlashCommand::parse("/config"),
             Some(SlashCommand::Config { section: None })
@@ -805,6 +896,16 @@ mod tests {
                 target: Some("abc123".to_string())
             })
         );
+        assert_eq!(
+            SlashCommand::parse("/rename repo-bootstrap"),
+            Some(SlashCommand::Rename {
+                name: Some("repo-bootstrap".to_string())
+            })
+        );
+        assert_eq!(
+            SlashCommand::parse("/rename"),
+            Some(SlashCommand::Rename { name: None })
+        );
     }
 
     #[test]
@@ -825,8 +926,10 @@ mod tests {
         assert!(help.contains("/permissions [read-only|workspace-write|danger-full-access]"));
         assert!(help.contains("/clear [--confirm]"));
         assert!(help.contains("/cost"));
+        assert!(help.contains("/usage"));
         assert!(help.contains("/dump-manifests"));
         assert!(help.contains("/bootstrap-plan"));
+        assert!(help.contains("/parity"));
         assert!(help.contains("/resume <session-path>"));
         assert!(help.contains("/login"));
         assert!(help.contains("/logout"));
@@ -851,8 +954,9 @@ mod tests {
         assert!(help.contains("/plan [task]"));
         assert!(help.contains("/export [file]"));
         assert!(help.contains("/session [list|switch <session-id>]"));
-        assert_eq!(slash_command_specs().len(), 40);
-        assert_eq!(resume_supported_slash_commands().len(), 26);
+        assert!(help.contains("/rename [name]"));
+        assert_eq!(slash_command_specs().len(), 47);
+        assert_eq!(resume_supported_slash_commands().len(), 32);
     }
 
     #[test]
@@ -861,6 +965,7 @@ mod tests {
 
         assert!(help.contains("Resume-compatible slash commands"));
         assert!(help.contains("/help"));
+        assert!(help.contains("/parity"));
         assert!(help.contains("/config [env|hooks|model|provider]"));
         assert!(help.contains("/export [file]"));
         assert!(help.contains("/session [list|switch <session-id>]"));
@@ -945,6 +1050,7 @@ mod tests {
                 .is_none()
         );
         assert!(handle_slash_command("/cost", &session, CompactionConfig::default()).is_none());
+        assert!(handle_slash_command("/usage", &session, CompactionConfig::default()).is_none());
         assert!(
             handle_slash_command("/dump-manifests", &session, CompactionConfig::default())
                 .is_none()
@@ -976,6 +1082,7 @@ mod tests {
             handle_slash_command("/reload-plugins", &session, CompactionConfig::default())
                 .is_none()
         );
+        assert!(handle_slash_command("/rename", &session, CompactionConfig::default()).is_none());
         assert!(
             handle_slash_command("/remote-env", &session, CompactionConfig::default()).is_none()
         );

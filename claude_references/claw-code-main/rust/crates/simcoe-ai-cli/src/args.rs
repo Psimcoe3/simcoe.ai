@@ -3,13 +3,14 @@ use std::env;
 use std::path::PathBuf;
 
 use runtime::PermissionMode;
-use tools::{matches_tool_request, mvp_tool_specs};
+use tools::{is_dynamic_mcp_tool_name, matches_tool_request, mvp_tool_specs};
 
 pub(crate) type AllowedToolSet = BTreeSet<String>;
 
 const NAMED_CLI_SUBCOMMANDS: &[&str] = &[
     "dump-manifests",
     "bootstrap-plan",
+    "parity",
     "system-prompt",
     "config",
     "hooks",
@@ -24,6 +25,8 @@ const NAMED_CLI_SUBCOMMANDS: &[&str] = &[
     "doctor",
     "skills",
     "tasks",
+    "teams",
+    "crons",
     "export",
     "session",
     "login",
@@ -38,6 +41,9 @@ pub(crate) enum CliAction {
         output_format: CliOutputFormat,
     },
     BootstrapPlan {
+        output_format: CliOutputFormat,
+    },
+    Parity {
         output_format: CliOutputFormat,
     },
     PrintSystemPrompt {
@@ -90,6 +96,14 @@ pub(crate) enum CliAction {
     },
     Tasks {
         task: Option<String>,
+        output_format: CliOutputFormat,
+    },
+    Teams {
+        team: Option<String>,
+        output_format: CliOutputFormat,
+    },
+    Crons {
+        cron: Option<String>,
         output_format: CliOutputFormat,
     },
     Export {
@@ -288,6 +302,7 @@ pub(crate) fn parse_args(args: &[String]) -> Result<CliAction, String> {
     match rest[0].as_str() {
         "dump-manifests" => Ok(CliAction::DumpManifests { output_format }),
         "bootstrap-plan" => Ok(CliAction::BootstrapPlan { output_format }),
+        "parity" => parse_parity_args(&rest[1..], output_format),
         "system-prompt" => parse_system_prompt_args(&rest[1..], output_format),
         "config" => parse_config_args(&rest[1..], output_format),
         "hooks" => parse_hooks_args(&rest[1..], output_format),
@@ -302,6 +317,8 @@ pub(crate) fn parse_args(args: &[String]) -> Result<CliAction, String> {
         "doctor" => parse_doctor_args(&rest[1..], output_format),
         "skills" => parse_skills_args(&rest[1..], output_format),
         "tasks" => parse_tasks_args(&rest[1..], output_format),
+        "teams" => parse_teams_args(&rest[1..], output_format),
+        "crons" => parse_crons_args(&rest[1..], output_format),
         "export" => parse_export_args(&rest[1..], output_format),
         "session" => parse_session_args(&rest[1..], output_format),
         "login" => Ok(CliAction::Login { output_format }),
@@ -409,9 +426,15 @@ fn normalize_allowed_tools(values: &[String]) -> Result<Option<AllowedToolSet>, 
                 .get(&normalized)
                 .cloned()
                 .or_else(|| {
-                    specs.iter()
+                    specs
+                        .iter()
                         .find(|spec| matches_tool_request(spec.name, token))
                         .map(|spec| spec.name.to_string())
+                })
+                .or_else(|| {
+                    // Allow explicit qualified dynamic MCP tool names (mcp__server__tool) through
+                    // without requiring a matching static spec entry.
+                    is_dynamic_mcp_tool_name(token).then(|| token.to_string())
                 })
                 .ok_or_else(|| {
                     format!(
@@ -532,6 +555,12 @@ fn parse_no_arg_output_command(
     Ok(build_action(output_format))
 }
 
+fn parse_parity_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
+    parse_no_arg_output_command(args, output_format, "parity", |output_format| {
+        CliAction::Parity { output_format }
+    })
+}
+
 fn parse_config_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
     parse_selector_command(args, output_format, "config", |section, output_format| {
         CliAction::Config {
@@ -638,6 +667,24 @@ fn parse_tasks_args(args: &[String], output_format: CliOutputFormat) -> Result<C
     parse_selector_command(args, output_format, "tasks", |task, output_format| {
         CliAction::Tasks {
             task,
+            output_format,
+        }
+    })
+}
+
+fn parse_teams_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
+    parse_selector_command(args, output_format, "teams", |team, output_format| {
+        CliAction::Teams {
+            team,
+            output_format,
+        }
+    })
+}
+
+fn parse_crons_args(args: &[String], output_format: CliOutputFormat) -> Result<CliAction, String> {
+    parse_selector_command(args, output_format, "crons", |cron, output_format| {
+        CliAction::Crons {
+            cron,
             output_format,
         }
     })

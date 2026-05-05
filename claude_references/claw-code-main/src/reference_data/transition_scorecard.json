@@ -1,0 +1,318 @@
+{
+  "generated_date": "2026-05-04",
+  "transition_goal": "Production-grade local Rust parity with explicit diagnostic blockers for upstream contracts that are not present in this snapshot.",
+  "summary": {
+    "status_label": "strong-local-parity",
+    "current_position": "Core local CLI, agent loop, tools, sessioning, structured output, and supported MCP transports are usable; full product parity still depends on plugin, bundled-skill, remote-session, and service contracts.",
+    "recommended_first_slice": [
+      "Freeze a live parity matrix and keep it test-backed.",
+      "Close in-repo skill, hook, and plugin gaps where contracts exist.",
+      "Add quotas, sandbox profiles, guardrails, redaction, and audit exports before expanding risky automation.",
+      "Modularize the CLI/TUI before adding richer editor and dashboard surfaces."
+    ]
+  },
+  "parity_items": [
+    {
+      "name": "core-runtime",
+      "category": "claw-reference",
+      "status": "implemented",
+      "priority": "p0",
+      "current": "Rust conversation runtime supports streaming assistant turns, tool calls, sessions, permissions, and usage tracking.",
+      "needed": [],
+      "anchors": [
+        "rust/crates/runtime/src/conversation.rs",
+        "rust/crates/runtime/src/session.rs",
+        "rust/crates/runtime/src/usage.rs"
+      ]
+    },
+    {
+      "name": "tool-registry",
+      "category": "claw-reference",
+      "status": "partial",
+      "priority": "p0",
+      "current": "Native Rust tools, TypeScript-name aliases, schemas, dynamic MCP tools, and dedicated renderers are present for the practical local surface.",
+      "needed": [
+        "Keep diagnostic-only tools honest until a real runtime exists.",
+        "Continue adding output schemas/renderers as new tools land."
+      ],
+      "anchors": [
+        "rust/crates/tools/src/lib.rs",
+        "rust/crates/simcoe-ai-cli/src/main.rs"
+      ]
+    },
+    {
+      "name": "mcp-transports",
+      "category": "claw-reference",
+      "status": "blocked-by-contract",
+      "priority": "p0",
+      "current": "stdio, direct HTTP/SSE, and websocket MCP execution are supported; sdk, simcoe-ai-proxy, and headersHelper paths return structured unsupported-runtime diagnostics.",
+      "needed": [
+        "Import or document the upstream SDK adapter contract.",
+        "Import or document the simcoe-ai-proxy websocket/session adapter contract.",
+        "Define headersHelper output and credential-injection behavior."
+      ],
+      "anchors": [
+        "rust/crates/runtime/src/mcp.rs",
+        "rust/crates/runtime/src/mcp_stdio.rs",
+        "src/reference_data/subsystems/remote.json"
+      ]
+    },
+    {
+      "name": "plugins",
+      "category": "claw-reference",
+      "status": "inspection-only",
+      "priority": "p0",
+      "current": "The CLI can inspect archived plugin command/module surfaces, but there is no live plugin loader, lifecycle, marketplace flow, or extension registration path.",
+      "needed": [
+        "Define plugin manifest and lifecycle schema.",
+        "Load enabled plugins from disk.",
+        "Register plugin-provided commands, hooks, tools, skills, and MCP servers.",
+        "Implement reload, enable, disable, install, and update flows."
+      ],
+      "anchors": [
+        "rust/crates/compat-harness/src/lib.rs",
+        "rust/crates/simcoe-ai-cli/src/format.rs",
+        "src/reference_data/subsystems/plugins.json"
+      ]
+    },
+    {
+      "name": "skills",
+      "category": "claw-reference",
+      "status": "partial",
+      "priority": "p0",
+      "current": "Local markdown skills are usable and archived bundled skills are inspectable, but bundled and MCP-built skill execution remains absent.",
+      "needed": [
+        "Load bundled skill packages as executable prompt/runtime assets.",
+        "Add skill reload/change detection.",
+        "Port or replace MCP skill-builder behavior.",
+        "Integrate skill use with session/team memory where available."
+      ],
+      "anchors": [
+        "rust/crates/tools/src/lib.rs",
+        "rust/crates/simcoe-ai-cli/src/format.rs",
+        "src/reference_data/subsystems/skills.json"
+      ]
+    },
+    {
+      "name": "hooks",
+      "category": "claw-reference",
+      "status": "partial",
+      "priority": "p1",
+      "current": "PreToolUse and PostToolUse shell hooks are parsed, inspected, and executed, including deny/warn behavior.",
+      "needed": [
+        "Add broader hook event families where needed.",
+        "Define a safe mutation/rewrite pipeline.",
+        "Add hook management commands beyond config inspection."
+      ],
+      "anchors": [
+        "rust/crates/runtime/src/hooks.rs",
+        "rust/crates/runtime/src/conversation.rs",
+        "rust/crates/simcoe-ai-cli/src/format.rs"
+      ]
+    },
+    {
+      "name": "remote-transport",
+      "category": "claw-reference",
+      "status": "diagnostic-only",
+      "priority": "p0",
+      "current": "Rust reports bootstrap/proxy readiness and structured local turn transport metadata, but it does not run the TypeScript live remote websocket/session path.",
+      "needed": [
+        "Obtain the websocket/session protocol contract.",
+        "Port live remote structured I/O with resumable state and tests.",
+        "Keep local api-stream metadata explicit while remote is unavailable."
+      ],
+      "anchors": [
+        "rust/crates/runtime/src/remote.rs",
+        "rust/crates/simcoe-ai-cli/src/transport.rs",
+        "src/reference_data/subsystems/remote.json"
+      ]
+    },
+    {
+      "name": "service-ecosystem",
+      "category": "claw-reference",
+      "status": "missing",
+      "priority": "p2",
+      "current": "Core auth/API/MCP/usage foundations exist, but analytics, settings sync, team memory sync, notifier, voice, and policy-limit services are not ported.",
+      "needed": [
+        "Inventory service contracts that are actually required for this product.",
+        "Port only services with clear local or remote contracts.",
+        "Keep unavailable service families documented as out-of-scope or blocked."
+      ],
+      "anchors": [
+        "rust/crates/api/src",
+        "rust/crates/runtime/src/oauth.rs",
+        "rust/crates/runtime/src/config.rs"
+      ]
+    }
+  ],
+  "industry_benchmarks": [
+    {
+      "category": "ide-integration",
+      "benchmark": "GitHub Copilot and Cursor",
+      "current_status": "missing",
+      "gap": "The product is terminal-first and does not yet expose editor-native diagnostics, inline edits, symbol navigation, code actions, or session tracking.",
+      "priority": "p0",
+      "needed": [
+        "Add a language-server or VS Code extension bridge.",
+        "Surface diffs, diagnostics, chat, and agent session progress inside the editor.",
+        "Replace LSPTool diagnostics with real editor-attached execution when available."
+      ],
+      "anchors": [
+        "rust/crates/simcoe-ai-cli/src/main.rs",
+        "rust/crates/tools/src/lib.rs",
+        "rust/TUI-ENHANCEMENT-PLAN.md"
+      ]
+    },
+    {
+      "category": "codebase-indexing",
+      "benchmark": "Cursor codebase understanding and Copilot repository memory",
+      "current_status": "partial",
+      "gap": "Retrieval/context scripts exist, but there is no incremental symbol graph, reference graph, impact map, or test ownership index for the Rust CLI.",
+      "priority": "p0",
+      "needed": [
+        "Build file, symbol, reference, dependency, and test ownership indexes.",
+        "Use the index for planning, tool choice, and post-edit verification.",
+        "Persist repository-scoped facts with invalidation."
+      ],
+      "anchors": [
+        "scripts/context_providers.py",
+        "scripts/build_retrieval_corpus.py",
+        "scripts/retrieval_utils.py",
+        "scripts/indexed_memory.py"
+      ]
+    },
+    {
+      "category": "guardrails-and-sandboxing",
+      "benchmark": "OpenAI Agents guardrails and hosted/local sandbox patterns",
+      "current_status": "partial",
+      "gap": "Permission modes and allowlists exist, but quotas, network/file sandbox profiles, redaction, and human-review checkpoints are not complete.",
+      "priority": "p0",
+      "needed": [
+        "Add per-tool/session quotas, rate limits, and timeouts.",
+        "Add sandbox profiles for shell, file, and network tools.",
+        "Block or require approval for destructive commands, credential access, exfiltration, and mass edits.",
+        "Add secret redaction and audit export."
+      ],
+      "anchors": [
+        "rust/crates/runtime/src/permissions.rs",
+        "rust/crates/runtime/src/sandbox.rs",
+        "scripts/hook_runtime.py",
+        "scripts/runtime_contracts.py"
+      ]
+    },
+    {
+      "category": "background-agents",
+      "benchmark": "GitHub Copilot cloud agent and Claude Code remote/continuous workflows",
+      "current_status": "partial",
+      "gap": "Local task manifests and session resume exist, but durable cloud/background sessions with progress tracking, notifications, cancellation, and PR artifacts are not complete.",
+      "priority": "p1",
+      "needed": [
+        "Add durable background run state and progress logs.",
+        "Expose cancellation, artifact collection, and notifications.",
+        "Connect runs to GitHub issues, PRs, and review comments."
+      ],
+      "anchors": [
+        "rust/crates/tools/src/lib.rs",
+        "scripts/agent_task_manager.py",
+        "scripts/agent_registry.py"
+      ]
+    },
+    {
+      "category": "mcp-conformance",
+      "benchmark": "MCP clients across Claude, ChatGPT, Cursor, VS Code, and GitHub workflows",
+      "current_status": "strong-partial",
+      "gap": "Supported transports are robust, but blocked transports and prompt/resource conformance need explicit profiles and tests.",
+      "priority": "p1",
+      "needed": [
+        "Add conformance fixtures for tools, resources, prompts, auth, and dynamic allowlisting.",
+        "Publish compatibility profiles for common servers and client expectations.",
+        "Keep unsupported transports categorized with remediation hints."
+      ],
+      "anchors": [
+        "rust/crates/runtime/src/mcp.rs",
+        "rust/crates/runtime/src/mcp_stdio.rs",
+        "rust/crates/tools/src/lib.rs"
+      ]
+    },
+    {
+      "category": "observability-and-evals",
+      "benchmark": "OpenAI tracing/evals and enterprise release gates",
+      "current_status": "partial",
+      "gap": "Root eval scripts exist, but Rust CLI agent workflows lack unified trace spans, benchmark scenarios, and release scorecards.",
+      "priority": "p1",
+      "needed": [
+        "Trace model calls, tool calls, MCP calls, hooks, retries, approvals, and errors.",
+        "Add code-edit, bug-fix, refactor, PR-review, MCP, and security benchmarks.",
+        "Wire scorecards into CI release gates."
+      ],
+      "anchors": [
+        "scripts/evaluate.py",
+        "scripts/build_golden_benchmark.py",
+        "evals/results.json"
+      ]
+    },
+    {
+      "category": "ux-and-tui",
+      "benchmark": "Claude Code terminal UX and Cursor visual review",
+      "current_status": "partial",
+      "gap": "The CLI works, but the active REPL remains monolithic and lacks a persistent HUD, collapsible tool output, rich diffs, pager, and editor-style review panels.",
+      "priority": "p1",
+      "needed": [
+        "Modularize LiveCli out of main.rs.",
+        "Add status bar, live token/cost HUD, colored diffs, pager, and collapsible tool output.",
+        "Make full-screen TUI or web dashboard optional after module boundaries are stable."
+      ],
+      "anchors": [
+        "rust/crates/simcoe-ai-cli/src/main.rs",
+        "rust/crates/simcoe-ai-cli/src/render.rs",
+        "rust/TUI-ENHANCEMENT-PLAN.md"
+      ]
+    }
+  ],
+  "blocked_contracts": [
+    {
+      "name": "mcp-sdk-transport",
+      "status": "blocked-by-contract",
+      "needed_contract": "Upstream SDK adapter execution contract and request/response lifecycle.",
+      "current_behavior": "Rust reports unsupported-runtime before attempting execution.",
+      "anchors": ["rust/crates/runtime/src/mcp.rs"]
+    },
+    {
+      "name": "simcoe-ai-proxy-transport",
+      "status": "blocked-by-contract",
+      "needed_contract": "Websocket/session adapter equivalent to remote/SessionsWebSocket.ts and remote/sdkMessageAdapter.ts.",
+      "current_behavior": "Rust reports remote/proxy readiness diagnostics and blocks live execution.",
+      "anchors": [
+        "rust/crates/runtime/src/remote.rs",
+        "src/reference_data/subsystems/remote.json"
+      ]
+    },
+    {
+      "name": "remote-headers-helper",
+      "status": "blocked-by-contract",
+      "needed_contract": "headersHelper invocation, output schema, credential scope, refresh behavior, and failure semantics.",
+      "current_behavior": "Rust leaves headersHelper-backed MCP servers inspection-only.",
+      "anchors": ["rust/crates/runtime/src/mcp.rs"]
+    },
+    {
+      "name": "plugin-runtime",
+      "status": "blocked-by-design",
+      "needed_contract": "Plugin manifest, lifecycle, extension contribution points, and security boundaries.",
+      "current_behavior": "Rust exposes archived plugin inspection only.",
+      "anchors": [
+        "rust/crates/compat-harness/src/lib.rs",
+        "src/reference_data/subsystems/plugins.json"
+      ]
+    },
+    {
+      "name": "bundled-and-mcp-skills",
+      "status": "blocked-by-design",
+      "needed_contract": "Bundled skill execution environment and MCP skill-builder behavior.",
+      "current_behavior": "Rust runs local markdown skills and inspects archived bundled skill samples.",
+      "anchors": [
+        "rust/crates/tools/src/lib.rs",
+        "src/reference_data/subsystems/skills.json"
+      ]
+    }
+  ]
+}
